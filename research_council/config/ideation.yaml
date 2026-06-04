@@ -1,0 +1,11 @@
+stage: ideation
+n_rounds: 2
+seats:
+  openai: gpt-5
+  anthropic: claude-opus-4-8
+  gemini: gemini-2.5-pro
+tools: [wiki, openalex]          # selectable per round (--tools)
+weights: {novelty: 0.35, soundness: 0.25, feasibility: 0.25, clarity: 0.15}
+usd_max: 5.0
+anonymize: true                  # self-preference-bias control (set false for B5 ablation)
+verifier_mode: mock              # incr 1; "sandbox" in incr 2

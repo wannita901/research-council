@@ -1,0 +1,76 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Phase 5 · Build Log — Increment 1 · research-council</title>
+  <link rel="stylesheet" href="style.css">
+  <script src="nav.js"></script>
+</head>
+<body>
+  <main class="content">
+    <header>
+      <div class="eyebrow">Phase 5 · Implementation</div>
+      <h1>Build Log — Increment 1 (offline spine)</h1>
+      <div class="meta">2026-06-05 · Repo scaffolded · 7-phase debate runs offline · tests green</div>
+    </header>
+
+    <p class="lead">The repo is scaffolded exactly to <a href="2_architecture-design.html">Architecture §7</a>. The full <strong>7-phase debate runs end to end offline</strong> (deterministic stub peers, mock verifier — no API keys), writes a JSONL trace, and prints a verifier-weighted ranking. <code>pytest</code> passes.</p>
+
+    <div class="callout good">
+      <div class="label">Verified working</div>
+      <pre style="margin:8px 0 0"><code>$ rc debate --topic "Do LLM code-review agents catch security bugs better than SAST?" \
+            --tools wiki,openalex,arxiv
+  seats  {openai: gpt-5, anthropic: claude-opus-4-8, gemini: gemini-2.5-pro}
+  tools  ['wiki','openalex','arxiv']   anonymize=True   rounds=2
+  Ranking (verifier-weighted panel vote):
+    1. 0.740  [anthropic] …
+    2. 0.698  [gemini] …
+    3. 0.632  [openai] …
+  trace: runs/&lt;id&gt;/trace.jsonl       # 2 passed in 0.42s</code></pre>
+    </div>
+
+    <h2>What's real vs stubbed</h2>
+    <table>
+      <thead><tr><th>Module</th><th>Status</th></tr></thead>
+      <tbody>
+        <tr><td><code>store/models.py</code> — all 8 contracts + RunConfig + Event</td><td><span class="yes">✓ real</span></td></tr>
+        <tr><td><code>debate/</code> — orchestrator (7 phases), anonymize, termination</td><td><span class="yes">✓ real</span></td></tr>
+        <tr><td><code>store/checkpoint.py</code> — JSONL trace writer</td><td><span class="yes">✓ real</span></td></tr>
+        <tr><td><code>verify/mock.py</code> — heuristic feasibility (incr 1)</td><td><span class="yes">✓ real</span></td></tr>
+        <tr><td><code>agents/stub_peer.py</code> — deterministic offline peer</td><td><span class="yes">✓ real</span></td></tr>
+        <tr><td><code>retrieval/</code> — Protocol, registry, hybrid (fan-out + dedup)</td><td><span class="part">real shell, stub sources</span></td></tr>
+        <tr><td><code>config.py · cli.py</code> — load + <code>rc debate/resume/ingest/lint</code></td><td><span class="yes">✓ real (latter 3 are TODO stubs)</span></td></tr>
+        <tr><td><code>agents/llm_peer.py</code> + <code>providers/sdk.py</code> — live path</td><td><span class="part">wired, not implemented</span></td></tr>
+        <tr><td><code>librarian/</code> — wiki write side</td><td><span class="no">✗ not yet (next)</span></td></tr>
+        <tr><td><code>verify/sandbox.py</code> — real feasibility (incr 2)</td><td><span class="no">✗ not yet</span></td></tr>
+      </tbody>
+    </table>
+
+    <h2>How to run</h2>
+    <pre><code>python -m venv .venv && source .venv/bin/activate
+pip install -e ".[dev]"
+pytest -q
+rc debate --topic "…" --tools wiki,openalex,arxiv     # offline, no keys
+rc debate --topic "…" --no-anonymize                  # B5 ablation knob
+rc debate --topic "…" --seats openai=gpt-5,anthropic=claude-opus-4-8,gemini=gemini-2.5-pro</code></pre>
+
+    <h2>Notes</h2>
+    <ul>
+      <li>Offline <em>debate</em> path uses <code>StubPeer</code> (bypasses providers) so the loop runs with zero keys; <code>StubProvider</code> exists for provider-layer parity.</li>
+      <li>Stub peer/retrieval content is placeholder — it exercises the <em>flow + contracts + trace</em>, not real research output.</li>
+      <li>Every baseline is a config of this one path: <code>--seats</code> all-one-vendor = B3; <code>--no-anonymize</code> = B5; verifier mode = B4 (<a href="5_research-framing-eval.html">Research Framing</a>).</li>
+      <li>Not yet a git repo — needed for the wiki snapshot/commit-hash discipline; <code>git init</code> is a sensible next step.</li>
+    </ul>
+
+    <h2>Next implementation steps</h2>
+    <ol>
+      <li><strong>Real provider adapters</strong> (<code>providers/sdk.py</code>) + wire <code>LLMPeer</code> → first <code>--live</code> 3-vendor debate.</li>
+      <li><strong>Real retrieval</strong>: <code>openalex.py</code> + <code>arxiv.py</code> (then semanticscholar/github/paperswithcode).</li>
+      <li><strong>Librarian write side</strong> (<code>rc ingest</code>/<code>rc lint</code>) per <a href="9_librarian-design.html">plan/9</a>.</li>
+      <li><strong>Sandbox verifier</strong> (incr 2) for objective feasibility.</li>
+      <li><strong>Obs</strong>: metrics-from-trace + HTML run report (<a href="7_observability.html">plan/7</a>).</li>
+    </ol>
+  </main>
+</body>
+</html>

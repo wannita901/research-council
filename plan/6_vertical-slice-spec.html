@@ -1,0 +1,206 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Phase 4 · Vertical Slice Spec · research-council</title>
+  <link rel="stylesheet" href="style.css">
+  <script src="nav.js"></script>
+  <style>
+    details { border: 1px solid var(--border); border-radius: 8px; margin: 8px 0; background: var(--panel); }
+    details summary { cursor: pointer; padding: 11px 15px; font-weight: 600; font-size: 13.5px; }
+    details[open] summary { border-bottom: 1px solid var(--border); }
+    details .body { padding: 0; }
+    details .body pre { margin: 0; border: 0; border-radius: 0 0 8px 8px; }
+    .who { font-size: 11.5px; color: var(--ink-faint); font-weight: 500; }
+    .incr { display:inline-block; font-size:11px; padding:2px 8px; border-radius:999px; border:1px solid var(--border); background:var(--panel-2); color:var(--ink-soft); margin-left:6px;}
+    .incr.one { border-color:#2c5f3c; color:var(--good); }
+    .incr.two { border-color:#34507e; color:var(--accent); }
+  </style>
+</head>
+<body>
+  <main class="content">
+    <header>
+      <div class="eyebrow">Phase 4 · Build Specs</div>
+      <h1>Vertical Slice Spec &mdash; Ideation &rarr; Feasibility</h1>
+      <div class="meta">Drafted 2026-06-04 · The one runnable slice we build first · Last planning page before code</div>
+    </header>
+
+    <p class="lead">One slice, end to end: you give an AI4SE topic; three cross-vendor peers research it independently, propose a research idea + a <em>minimal experiment plan</em>, cross-critique, rebut, and the verifier checks whether each plan actually runs; the panel votes and you confirm. This is exactly the eval anchor from <a href="5_research-framing-eval.html">Research Framing</a>, so building it = building the experiment harness.</p>
+
+    <h2>Scope of the slice</h2>
+    <table>
+      <thead><tr><th>In</th><th>Out (later)</th></tr></thead>
+      <tbody>
+        <tr><td>3-vendor parallel research over Hybrid/OpenAlex retrieval</td><td>Other lifecycle stages (full experiments, writing)</td></tr>
+        <tr><td>Propose &rarr; cross-critique &rarr; rebut (1&ndash;2 rounds)</td><td>Full experiment execution (we only feasibility-smoke-test)</td></tr>
+        <tr><td>Feasibility verifier (staged &mdash; see increments)</td><td>Web UI (architecture already streams to it)</td></tr>
+        <tr><td>Anonymized panel vote + human confirm</td><td>Job-queue runner / parallel debates</td></tr>
+        <tr><td>Checkpointing + full transcript logging</td><td>Baselines B0/B3/B4/B5 wiring (next, reuse same core)</td></tr>
+      </tbody>
+    </table>
+
+    <div class="callout">
+      <div class="label">Two build increments</div>
+      <p style="margin:6px 0 0"><span class="incr one">Increment 1</span> the full debate with a <strong>mock verifier</strong> (an independent model rates feasibility 0&ndash;1 with justification). Cheapest test of "does heterogeneous debate work?" &mdash; no sandbox.<br>
+      <span class="incr two">Increment 2</span> swap in the <strong>real feasibility verifier</strong>: generate a minimal runnable scaffold from the experiment plan, execute it in a sandbox, signal = "did it run &amp; emit the metric?". This is the load-bearing piece for RQ2.</p>
+    </div>
+
+    <h2>1. Data contracts (this slice)</h2>
+    <pre><code>TopicSpec        { area, question?, constraints?, n_rounds=2, seats{openai,claude,gemini} }
+ResearchBrief    { vendor, landscape, gap, rationale, refs[] }          # phase 1, per peer
+Candidate        { id, vendor, version, title, gap, hypothesis,
+                   method, experiment_plan, refs[] }                    # phase 2 (vendor hidden downstream)
+Critique         { critic_vendor, target_id, axis: novelty|soundness|feasibility,
+                   severity:1..5, claim, needs_verification:bool, evidence_ref? }   # phase 3
+Rebuttal         { candidate_id, responses[{critique_ref, stance: concede|defend|revise, note}],
+                   revised_candidate? }                                 # phase 4
+VerifierSignal   { candidate_id, runnable:bool, feasibility:0..1, log }  # phase 5
+Score            { judge_vendor, candidate_id, novelty, soundness,
+                   feasibility, clarity, rationale }                    # phase 6 (authorship hidden)
+Recommendation   { ranked[candidate_id], verifier_weighted:bool, rationale }</code></pre>
+    <p class="who">Every record is persisted to the checkpoint store as it's produced; a crash resumes from the last completed phase.</p>
+
+    <h2>2. Per-phase prompts <span class="tag">click to expand</span></h2>
+
+    <details open>
+      <summary>Phase 1 · Independent research <span class="who">— each peer, in parallel</span></summary>
+      <div class="body"><pre><code>SYSTEM
+You are an AI4SE research scientist. Survey ONLY the literature provided
+below and identify ONE specific, underexplored gap in the given area.
+Rules:
+- Ground every claim in a provided reference id. Do NOT invent citations.
+- Prefer a gap that could be tested with a small, runnable experiment.
+Return JSON: ResearchBrief { landscape, gap, rationale, refs[] }.
+
+USER
+Area: {area}            Question (optional): {question}
+Constraints: {constraints}
+Retrieved papers (id · title · abstract):
+{retrieved_papers}</code></pre></div>
+    </details>
+
+    <details>
+      <summary>Phase 2 · Propose <span class="who">— each peer turns its gap into an idea + minimal plan</span></summary>
+      <div class="body"><pre><code>SYSTEM
+Turn your identified gap into a concrete, testable research idea AND a
+MINIMAL experiment plan runnable at toy scale to produce a first signal.
+The experiment_plan MUST name, concretely:
+  - dataset (small &amp; publicly available; give name/source)
+  - baseline(s) to compare against
+  - the method / intervention
+  - the metric and how it's computed
+  - the SMALLEST end-to-end runnable step (what a 20-line script would do)
+Return JSON: Candidate { title, gap, hypothesis, method, experiment_plan, refs[] }.
+
+USER
+Your research brief: {research_brief}</code></pre></div>
+    </details>
+
+    <details>
+      <summary>Phase 3 · Cross-critique <span class="who">— each peer critiques ALL candidates, authorship hidden</span></summary>
+      <div class="body"><pre><code>SYSTEM
+You are reviewing AI4SE research candidates (authorship anonymized).
+Critique EACH candidate on novelty, soundness, and feasibility. Be
+specific and adversarial but fair.
+- If a claim is empirically checkable, set needs_verification=true
+  instead of asserting it yourself.
+- severity 1 (nit) .. 5 (fatal). Cite evidence_ref where possible.
+Return JSON: Critique[] (one or more per candidate).
+
+USER
+Candidates (anonymized):
+{candidates_without_vendor}</code></pre>
+      <p class="who" style="padding:0 15px 12px">Blind critique of all three (incl. unknowingly one's own) is what lets us measure self-preference for RQ3.</p></div>
+    </details>
+
+    <details>
+      <summary>Phase 4 · Rebut / revise <span class="who">— each author answers critiques of its candidate</span></summary>
+      <div class="body"><pre><code>SYSTEM
+Here are critiques of YOUR candidate. For each: concede, defend with
+evidence, or revise. If revising, return the updated Candidate. Push any
+empirically-checkable dispute to verification (don't argue it rhetorically).
+Return JSON: Rebuttal { responses[], revised_candidate? }.
+
+USER
+Your candidate: {candidate}
+Critiques targeting it: {critiques_for_candidate}</code></pre></div>
+    </details>
+
+    <details>
+      <summary>Phase 5 · Verify <span class="who">— verifier tool, not a peer</span></summary>
+      <div class="body"><pre><code># Increment 1 (mock): an independent model rates feasibility.
+SYSTEM  Given an experiment_plan, estimate whether a competent engineer
+        could implement &amp; run a toy version in &lt; 1 hour. Return
+        VerifierSignal { runnable:bool, feasibility:0..1, log }.
+
+# Increment 2 (real): generate → execute.
+1. codegen agent emits a minimal runnable scaffold from experiment_plan
+   (load toy data → run baseline+method on a few samples → print metric)
+2. run in sandbox: container, no network, time/mem capped
+3. runnable = exited 0 AND emitted the declared metric
+   feasibility = f(runnable, #deps resolved, #auto-fixes needed)</code></pre></div>
+    </details>
+
+    <details>
+      <summary>Phase 6 · Judge / score <span class="who">— each peer scores all candidates, authorship hidden</span></summary>
+      <div class="body"><pre><code>SYSTEM
+Score each candidate (authorship anonymized) 1..5 on novelty, soundness,
+feasibility, clarity. Your feasibility score MUST be consistent with the
+verifier signal provided for that candidate (the signal outranks opinion).
+Return JSON: Score[] with a one-line rationale each.
+
+USER
+Candidates (anonymized): {candidates}
+Verifier signals: {verifier_signals}
+
+# Aggregation (code, not LLM):
+#   composite = w_n·novelty + w_s·soundness + w_f·feasibility + w_c·clarity
+#   feasibility term clamped to verifier signal; mean across the 3 judges
+#   → Recommendation.ranked ; human confirms / re-runs.</code></pre></div>
+    </details>
+
+    <h2>3. Termination &amp; config</h2>
+    <p>Loop phases 3&rarr;6 until <strong>(a)</strong> no critique of severity &ge; 3 is raised in a full round (consensus), or <strong>(b)</strong> <code>n_rounds</code> reached. Then judge + human confirm.</p>
+    <pre><code># config/ideation.yaml
+stage: ideation
+n_rounds: 2
+seats:   { openai: gpt-5, claude: claude-opus-4-8, gemini: gemini-2.5-pro }
+retrieval: { tools: [wiki, openalex, arxiv], k: 25 }   # tools selectable per round
+verifier:  { mode: mock }          # increment 1 → { mode: sandbox } in increment 2
+weights:   { novelty: .35, soundness: .25, feasibility: .25, clarity: .15 }
+budget:    { usd_max: 5.0 }</code></pre>
+
+    <h2>4. What one run looks like</h2>
+    <pre><code>$ rc debate ideation --area "LLM agents for code review" \
+      --question "Do they catch security bugs better than SAST?"
+
+  seats   openai=gpt-5  claude=opus-4-8  gemini=2.5-pro        [confirm ↵]
+  tools   wiki · openalex · arxiv                              [confirm ↵]
+① research   ●●●  3 briefs · wiki + arxiv + 71 OpenAlex papers
+② propose    ●●●  3 candidates
+③ critique   ●●●  14 critiques (4 flagged needs_verification)
+④ rebut      ●●●  2 candidates revised
+⑤ verify     ▣▣▣  C2 runnable✓ feas .82 · C1 .55 · C3 not-runnable✗ .20
+⑥ judge      ●●●  rank: C2 > C1 > C3   (verifier-weighted)
+
+  → Recommended: C2 "Differential security-bug detection: agent vs SAST
+    on a 50-CVE micro-benchmark"   feasibility .82
+  transcript: runs/2026-06-04-ideation-a3f1.jsonl     [confirm / revise / rerun]</code></pre>
+    <p class="who">Toy illustration of the run shape, not real output. The transcript is the eval datum: every brief, critique, rebuttal, verifier log, and score is on disk.</p>
+
+    <h2>5. How this slice <em>is</em> the experiment harness</h2>
+    <ul>
+      <li>Swapping <code>seats</code> to all-one-vendor gives baseline <strong>B3</strong>; a single seat + self-debate gives <strong>B1</strong>; <code>n_rounds: 0</code> single seat gives <strong>B0</strong>.</li>
+      <li><code>verifier.mode: mock</code> vs real, and the candidate-with-vs-without verifier in judging, gives <strong>B4</strong> (RQ2).</li>
+      <li>An <code>anonymize: false</code> flag in phases 3/6 gives <strong>B5</strong> and the self-preference measurement (RQ3).</li>
+      <li>So every baseline is a <strong>config of the same code path</strong> &mdash; no separate harnesses to build or keep in sync.</li>
+    </ul>
+
+    <div class="callout good">
+      <div class="label">Ready to build</div>
+      <p style="margin:6px 0 0">This slice has concrete contracts, prompts, termination, config, and a clear increment-1 path that needs no sandbox. Next step (B) scaffolds <code>research_council/</code> to host exactly this.</p>
+    </div>
+  </main>
+</body>
+</html>

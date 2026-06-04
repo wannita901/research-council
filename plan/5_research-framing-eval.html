@@ -1,0 +1,135 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Phase 3 · Research Framing & Eval Design · research-council</title>
+  <link rel="stylesheet" href="style.css">
+  <script src="nav.js"></script>
+  <style>
+    details { border: 1px solid var(--border); border-radius: 8px; margin: 10px 0; background: var(--panel); }
+    details summary { cursor: pointer; padding: 12px 16px; font-weight: 600; font-size: 14px; }
+    details[open] summary { border-bottom: 1px solid var(--border); }
+    details .body { padding: 12px 16px; font-size: 13.5px; color: var(--ink-soft); }
+    .rq { background: var(--panel); border: 1px solid var(--border); border-left: 3px solid var(--accent); border-radius: 8px; padding: 14px 18px; margin: 14px 0; }
+    .rq .id { color: var(--accent); font-weight: 700; font-size: 13px; letter-spacing: .5px; }
+    .rq .h { color: var(--ink-faint); font-size: 13px; margin-top: 6px; }
+    .rq .h b { color: var(--ink); }
+  </style>
+</head>
+<body>
+  <main class="content">
+    <header>
+      <div class="eyebrow">Phase 3 · Research Framing &amp; Eval</div>
+      <h1>Research Framing &amp; Evaluation Design</h1>
+      <div class="meta">Drafted 2026-06-04 · Locked: ideation+verifier anchor · FSE/ICSE/ASE · v1 = Core + bias (RQ1&ndash;RQ3)</div>
+    </header>
+
+    <p class="lead">The platform is the <em>artifact</em>; the paper is a <em>controlled study</em>. The thesis is falsifiable: <strong>heterogeneous cross-vendor debate, grounded in executable verification, produces better AI4SE research artifacts than a single strong model or a same-vendor panel.</strong> If that's false, a clean design still yields a publishable, honest negative result.</p>
+
+    <div class="callout warn">
+      <div class="label">The trap to avoid</div>
+      <p style="margin:6px 0 0">"We built a multi-agent system" is <em>not</em> a contribution at ICSE/FSE. The contribution is <strong>evidence that isolates <em>why</em> it works</strong> &mdash; specifically that vendor <em>heterogeneity</em> (not just more compute) and <em>verification grounding</em> (not just debate) each carry weight. The baseline ladder below is engineered to prove exactly that, one rung at a time.</p>
+    </div>
+
+    <h2>1. Research questions &amp; hypotheses</h2>
+    <div class="rq">
+      <div class="id">RQ1 · Heterogeneity</div>
+      Does a heterogeneous cross-vendor peer panel produce higher-quality AI4SE research artifacts than (a) the strongest single model and (b) a <em>homogeneous</em> same-vendor panel of equal size and budget?
+      <div class="h"><b>H1:</b> heterogeneous &gt; homogeneous &gt; single &mdash; diverse vendors have complementary error profiles, so cross-critique catches more flaws. <em>The homogeneous-panel baseline is what separates "diversity helps" from "more samples help."</em></div>
+    </div>
+    <div class="rq">
+      <div class="id">RQ2 · Verification grounding</div>
+      Does grounding the debate in executable verification improve the <em>feasibility / correctness</em> of artifacts relative to debate without verification?
+      <div class="h"><b>H2:</b> verification-grounded debate raises objective feasibility without sacrificing novelty &mdash; directly narrowing the documented <a href="https://arxiv.org/html/2506.20803v1">ideation&ndash;execution gap</a> (LLM ideas: novel but infeasible).</div>
+    </div>
+    <div class="rq">
+      <div class="id">RQ3 · Self-preference bias</div>
+      Do peers favour their own candidates when judging, and does authorship anonymization reduce it?
+      <div class="h"><b>H3:</b> de-anonymized judging shows measurable self-preference; anonymization significantly reduces it. <em>A clean, novel, measurable result regardless of RQ1's outcome.</em></div>
+    </div>
+    <div class="rq">
+      <div class="id">RQ4 · Cost&ndash;quality</div>
+      What is the cost / latency vs. quality tradeoff of the panel against single-model baselines?
+      <div class="h">Descriptive (no directional hypothesis) &mdash; reviewers expect an honest accounting of the price of the gains.</div>
+    </div>
+
+    <h2>2. The baseline ladder <span class="tag">each rung isolates one claim</span></h2>
+    <table>
+      <thead><tr><th>ID</th><th>Condition</th><th>Isolates</th></tr></thead>
+      <tbody>
+        <tr><td>B0</td><td>Single model, zero-shot (each vendor alone)</td><td>Is multi-agent needed at all?</td></tr>
+        <tr><td>B1</td><td>Single model self-debate / self-refine, N rounds</td><td>Effect of iteration alone</td></tr>
+        <tr><td>B2</td><td>Best-of-N / majority vote, no debate (same vendor)</td><td>Aggregation vs. debate</td></tr>
+        <tr><td>B3</td><td><strong>Homogeneous panel</strong> (3× same vendor) + debate</td><td><strong>Heterogeneity vs. ensemble size</strong> (key)</td></tr>
+        <tr><td>B4</td><td>Heterogeneous panel + debate, <strong>no verification</strong></td><td>Verification grounding (RQ2)</td></tr>
+        <tr><td>B5</td><td>Heterogeneous panel + verification, <strong>no anonymization</strong></td><td>Bias control (RQ3)</td></tr>
+        <tr><td><strong>SYS</strong></td><td>Heterogeneous + verification + bias controls (full)</td><td>&mdash; the proposed system</td></tr>
+      </tbody>
+    </table>
+    <p class="hint" style="color:var(--ink-faint);font-size:12.5px">All conditions matched on total token/$ budget where possible, so gains can't be dismissed as "you just spent more."</p>
+    <p style="font-size:13.5px;color:var(--ink-soft)"><strong>Added ablation &mdash; wiki-on vs wiki-off:</strong> because the curated <a href="8_knowledge-layer.html">LLM Wiki</a> is a mutable artifact that could do work we'd attribute to debate, we run SYS with and without the wiki and report the delta. Novelty is judged against external literature, never the wiki's own synthesis.</p>
+
+    <h2>3. Evaluation task &mdash; vision-aligned and objectively grounded</h2>
+    <p>The elegant move: evaluate on the product's actual use case (<strong>AI4SE research ideation</strong>) but make the hardest-to-fake axis &mdash; <em>feasibility</em> &mdash; <strong>objective via the verifier</strong>. Given an AI4SE topic, the panel outputs a research idea + a <em>minimal experiment plan</em>; the verifier then checks whether that plan's scaffold actually compiles and runs. So "feasibility" is measured, not just rated &mdash; which is exactly the RQ2 contribution, embedded in the real workflow.</p>
+    <div class="cards">
+      <div class="card"><h4>Primary · objective</h4><p>Verifier feasibility pass rate: does the proposed minimal experiment scaffold compile / run / emit a metric? Fully automatable.</p></div>
+      <div class="card"><h4>Primary · expert</h4><p>Blind expert Likert on novelty / soundness / overall, replicating <a href="https://arxiv.org/abs/2409.04109">Si et&nbsp;al. 2024</a>. Report Krippendorff's α (inter-rater reliability).</p></div>
+      <div class="card"><h4>Mechanism</h4><p>Proposal diversity (embedding distance among the 3 independent proposals); self-preference rate; rounds-to-converge.</p></div>
+      <div class="card"><h4>Practical</h4><p>USD cost / run, wall-clock latency, tokens.</p></div>
+    </div>
+    <p style="font-size:13.5px;color:var(--ink-soft)"><strong>Optional robustness tier:</strong> a fully objective AI4SE task (program repair / test generation, e.g. a SWE-bench-Verified or Defects4J slice) where quality = % resolved &mdash; no human raters, hardens the RQ1/RQ2 claims.</p>
+
+    <h2>4. Statistical rigor</h2>
+    <ul>
+      <li><strong>Multiple seeds</strong> per condition (decoding is stochastic at temp &gt; 0); report mean ± bootstrap CI.</li>
+      <li><strong>Paired tests</strong> across conditions on the same tasks: McNemar for pass/fail, Wilcoxon signed-rank for ratings.</li>
+      <li><strong>Multiple-comparison correction</strong> (Holm) across the baseline ladder; report <strong>effect sizes</strong> (Cliff's δ), not just p-values.</li>
+      <li><strong>Pre-register</strong> RQs, conditions, and metrics before the full run (credibility + guards against p-hacking).</li>
+    </ul>
+
+    <h2>5. Data &amp; contamination <span class="tag">#1 reviewer attack on LLM-for-code</span></h2>
+    <ul>
+      <li>Use <strong>topics / benchmark tasks dated after the models' training cutoffs</strong>, or freshly authored items, to limit memorization.</li>
+      <li>Report each model's cutoff date and run a contamination probe (e.g., can the model recite held-out content?).</li>
+      <li>Verification grounding partly defends here: a memorized-but-wrong idea still fails the executable check.</li>
+      <li><strong>Wiki snapshot:</strong> the knowledge wiki is git-versioned; the commit hash is recorded in every run trace, so each result is tied to an exact, auditable knowledge state.</li>
+      <li><strong>Retrieval tool-set:</strong> the enabled sources (wiki/openalex/arxiv/…) are fixed across all conditions in a batch and logged per run; <code>web</code> search is disabled in eval (non-reproducible).</li>
+    </ul>
+
+    <h2>6. Threats to validity</h2>
+    <details><summary>Construct</summary><div class="body">Do pass rate + Likert capture "research quality"? Mitigate by triangulating objective feasibility, expert novelty/soundness, and (optionally) downstream execution. State the gap honestly.</div></details>
+    <details><summary>Internal</summary><div class="body">Contamination; prompt sensitivity (report prompts, test paraphrases); the human-confirm step risks experimenter bias &mdash; keep the <em>primary objective metric independent of the human</em> so the headline result isn't confounded by it.</div></details>
+    <details><summary>External</summary><div class="body">Three specific vendors at one moment in time (models change fast &mdash; version-pin and date everything); single domain (AI4SE); generalization across lifecycle stages is future work, not claimed.</div></details>
+    <details><summary>Conclusion</summary><div class="body">Stochastic-decoding variance (seeds + CIs); multiple comparisons (correction); cost-matched conditions so significance isn't a budget artifact.</div></details>
+
+    <h2>7. Contribution claims (precise)</h2>
+    <ol>
+      <li>The <strong>first system + controlled study</strong> of <em>heterogeneous cross-vendor</em> debate grounded in <em>executable verification</em> for AI4SE research tasks.</li>
+      <li>Evidence <strong>isolating</strong> the effect of vendor <em>heterogeneity</em> (vs. a cost-matched homogeneous panel) and of <em>verification grounding</em> (vs. ungrounded debate), via a baseline ladder + ablations.</li>
+      <li>A <strong>measurable account of self-preference bias</strong> in cross-vendor panels and the effect of authorship anonymization &mdash; new, and independently interesting.</li>
+      <li>An <strong>open, provider-agnostic platform</strong> (artifact) for reproducible multi-LLM research orchestration.</li>
+    </ol>
+
+    <h2>8. Scope: minimum publishable core vs. extensions</h2>
+    <table>
+      <thead><tr><th>Tier</th><th>Includes</th></tr></thead>
+      <tbody>
+        <tr><td><strong>Minimum core</strong></td><td>RQ1 + RQ2 on the ideation task with objective feasibility + a modest blind expert eval; baselines B0, B3, B4, SYS.</td></tr>
+        <tr><td><strong>＋ Bias study ← v1 scope</strong></td><td>RQ3 + baseline B5 (anonymization ablation, self-preference metric).</td></tr>
+        <tr><td>+ Robustness</td><td>Secondary objective task (repair / test-gen); full baseline ladder. <em>(follow-up)</em></td></tr>
+        <tr><td>+ Cost study</td><td>RQ4 cost&ndash;quality frontier across conditions. <em>(follow-up; report descriptively in v1 if cheap)</em></td></tr>
+      </tbody>
+    </table>
+
+    <div class="callout good">
+      <div class="label">Decisions locked (2026-06-04)</div>
+      <ul style="margin:8px 0 0">
+        <li><strong>Eval anchor:</strong> AI4SE <strong>ideation + verifier-based feasibility</strong> (vision-aligned, objectively grounded). Modest blind expert eval for novelty/soundness.</li>
+        <li><strong>Target venue:</strong> <strong>FSE / ICSE / ASE</strong> &mdash; SE framing, AI4SE task, tool artifact.</li>
+        <li><strong>v1 scope:</strong> <strong>Core + bias study</strong> = RQ1 + RQ2 + RQ3; baselines <strong>B0, B3, B4, B5, SYS</strong>. RQ4 reported descriptively if cheap; robustness task is a follow-up.</li>
+      </ul>
+    </div>
+  </main>
+</body>
+</html>

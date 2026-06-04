@@ -1,0 +1,183 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Phase 2 · Architecture & Debate Protocol · research-council</title>
+  <link rel="stylesheet" href="style.css">
+  <script src="nav.js"></script>
+</head>
+<body>
+  <main class="content">
+    <header>
+      <div class="eyebrow">Phase 2 · Architecture &amp; Design</div>
+      <h1>Architecture &amp; the Cross-Vendor Debate Protocol</h1>
+      <div class="meta">Drafted 2026-06-04 · Design doc &mdash; no code yet · Provider-agnostic, minimal core</div>
+    </header>
+
+    <p class="lead">The novelty lives in two places: (1) a debate protocol where <strong>different vendors' models critique each other</strong>, and (2) <strong>executable verification as the tie-breaker</strong> so the "best" answer is decided by tests passing, not rhetoric. Everything else is deliberately thin and replaceable.</p>
+
+    <div class="callout">
+      <div class="label">Design principles</div>
+      <ul style="margin:8px 0 0">
+        <li><strong>Provider-agnostic core.</strong> A role is bound to a provider at runtime; the orchestrator never imports a vendor SDK directly.</li>
+        <li><strong>Ground truth &gt; opinion.</strong> Where a claim is checkable (code compiles, tests pass, metric improves), the verifier overrides the debate.</li>
+        <li><strong>Minimal repo.</strong> Thin custom orchestrator over raw SDKs + typed message contracts. No heavy agent framework in the core (LangGraph/AutoGen are fallbacks, not dependencies).</li>
+        <li><strong>Human-in-the-loop by default.</strong> Every stage can pause for approval. We do not market "fully autonomous."</li>
+        <li><strong>Everything is logged.</strong> Full debate transcripts + artifacts are first-class &mdash; they are the eval data later.</li>
+      </ul>
+    </div>
+
+    <h2>1. System architecture (layers)</h2>
+    <pre><code>Lifecycle Stages    gap-finding → ideation → experiment → execution → writing
+        │            (pluggable; each stage is just a debate config)
+        ▼
+Debate Orchestrator     ← the core novelty
+        │   phases · rounds · termination · anonymization · budget
+        ▼
+   ┌ Agent Layer ........ 3 peers (one per vendor); each PROPOSES + CRITIQUES
+   │                      judge = anonymized panel vote + human confirm
+   ├ Verification Layer . sandbox: compile / run tests / metric  (tie-breaker)
+   └ Human-in-the-loop .. approve · steer · veto · confirm
+        │
+        ▼
+Provider Abstraction    official SDKs → OpenAI · Claude · Gemini
+Knowledge & State       wiki + OpenAlex · transcripts · artifacts · checkpoints</code></pre>
+
+    <h2>2. Provider Abstraction Layer</h2>
+    <p>One interface, three adapters. The rest of the system speaks only this interface, so swapping or adding a vendor is a single adapter.</p>
+    <pre><code>class LLMProvider(Protocol):
+    name: str                      # "openai" | "claude" | "gemini"
+    model: str
+    async def complete(
+        self, messages: list[Message],
+        tools: list[Tool] | None = None,
+        schema: dict | None = None, # forces structured output
+    ) -> Response                  # .text, .tool_calls, .usage, .cost</code></pre>
+    <p>Responsibilities kept here (not leaked upward): retries/backoff, prompt caching, token+cost accounting, structured-output coercion, rate limiting.</p>
+
+    <h2>3. Agent Layer &mdash; 3 symmetric peers, one per vendor</h2>
+    <p>The panel is <strong>3 symmetric peer agents (one model per vendor: OpenAI, Claude, Gemini)</strong>. There is no fixed "the proposer" / "the critic" &mdash; <strong>every peer proposes <em>and</em> critiques</strong>. Each peer first researches independently (with retrieval-tool access), proposes a grounded candidate, then critiques the other two. Judging is a panel function, not a dedicated agent.</p>
+    <div class="cards">
+      <div class="card"><h4>Peer ×3 (proposer + critic)</h4><p>Each vendor: researches independently &rarr; proposes a candidate &rarr; critiques the other two's candidates (soundness / novelty / feasibility), citing evidence or requesting verification.</p></div>
+      <div class="card"><h4>Judge = panel vote + human</h4><p>Peers score all candidates with <strong>authorship anonymized</strong>; the verifier signal weights the scores into a recommendation; the <strong>human confirms</strong> the final pick. Not a 4th agent.</p></div>
+      <div class="card"><h4>Verifier (tool, not LLM)</h4><p>Runs the sandbox / checks. Returns ground-truth signals that outweigh any peer's opinion wherever a claim is checkable.</p></div>
+      <div class="card"><h4>Vendor binding</h4><p>Which model fills each of the 3 vendor seats is asked at run start (overridable by flags/config). See <a href="3_design-decisions.html">Decisions Q1</a>.</p></div>
+    </div>
+
+    <h2>4. The Debate Protocol <span class="tag">core contribution</span></h2>
+    <p>A debate is a config: the 3 vendor seats, how many rounds, and the termination rule. The flow has an explicit <strong>independent-research phase</strong> before the peers convene:</p>
+    <pre><code>0 INTAKE          human asks a question / proposes a topic
+        │
+1 RESEARCH        the 3 peers investigate IN PARALLEL, independently
+  (parallel)      each uses retrieval tools → forms its own grounded view
+        │
+2 PROPOSE         each peer puts forward one candidate (gap / idea / plan / patch)
+        │
+3 CROSS-CRITIQUE  every peer critiques the other two's candidates
+        │
+4 REBUT / REVISE  authors defend or revise in response
+        │
+5 VERIFY          sandbox runs checkable claims → ground-truth signal
+        │
+6 JUDGE           anonymized panel vote, verifier-weighted → recommendation;
+                  human confirms the final pick
+   (loop 3→6 until a termination rule fires)</code></pre>
+
+    <h3>Termination rules (pick per stage)</h3>
+    <ol>
+      <li><strong>Verification-gated</strong> (preferred when artifact is executable): stop when a candidate passes the objective check (tests green / metric beats baseline). Rhetoric cannot override a failing build.</li>
+      <li><strong>Consensus</strong>: stop when critics raise no new substantive objection for a full round (measured, not vibes &mdash; track distinct objection set).</li>
+      <li><strong>Panel vote + max rounds</strong>: fallback for non-executable stages (e.g., gap-framing). Anonymized peer vote produces a recommendation; human confirms. Cap rounds to bound cost.</li>
+    </ol>
+
+    <div class="callout warn">
+      <div class="label">Bias control (design rationale)</div>
+      <p style="margin:6px 0 0">Peers are symmetric, so self-preference bias (LLMs favouring their own / same-family output) is the main threat at the judge step. Mitigations baked into the protocol: <strong>(a) anonymize authorship</strong> in critique and scoring prompts (strip "this was written by X"); <strong>(b) prefer the verifier signal</strong> over peer opinion whenever a claim is checkable; <strong>(c) human confirms</strong> the final pick rather than auto-accepting the vote. These are testable design choices &mdash; ablating them is a paper result.</p>
+    </div>
+
+    <h2>5. Verification Layer (the tie-breaker)</h2>
+    <p>This is what makes AI4SE the right domain. For each stage we define a concrete, automatable check:</p>
+    <table>
+      <thead><tr><th>Stage</th><th>Verifiable signal</th></tr></thead>
+      <tbody>
+        <tr><td>Gap-finding</td><td>claim grounded in retrieved papers (citation exists &amp; supports); novelty vs. corpus</td></tr>
+        <tr><td>Ideation</td><td>feasibility probe: can a minimal scaffold be generated &amp; run?</td></tr>
+        <tr><td>Experiment-design</td><td>spec compiles to a runnable harness; baselines named &amp; available</td></tr>
+        <tr><td>Execution</td><td><strong>code compiles, tests pass, metric vs. baseline</strong> (e.g., SWE-bench-style slice)</td></tr>
+        <tr><td>Writing</td><td>every claim traces to a result or a real citation (no orphan claims)</td></tr>
+      </tbody>
+    </table>
+    <p>Runs in an isolated sandbox (containerized, no network by default, time/mem capped).</p>
+
+    <h2>6. Typed message contract</h2>
+    <p>All inter-agent traffic is structured (Pydantic) &mdash; cheap to log, replay, and later score. The <strong>canonical per-stage record types</strong> (ResearchBrief, Candidate, Critique, Rebuttal, VerifierSignal, Score, Recommendation) are specified in the <a href="6_vertical-slice-spec.html">Vertical Slice Spec</a>; here is the shared envelope every record carries:</p>
+    <pre><code>Envelope   { run_id, phase, round, author_vendor, kind, refs[], payload }
+# payload is one of the stage record types defined in the Vertical Slice Spec</code></pre>
+
+    <h2>7. Tech stack &amp; dependencies <span class="tag">free OSS only · no paid SaaS</span></h2>
+    <div class="callout">
+      <div class="label">Dependency philosophy</div>
+      <p style="margin:6px 0 0">Frameworks are mostly free OSS &mdash; the only real spend is LLM <em>tokens</em>, unavoidable regardless of stack. So the rule is: <strong>free OSS libraries where they save real work; hand-written code where token-control and paper-legibility matter.</strong> Avoid paid SaaS (LangSmith, AgentOps, hosted trackers) and heavyweight agent frameworks whose hidden prompting/retries silently inflate the token bill.</p>
+    </div>
+    <div class="cards">
+      <div class="card"><h4>Language</h4><p>Python 3.12, fully async (debate = many concurrent provider calls).</p></div>
+      <div class="card"><h4>Providers</h4><p><strong>Official first-party SDKs</strong> (<code>openai</code>, <code>anthropic</code>, <code>google-genai</code>) behind our own <code>LLMProvider</code> Protocol + a shared retry/cost helper. Smallest, most trustworthy supply chain (LiteLLM had repeated 2026 CVEs + a PyPI supply-chain compromise). LiteLLM remains a drop-in option if we ever need 10+ providers.</p></div>
+      <div class="card"><h4>Orchestration</h4><p><strong>Hand-written</strong> (~few hundred lines async). The debate is our contribution &mdash; full control of phases/termination/anonymization/budget; no hidden token overhead. <em>No LangGraph/AutoGen/CrewAI.</em></p></div>
+      <div class="card"><h4>Contracts</h4><p>Pydantic for messages + structured outputs.</p></div>
+      <div class="card"><h4>Retrieval</h4><p>Two providers behind <code>RetrievalProvider</code>: an LLM-maintained <strong>wiki</strong> (curated synthesis) + <strong>OpenAlex</strong> (<code>pyalex</code>/httpx, live discovery). See <a href="8_knowledge-layer.html">Knowledge Layer</a>. No RAG framework.</p></div>
+      <div class="card"><h4>CLI · Store</h4><p>Typer CLI; SQLite + JSONL transcripts (also the eval data). Local logging only.</p></div>
+      <div class="card"><h4>Sandbox <span class="tag">incr 2</span></h4><p>Docker SDK / subprocess for the feasibility check; no framework.</p></div>
+    </div>
+    <pre><code>research_council/                  # code
+  providers/   base.py  openai.py  anthropic.py  gemini.py   # official SDKs
+  retrieval/   base.py  registry.py  hybrid.py                # read side; per-round tool select
+               wiki.py  openalex.py  arxiv.py  semanticscholar.py
+               github.py  paperswithcode.py  web.py
+  librarian/   ingest.py  router.py  lint.py  schema.py       # wiki write side (Sonnet)
+  agents/      peer.py                  # research/propose/critique/rebut/score prompts
+  debate/      orchestrator.py  termination.py  anonymize.py
+  verify/      base.py  mock.py         # sandbox.py = increment 2
+  obs/         telemetry.py  logging.py  metrics.py  report.py
+  store/       models.py  checkpoint.py # pydantic contracts + JSONL resume
+  config/      ideation.yaml  wiki.yaml
+  cli.py                                # rc debate / resume / ingest / lint
+knowledge/                         # data (git-versioned; snapshot per run)
+  raw/external/   raw/internal/        # external = prior art; internal never cited
+  wiki/           # index.md log.md papers/ tasks/ approaches/ methods/
+                  #   concepts/ motivations/ benchmarks/ findings/ gaps/
+  CLAUDE.md       # wiki schema (librarian conventions)
+</code></pre>
+
+    <h2>8. Cost &amp; reliability controls</h2>
+    <ul>
+      <li>Token + $ budget per debate; hard ceiling aborts gracefully.</li>
+      <li>Prompt caching on shared context (corpus, rubric) across rounds.</li>
+      <li>Cost-aware routing: cheaper models for high-volume non-debate passes (wiki librarian, lint); the chosen frontier models for the debate seats.</li>
+      <li>Every provider call retried with backoff; a dead vendor degrades the panel rather than failing the run.</li>
+    </ul>
+
+    <h2>9. Build order (the vertical slice)</h2>
+    <ol>
+      <li><strong>Slice first:</strong> Provider Abstraction Layer + a 3-vendor debate on <em>one</em> stage &mdash; gap-finding &rarr; idea + critique. No sandbox yet; this is the cheapest test of "does heterogeneous debate beat a single model?"</li>
+      <li>Add the Verifier as tie-breaker on the execution stage (the genuinely novel part).</li>
+      <li>Generalize remaining lifecycle stages.</li>
+      <li>Harden + design the eval (Step toward publishable system).</li>
+    </ol>
+
+    <div class="callout">
+      <div class="label">Forward link: the eval decides publishability</div>
+      <p style="margin:6px 0 0">The architecture is built so the debate transcript + verifier signals <em>are</em> the measurement substrate. Primary outcome (decided &mdash; see <a href="5_research-framing-eval.html">Research Framing</a>): AI4SE <strong>ideation quality with verifier-based feasibility</strong>, heterogeneous vs. cost-matched homogeneous panel.</p>
+    </div>
+
+    <h2>Open design questions — all resolved</h2>
+    <p>Everything once open here is now decided downstream &mdash; kept as a pointer:</p>
+    <ul>
+      <li>Vendor&harr;seat binding &amp; panel size &rarr; <a href="3_design-decisions.html">Decisions Q1&ndash;Q2</a> (3 symmetric peers; models asked each run).</li>
+      <li>Retrieval backbone &rarr; <a href="8_knowledge-layer.html">Knowledge Layer</a> (LLM Wiki + OpenAlex).</li>
+      <li>Execution model &rarr; <a href="3_design-decisions.html">Decisions Q4</a> (checkpointed CLI).</li>
+      <li>Primary eval metric &rarr; <a href="5_research-framing-eval.html">Research Framing</a> (ideation + verifier feasibility).</li>
+    </ul>
+  </main>
+</body>
+</html>

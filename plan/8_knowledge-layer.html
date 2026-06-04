@@ -1,0 +1,130 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Phase 4 · Knowledge Layer · research-council</title>
+  <link rel="stylesheet" href="style.css">
+  <script src="nav.js"></script>
+</head>
+<body>
+  <main class="content">
+    <header>
+      <div class="eyebrow">Phase 4 · Build Specs</div>
+      <h1>Knowledge Layer &mdash; LLM Wiki + OpenAlex</h1>
+      <div class="meta">Drafted 2026-06-04 · Retrieval = curated wiki (always) + per-round selectable discovery tools</div>
+    </header>
+
+    <p class="lead">Retrieval is a registry of <code>RetrievalProvider</code> sources <strong>selected per round</strong>: always the <strong>curated, LLM-maintained wiki</strong> (deep synthesis that compounds), plus the discovery tools you enable for that debate (OpenAlex, arXiv, Semantic Scholar, GitHub, …). The wiki design follows Andrej Karpathy's <a href="https://gist.github.com/karpathy/442a6bf555914893e9891c11519de94f">LLM Wiki</a> pattern (<a href="https://medium.com/@urvvil08/andrej-karpathys-llm-wiki-create-your-own-knowledge-base-8779014accd5">explainer</a>).</p>
+
+    <div class="callout good">
+      <div class="label">Why a wiki, not just RAG</div>
+      <p style="margin:6px 0 0">Gap-finding (our Phase 1) <em>is</em> synthesis across documents &mdash; and the wiki's <strong>lint pass already surfaces "contradictions, stale claims, and gaps."</strong> The wiki's core maintenance operation is a primitive of the research task itself. It excels on a bounded curated corpus (100&ndash;500 sources); OpenAlex covers the "massive &amp; fresh" case where RAG-style discovery still wins. Using both plays each to its strength.</p>
+    </div>
+
+    <h2>1. Three layers (adapted to AI4SE)</h2>
+    <table>
+      <thead><tr><th>Layer</th><th>Contents</th><th>Who writes</th></tr></thead>
+      <tbody>
+        <tr><td><code>raw/</code></td><td>Immutable AI4SE sources: paper PDFs, abstracts, your notes &mdash; the source of truth</td><td>You curate; LLM <em>reads only</em></td></tr>
+        <tr><td><code>wiki/</code></td><td>LLM-maintained markdown: entity pages, concept pages, summaries, <code>index.md</code> catalog, <code>log.md</code> audit trail, cross-links, contradiction/gap flags</td><td>LLM owns entirely</td></tr>
+        <tr><td>schema</td><td><code>CLAUDE.md</code>: page structure, ingest protocol, answer-format conventions (from Karpathy's gist, adapted to AI4SE)</td><td>You, once</td></tr>
+      </tbody>
+    </table>
+
+    <h2>2. Write side vs read side <span class="tag">key split</span></h2>
+    <div class="cards">
+      <div class="card"><h4>Write side — automated ops</h4><p><strong>Ingest</strong> (drop a source → a librarian agent updates 10&ndash;15 pages, cross-links, flags) and <strong>lint</strong> (find contradictions, stale claims, orphans, gaps) run as platform ops &mdash; <code>rc ingest</code> / <code>rc lint</code> &mdash; with the guardrails in §5. Offline/async; <em>not</em> in the debate hot path.</p></div>
+      <div class="card"><h4>Read side — the platform</h4><p><code>WikiProvider.search/query</code> navigates <code>index.md</code>, pulls relevant pages, and returns synthesized notes <strong>with citations back to <code>raw/</code></strong>. Debates read a committed snapshot.</p></div>
+    </div>
+    <p class="hint" style="color:var(--ink-faint);font-size:12.5px">Decision (revised 2026-06-04): ingest/lint are <strong>automated from the start</strong> as platform ops, with the guardrails in §5 &mdash; not a manual Claude Code workflow. The maintainer agent, taxonomy, and routing rules are specified in <a href="9_librarian-design.html">Wiki Librarian Design</a>.</p>
+
+    <h2>3. The hybrid read path</h2>
+    <pre><code>HybridRetrieval.search(topic, tools):      # `tools` = the set enabled this round
+  1. always: WikiProvider.query(topic)         # curated, synthesized memory
+  2. fan out to each enabled discovery tool, in parallel:
+       openalex · arxiv · semanticscholar · github · paperswithcode · web
+  3. dedup by DOI/title · queue new externals for ingestion  # wiki compounds
+  return notes[]  with a provenance tag = the source each came from</code></pre>
+    <p>The enabled <code>tools</code> set is chosen at round setup (see below) and recorded in the run trace; every returned item is provenance-tagged so a peer (and our logs) always know which source a claim came from.</p>
+
+    <h3>Available sources — registry &amp; per-round selection</h3>
+    <p>All sources implement the same <code>RetrievalProvider</code> interface and are registered by name. At debate setup &mdash; the same step that asks which model fills each vendor seat &mdash; the CLI also asks <strong>which retrieval tools the council may use this round</strong>, so capability and cost are controlled per debate.</p>
+    <table>
+      <thead><tr><th>Source</th><th>Kind</th><th>Key?</th><th>In eval</th></tr></thead>
+      <tbody>
+        <tr><td><code>wiki</code></td><td>curated synthesis (internal memory)</td><td>no</td><td>on (frozen snapshot)</td></tr>
+        <tr><td><code>openalex</code></td><td>scholarly metadata (CC0)</td><td>no</td><td>on</td></tr>
+        <tr><td><code>arxiv</code></td><td>full-text preprints</td><td>no</td><td>on</td></tr>
+        <tr><td><code>semanticscholar</code></td><td>TLDRs + citation graph</td><td>optional</td><td>on</td></tr>
+        <tr><td><code>github</code></td><td>code search (implementations / benchmarks)</td><td>token</td><td>on (if enabled)</td></tr>
+        <tr><td><code>paperswithcode</code></td><td>paper ↔ code ↔ benchmark links</td><td>no</td><td>on (if enabled)</td></tr>
+        <tr><td><code>web</code></td><td>general web search</td><td>key</td><td><strong>OFF</strong> — noisy / irreproducible</td></tr>
+      </tbody>
+    </table>
+    <p class="hint" style="color:var(--ink-faint);font-size:12.5px">Same-interface future adds: DBLP (venue-accurate SE), Crossref, ACL Anthology, OpenReview. A tool is only offered at setup if its credentials are configured.</p>
+    <div class="callout warn">
+      <div class="label">Eval discipline</div>
+      <p style="margin:6px 0 0">The enabled tool-set is an explicit <strong>experimental variable</strong>: <strong>fixed across all conditions</strong> in an experiment batch and recorded in every run trace (next to the seats + wiki commit hash). <code>web</code> is <strong>off</strong> during eval. "Does richer retrieval help debate?" can later be studied deliberately by varying this set.</p>
+    </div>
+
+    <h2>4. Reproducibility &amp; bias controls <span class="tag">eval-critical</span></h2>
+    <div class="callout warn">
+      <div class="label">The wiki is a mutable, LLM-generated artifact &mdash; handle with care</div>
+      <ul style="margin:8px 0 0">
+        <li><strong>Snapshot per run:</strong> the wiki is a git repo; record the <strong>commit hash in every run trace</strong> so any result is tied to an exact knowledge state.</li>
+        <li><strong>wiki-on vs wiki-off</strong> becomes an explicit eval condition (added to <a href="5_research-framing-eval.html">Research Framing</a>'s ablations) &mdash; isolates the wiki's contribution and guards against it doing the work we attribute to debate.</li>
+        <li><strong>Novelty grounded externally:</strong> novelty is judged against the <em>external</em> literature, never the wiki's own synthesis &mdash; otherwise the system could echo itself and distort novelty scores.</li>
+        <li><strong>Contamination timeline:</strong> <code>log.md</code> date-stamps every ingest, so we can reason about what was "known" when, alongside model cutoffs.</li>
+      </ul>
+    </div>
+
+    <h2>5. Automating ingest/lint — what to consider <span class="tag">new decision</span></h2>
+    <p>Automating the write side is the right call (the wiki maintains itself and compounds), but it shifts real responsibility onto the platform. The considerations, with my recommended defaults:</p>
+    <table>
+      <thead><tr><th>Consideration</th><th>Why it matters · default</th></tr></thead>
+      <tbody>
+        <tr><td><strong>Librarian model</strong></td><td>Maintain the wiki with <em>one fixed, cheaper</em> model (consistent structure/style), <em>not</em> the debate panel. Keeps the wiki vendor-neutral; avoids cross-vendor drift.</td></tr>
+        <tr><td><strong>Snapshot isolation</strong></td><td>Debates read while ingest writes. Writes stage on a git branch → validate → merge; debates always read the last committed snapshot. No torn reads.</td></tr>
+        <tr><td><strong>Quality gate vs "wiki rot"</strong></td><td>Auto-edits can hallucinate or corrupt pages. Gate each ingest with schema validation + a lint pass; optional human-review (PR-style) before merge; git makes every change revertible.</td></tr>
+        <tr><td><strong>Dedup / idempotency</strong></td><td>Re-ingesting the same/similar source must merge, not duplicate. Hash sources; detect near-duplicates before creating pages.</td></tr>
+        <tr><td><strong>Transactional writes</strong></td><td>A partial ingest must never leave the wiki inconsistent: stage → validate → commit, else roll back.</td></tr>
+        <tr><td><strong>Prompt-injection safety</strong></td><td>External PDFs/web are untrusted &mdash; a paper can hide instructions. Sanitize; the ingest agent treats source text as <em>data</em> and never executes tool calls from it.</td></tr>
+        <tr><td><strong>Cost</strong></td><td>Each source touches 10&ndash;15 pages = many calls. Cheaper librarian model + batching + budget caps; ingest is offline so it never inflates per-debate cost.</td></tr>
+      </tbody>
+    </table>
+    <div class="callout warn">
+      <div class="label">The one that can break the paper — self-contamination</div>
+      <p style="margin:6px 0 0">If a debate's own discoveries/ideas get auto-ingested, the system can start citing <em>its own generated content as if it were external literature</em> &mdash; silently inflating novelty. <strong>Hard rule:</strong> two separate namespaces &mdash; <code>raw/external/</code> (real sources, the only thing that counts as prior art) and <code>raw/internal/</code> (system-generated notes). Novelty is judged against <code>external/</code> only.</p>
+    </div>
+
+    <h2>6. Where it lives</h2>
+    <pre><code>knowledge/
+  raw/
+    external/          # real sources — ONLY these count as prior art
+    internal/          # system-generated notes (never cited as literature)
+  wiki/                # LLM-maintained, typed folders (see Librarian Design):
+                       #   index.md log.md papers/ tasks/ approaches/ methods/
+                       #   concepts/ motivations/ benchmarks/ findings/ gaps/
+  CLAUDE.md            # wiki schema (Karpathy gist, adapted to AI4SE)
+research_council/
+  retrieval/   base.py  wiki.py  openalex.py  hybrid.py     # read side
+  librarian/   ingest.py router.py lint.py schema.py agent.py  # write side (automated)</code></pre>
+
+    <h2>7. Scope for v0</h2>
+    <ul>
+      <li><strong>Build (read):</strong> <code>WikiProvider</code>, <code>OpenAlexProvider</code>, <code>HybridRetrieval</code> behind the Protocol.</li>
+      <li><strong>Build (write):</strong> <code>rc ingest</code> / <code>rc lint</code> via a fixed librarian model; git stage&rarr;validate&rarr;merge; <code>external/</code> vs <code>internal/</code> namespaces.</li>
+      <li><strong>Seed:</strong> ingest a small AI4SE corpus to test against.</li>
+      <li><strong>Record:</strong> wiki commit hash in the run trace from day one.</li>
+      <li><strong>Defer:</strong> human-review UI for merges; reranking; full-text PDF RAG.</li>
+    </ul>
+
+    <h2>Sources</h2>
+    <ol class="sources">
+      <li><a href="https://gist.github.com/karpathy/442a6bf555914893e9891c11519de94f">Karpathy &mdash; LLM Wiki gist</a></li>
+      <li><a href="https://medium.com/@urvvil08/andrej-karpathys-llm-wiki-create-your-own-knowledge-base-8779014accd5">Andrej Karpathy's LLM Wiki: Create Your Own Knowledge Base (explainer)</a></li>
+    </ol>
+  </main>
+</body>
+</html>

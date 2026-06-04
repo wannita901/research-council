@@ -1,0 +1,145 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Wiki Librarian Design · research-council</title>
+  <link rel="stylesheet" href="style.css">
+  <script src="nav.js"></script>
+</head>
+<body>
+  <main class="content">
+    <header>
+      <div class="eyebrow">Phase 4 · Build Specs</div>
+      <h1>Wiki Librarian Design</h1>
+      <div class="meta">Drafted 2026-06-04 · The automated maintainer of the <a href="8_knowledge-layer.html">LLM Wiki</a> · Expect iteration</div>
+    </header>
+
+    <p class="lead">The <strong>librarian</strong> is the agent that maintains the wiki: it ingests sources, routes content into typed pages, cross-links, and lints. Locked decisions: <strong>Claude Sonnet</strong> for all passes, <strong>hybrid merge gate</strong>, and the expanded AI4SE taxonomy below. The hard part is routing &mdash; the page types overlap unless defined sharply, so this page nails the definitions.</p>
+
+    <h2>1. Page taxonomy (final)</h2>
+    <table>
+      <thead><tr><th>Folder</th><th>Holds — the question it answers</th><th>Does NOT hold</th></tr></thead>
+      <tbody>
+        <tr><td><code>papers/</code></td><td>One note per source — the <strong>anchor</strong> that links out to every typed page the paper touches</td><td>Deep synthesis (that lives in the typed pages)</td></tr>
+        <tr><td><code>tasks/</code></td><td><strong>WHAT problem</strong> — the SE goal addressed (program repair, flaky-test detection)</td><td>Any technique or evaluation</td></tr>
+        <tr><td><code>motivations/</code></td><td><strong>WHY</strong> — why the problem matters, why a design choice was made, assumptions, pain points</td><td>What was built or how it was tested</td></tr>
+        <tr><td><code>concepts/</code></td><td><strong>The IDEA</strong> — SE philosophy, framing, theory, principles (e.g. "tests as specification")</td><td>Concrete algorithms or study protocols</td></tr>
+        <tr><td><code>approaches/</code></td><td><strong>HOW (technical)</strong> — the technique / architecture / algorithm a paper <em>builds</em> (e.g. "agentic repair with execution feedback")</td><td>How it was evaluated; the abstract idea behind it</td></tr>
+        <tr><td><code>methods/</code></td><td><strong>HOW (validated)</strong> — research methodology: study design, baselines, datasets/metrics, statistics, threats</td><td>The technique itself; the motivation</td></tr>
+        <tr><td><code>benchmarks/</code></td><td>The datasets / benchmarks themselves (SWE-bench, Defects4J): size, metrics, caveats</td><td>Results obtained on them (those are findings)</td></tr>
+        <tr><td><code>findings/</code></td><td><strong>WHAT was found</strong> — results / claims, cross-paper, each with evidence refs</td><td>Unsupported opinion</td></tr>
+        <tr><td><code>gaps/</code></td><td><strong>What's missing</strong> — open problems, unaddressed motivations, weak methods → <em>feeds ideation</em></td><td>Solved problems</td></tr>
+      </tbody>
+    </table>
+    <p class="hint" style="color:var(--ink-faint);font-size:12.5px">Plus <code>index.md</code> (catalog) and <code>log.md</code> (ingest/lint history). Folder names are cosmetic and renameable.</p>
+
+    <div class="callout">
+      <div class="label">The disambiguation that keeps routing clean</div>
+      <p style="margin:6px 0 0"><strong>approaches</strong> = the thing they <em>built</em> · <strong>methods</strong> = what they <em>did to validate it</em> · <strong>concepts</strong> = the <em>idea</em> underneath · <strong>motivations</strong> = the <em>why</em>. These four go in the librarian's schema prompt verbatim so Sonnet routes consistently.</p>
+    </div>
+
+    <h3>Worked example — one paper fans out</h3>
+    <p>"<em>Agentic program repair with execution feedback, evaluated on SWE-bench via pass@k with ablations</em>" ingests into:</p>
+    <pre><code>papers/doe-2025-agentic-repair.md        # anchor → links to all below
+  ├─ tasks/program-repair.md             # the problem
+  ├─ motivations/why-execution-feedback.md   # why feedback should help
+  ├─ concepts/tests-as-oracle.md         # the underlying idea
+  ├─ approaches/agentic-repair-exec-feedback.md   # the technique built
+  ├─ methods/passk-with-ablations.md     # how it was evaluated
+  ├─ benchmarks/swe-bench.md             # the dataset
+  ├─ findings/exec-feedback-improves-repair.md    # the result
+  └─ gaps/repair-beyond-test-passing.md  # open problem it exposes</code></pre>
+
+    <h2>2. Page schema (default — iterable)</h2>
+    <p>Every page is markdown with YAML frontmatter; required sections vary by type. Example for an <code>approaches/</code> page:</p>
+    <pre><code>---
+type: approach
+title: Agentic repair with execution feedback
+papers: [doe-2025]                 # citation keys → raw/external only
+related: ["[[task:program-repair]]", "[[method:passk-with-ablations]]"]
+updated: 2026-06-04
+---
+## Summary           # 2–3 sentences
+## How it works      # the mechanism
+## Evidence          # claims w/ paper refs
+## Contradictions / open questions</code></pre>
+
+    <h2>3. Ingest pipeline (the librarian's loop)</h2>
+    <pre><code>rc ingest &lt;source&gt;:
+  1 load + SANITIZE      # untrusted input: strip injected instructions; treat as data
+  2 extract → papers/    # create the anchor note
+  3 route + synthesize   # create/update the typed pages (tasks/approaches/methods/…),
+                         #   add cross-links + citation refs back to raw/external
+  4 dedup               # source hash + title similarity → merge, don't duplicate
+  5 lint                # contradictions, orphans, schema violations, stale claims
+  6 gate (hybrid)       # clean → auto-merge ; flagged → human review diff
+  7 commit (transactional) → append log.md → record wiki commit hash</code></pre>
+
+    <h3>When does ingest fire? — triggers &amp; timing</h3>
+    <p>Ingestion is always <strong>offline and after</strong> a debate (or on demand) &mdash; never in the debate hot path. A debate reads a <strong>committed snapshot</strong>; papers discovered mid-debate are <em>read</em> transiently, not written. v0 triggers:</p>
+    <ul>
+      <li><strong>Manual</strong> &mdash; <code>rc ingest &lt;path&gt;</code>: papers you add yourself. Always on.</li>
+      <li><strong>Post-debate harvest (opt-in)</strong> &mdash; after a debate ends, the <em>external</em> (OpenAlex) papers the peers discovered are queued and ingested into <code>raw/external/</code>, so the wiki <strong>compounds from use</strong>. Runs through the hybrid gate like any ingest.</li>
+      <li><strong>Eval freeze (non-negotiable)</strong> &mdash; during an experiment batch the wiki is <strong>frozen</strong> (auto-harvest OFF) so runs stay comparable; the wiki commit hash is pinned in every run trace.</li>
+      <li><strong>Deferred:</strong> watch-folder / scheduled ingest.</li>
+    </ul>
+    <p class="hint" style="color:var(--ink-faint);font-size:12.5px">The debate's own outputs go to <code>raw/internal/</code> and are <strong>never</strong> harvested as prior art &mdash; the self-contamination rule from the <a href="8_knowledge-layer.html">Knowledge Layer</a>.</p>
+
+    <h3>The read &harr; write lifecycle</h3>
+    <p>How the read and write sides interleave across debates &mdash; the wiki compounds only <em>between</em> runs, and only from real literature:</p>
+    <pre><code>      ┌───────────────────────────────────────────────────┐
+      │                                                     │
+      ▼                                                     │
+  [ wiki snapshot @ commit C ]                              │
+      │  READ (Phase 1: peers consult synthesized pages)    │
+      ▼                                                     │
+  DEBATE ──► peers discover external papers via OpenAlex    │
+      │       (transient READ only — no write mid-run)      │
+      ▼  debate ends                                        │
+  harvest queue ── external / OpenAlex finds ONLY           │
+      │  (opt-in · OFF during eval freeze)                  │
+      ▼                                                     │
+  LIBRARIAN ingest (offline · Sonnet)                       │
+      │  route → dedup → lint → hybrid gate                 │
+      ▼                                                     │
+  commit C+1  (transactional · log.md · hash → run trace) ──┘
+      │
+      ▼
+  next debate READS the grown snapshot @ C+1
+
+  the council's own ideas/critiques ─► raw/internal/
+                                       (never harvested as prior art)</code></pre>
+    <p class="hint" style="color:var(--ink-faint);font-size:12.5px">Key invariants: the wiki is immutable <em>within</em> a debate; it only advances (C → C+1) via an offline, gated ingest between debates; every debate's result is tied to the exact snapshot it read.</p>
+
+    <h2>4. Model &amp; merge — locked</h2>
+    <div class="cards">
+      <div class="card"><h4>Librarian model</h4><p><strong>Claude Sonnet</strong> for all passes (ingest synthesis + lint). Balanced quality/cost; batch + budget-cap the high-volume passes. Offline, so it never inflates per-debate cost. Swappable later (e.g. Haiku for lint) if cost bites.</p></div>
+      <div class="card"><h4>Merge gate — hybrid</h4><p>Stage edits on a git branch → schema-validate + lint. <strong>Clean &amp; no contradiction → auto-merge</strong>; contradiction or low-confidence → <strong>pause for your review diff</strong>. Every change git-revertible.</p></div>
+    </div>
+
+    <h2>5. Defaults we can iterate</h2>
+    <ul>
+      <li><strong>Trigger:</strong> manual <code>rc ingest</code> + opt-in post-debate harvest (external-only, gated, frozen during eval) &mdash; see "When does ingest fire?" above; watch-folder deferred.</li>
+      <li><strong>Identity &amp; links:</strong> kebab-case slugs; <code>[[type:slug]]</code> wikilinks; dedup by source hash + title similarity.</li>
+      <li><strong>Peer search over the wiki:</strong> <code>index.md</code> navigation + BM25 now; add embeddings only if recall suffers.</li>
+      <li><strong>Lint cadence:</strong> every ingest, plus on-demand <code>rc lint</code>.</li>
+    </ul>
+
+    <h2>6. Where it lives (write side)</h2>
+    <pre><code>research_council/
+  librarian/   agent.py       # the Sonnet maintainer (model + prompts)
+               ingest.py      # the pipeline above
+               router.py      # content → typed page (uses the schema prompt)
+               lint.py        # checks + hybrid gate
+               schema.py      # frontmatter + per-type section contracts
+  retrieval/   wiki.py        # read side — peers query the wiki
+  config/      wiki.yaml      # model: sonnet · gate: hybrid · taxonomy: [...]</code></pre>
+
+    <div class="callout good">
+      <div class="label">Open to iterate</div>
+      <p style="margin:6px 0 0">Taxonomy, schema, and routing definitions are the parts most likely to shift once we ingest real papers and see what mis-files. They live in one place (<code>wiki.yaml</code> + the schema prompt), so iterating is a config/prompt change, not a code rewrite.</p>
+    </div>
+  </main>
+</body>
+</html>

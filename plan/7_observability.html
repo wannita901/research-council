@@ -1,0 +1,98 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Phase 4 · Observability & Telemetry · research-council</title>
+  <link rel="stylesheet" href="style.css">
+  <script src="nav.js"></script>
+</head>
+<body>
+  <main class="content">
+    <header>
+      <div class="eyebrow">Phase 4 · Build Specs</div>
+      <h1>Observability &amp; Telemetry</h1>
+      <div class="meta">Drafted 2026-06-04 · Local-first · No paid SaaS · The trace is also the eval data</div>
+    </header>
+
+    <p class="lead">One principle drives the whole plan: <strong>observability is local, free, and identical to our eval dataset.</strong> Every debate already emits a structured record of itself; observability is just making that record complete, queryable, and viewable &mdash; without sending anything off-disk or paying anyone.</p>
+
+    <div class="callout good">
+      <div class="label">Why this is nearly free</div>
+      <p style="margin:6px 0 0">The checkpoint store (see <a href="2_architecture-design.html">Architecture §6</a> / <a href="6_vertical-slice-spec.html">Vertical Slice</a>) already persists every phase event for resume. Observability reuses that exact stream &mdash; we add per-call telemetry + a cost governor + a viewer. The same JSONL that lets a crash resume is what we later load into pandas to compute RQ metrics. Build it once, use it twice.</p>
+    </div>
+
+    <h2>Three pillars, mapped to local choices</h2>
+    <table>
+      <thead><tr><th>Pillar</th><th>What</th><th>How (free, local)</th></tr></thead>
+      <tbody>
+        <tr><td><strong>Logs</strong></td><td>Human-readable run progress, warnings, errors</td><td>Python <code>logging</code>, JSON formatter, correlation id = <code>run_id</code></td></tr>
+        <tr><td><strong>Metrics</strong></td><td>Cost, tokens, latency; RQ metrics</td><td>Telemetry records → pandas aggregates</td></tr>
+        <tr><td><strong>Traces</strong></td><td>The full debate timeline, phase by phase</td><td>Append-only JSONL trace + an HTML run report</td></tr>
+      </tbody>
+    </table>
+
+    <h2>Tier 0 &mdash; default (zero external services)</h2>
+
+    <h3>1 · Run trace (the one artifact)</h3>
+    <p>Append-only JSONL per <code>run_id</code>. Every phase output is an event with a shared envelope. This <em>is</em> the transcript, the checkpoint log, and the eval datum &mdash; one file, three jobs.</p>
+    <pre><code>// runs/2026-06-04-ideation-a3f1/trace.jsonl
+{ run_id, ts, phase, round, agent_vendor?, event_type, payload }
+// event_type ∈ research_brief | candidate | critique | rebuttal
+//            | verifier_signal | score | recommendation | human_action</code></pre>
+
+    <h3>2 · LLM call telemetry</h3>
+    <p>One record per provider call &mdash; the basis for cost, latency, and reliability views. (We compute cost in the shared provider helper from a small per-model token-price table.)</p>
+    <pre><code>{ run_id, phase, agent_vendor, provider, model,
+  prompt_tokens, completion_tokens, cached_tokens,
+  cost_usd, latency_ms, retries, error? }</code></pre>
+
+    <h3>3 · Cost / budget governor</h3>
+    <ul>
+      <li>Running USD total per debate; enforce <code>budget.usd_max</code> &mdash; on breach, <strong>abort gracefully and checkpoint</strong> (never a surprise bill).</li>
+      <li>Per-phase and per-vendor cost breakdown in the run summary.</li>
+      <li>Prompt caching on shared context (corpus, rubric) across rounds to cut spend &mdash; tracked via <code>cached_tokens</code>.</li>
+    </ul>
+
+    <h3>4 · Structured logging</h3>
+    <ul>
+      <li><code>INFO</code>: phase boundaries, decisions, final ranking. <code>WARNING</code>: retries, a degraded/dead vendor. <code>DEBUG</code>: full prompts + responses (behind a flag &mdash; verbose &amp; may hold sensitive text).</li>
+      <li>Every line carries <code>run_id</code> so a single debate is greppable end to end.</li>
+    </ul>
+
+    <h3>5 · Derived metrics = RQ metrics</h3>
+    <p>Computed from the trace by one script &mdash; observability and evaluation share the same pipeline:</p>
+    <ul>
+      <li><strong>rounds_to_converge</strong>, critique counts by axis/severity</li>
+      <li><strong>proposal_diversity</strong> (embedding distance among the 3 independent briefs/candidates) &mdash; evidence heterogeneity produces diverse starts</li>
+      <li><strong>self_preference_rate</strong> (own-candidate score vs others, anonymized vs de-anonymized) &mdash; <em>this is RQ3</em></li>
+      <li><strong>verifier pass rate</strong>, feasibility distribution &mdash; <em>this is RQ2</em></li>
+    </ul>
+
+    <h3>6 · Run report (HTML, offline)</h3>
+    <p>Generate <code>runs/&lt;id&gt;/report.html</code> reusing this plan's CSS: the phase timeline, candidates, critiques, costs, and final ranking &mdash; openable in a browser, no server. It also seeds the future UI, which would stream the very same events live.</p>
+
+    <h2>Tier 1 &mdash; optional, free OSS, self-hosted</h2>
+    <p>Only if Tier 0's JSONL + report proves insufficient for debugging multi-agent flows:</p>
+    <ul>
+      <li><strong>Arize Phoenix</strong> or <strong>Langfuse</strong> &mdash; both free OSS, self-hostable via Docker, <em>no SaaS bill</em>. They give span/trace UIs and dashboards over LLM calls. Bridge via <strong>OpenTelemetry</strong> instrumentation; off by default, opt-in env flag.</li>
+      <li>Cost: adds one local container. Worth it only when visual trace debugging pays for itself.</li>
+    </ul>
+
+    <div class="callout warn">
+      <div class="label">Explicitly NOT used (paid / data leaves disk)</div>
+      <p style="margin:6px 0 0">No <strong>LangSmith</strong>, <strong>AgentOps</strong>, or hosted <strong>Weights &amp; Biases</strong>. They're convenient but send debate content to a third party and/or meter you. Everything here stays local; the optional Tier-1 tools are the self-hosted OSS editions only.</p>
+    </div>
+
+    <h2>Where it lives in the repo</h2>
+    <pre><code>research_council/
+  store/      checkpoint.py     # trace JSONL + resume  (Tier 0 #1)
+  obs/        telemetry.py      # per-call records + cost governor  (#2,#3)
+              logging.py        # structured logs  (#4)
+              metrics.py        # derived/RQ metrics from a trace  (#5)
+              report.py         # trace → report.html  (#6)
+              otel.py           # optional Phoenix/Langfuse bridge  (Tier 1)
+</code></pre>
+  </main>
+</body>
+</html>

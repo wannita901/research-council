@@ -1,0 +1,135 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Phase 2 · Debate Flow Walkthrough · research-council</title>
+  <link rel="stylesheet" href="style.css">
+  <script src="nav.js"></script>
+  <style>
+    .flow { display: flex; flex-direction: column; gap: 0; margin: 20px 0; }
+    .node { display: flex; gap: 14px; align-items: stretch; cursor: pointer; }
+    .rail { display: flex; flex-direction: column; align-items: center; width: 40px; flex: 0 0 40px; }
+    .dot { width: 30px; height: 30px; border-radius: 50%; background: var(--panel-2); border: 2px solid var(--border); color: var(--ink-soft); display: flex; align-items: center; justify-content: center; font-weight: 700; font-size: 13px; transition: .15s; }
+    .line { width: 2px; flex: 1; background: var(--border); min-height: 14px; }
+    .node:last-child .line { display: none; }
+    .nodebody { flex: 1; padding: 0 0 16px; }
+    .nodehead { display: flex; align-items: center; gap: 10px; padding: 4px 0; }
+    .nodehead .ph { font-size: 11px; text-transform: uppercase; letter-spacing: .8px; color: var(--ink-faint); }
+    .nodehead .nm { font-weight: 700; font-size: 15px; }
+    .nodehead .who { margin-left: auto; font-size: 11.5px; color: var(--ink-faint); }
+    .detail { display: none; margin-top: 8px; padding: 14px 16px; background: var(--panel); border: 1px solid var(--border); border-left: 3px solid var(--accent); border-radius: 8px; font-size: 13.5px; color: var(--ink-soft); }
+    .node.on .dot { background: var(--accent-soft); border-color: var(--accent); color: #fff; }
+    .node.on .detail { display: block; }
+    .node.human .dot { border-style: dashed; border-color: var(--warn); color: var(--warn); }
+    .node.human.on .dot { background: #3a2f12; }
+    .hint { font-size: 12.5px; color: var(--ink-faint); margin: 4px 0 0; }
+    .seats { display:flex; gap:8px; flex-wrap:wrap; margin-top:6px; }
+    .seat { font-size:12px; padding:3px 9px; border-radius:999px; border:1px solid var(--border); background:var(--panel-2); }
+  </style>
+</head>
+<body>
+  <main class="content">
+    <header>
+      <div class="eyebrow">Phase 2 · Architecture &amp; Design</div>
+      <h1>Debate Flow Walkthrough</h1>
+      <div class="meta">Updated 2026-06-04 · The concrete run, as described · Click a phase for detail</div>
+    </header>
+
+    <p class="lead">This is the scenario in motion: you propose a topic; three peer agents (one per vendor) research independently, then convene to cross-critique, rebut, verify, and vote; you confirm the result. Click each phase below.</p>
+
+    <div class="seats">
+      <span class="seat">🟢 OpenAI seat</span>
+      <span class="seat">🟣 Claude seat</span>
+      <span class="seat">🔵 Gemini seat</span>
+      <span class="seat" style="border-style:dashed;border-color:var(--warn)">🧑 You (human-in-the-loop)</span>
+    </div>
+
+    <div class="flow" id="flow">
+      <div class="node human on">
+        <div class="rail"><div class="dot">0</div><div class="line"></div></div>
+        <div class="nodebody">
+          <div class="nodehead"><span class="ph">Intake</span><span class="nm">You ask a question / propose a topic</span><span class="who">human</span></div>
+          <div class="detail">You enter a research question or topic (e.g. <em>"Are LLM code-review agents better at finding security bugs than static analyzers?"</em>). The system selects the stage (gap-finding, ideation, …) and the 3 vendor seats for this run.</div>
+        </div>
+      </div>
+
+      <div class="node">
+        <div class="rail"><div class="dot">1</div><div class="line"></div></div>
+        <div class="nodebody">
+          <div class="nodehead"><span class="ph">Research · parallel</span><span class="nm">Each peer investigates on its own</span><span class="who">3 peers, concurrent</span></div>
+          <div class="detail">All three peers work <strong>independently and in parallel</strong>, each with retrieval-tool access (Hybrid/OpenAlex + local index). Each forms its own grounded view of the literature &mdash; no cross-talk yet, so the three perspectives stay genuinely diverse.</div>
+        </div>
+      </div>
+
+      <div class="node">
+        <div class="rail"><div class="dot">2</div><div class="line"></div></div>
+        <div class="nodebody">
+          <div class="nodehead"><span class="ph">Propose</span><span class="nm">Each peer puts forward one candidate</span><span class="who">3 peers</span></div>
+          <div class="detail">Each peer submits a single grounded candidate (a gap / idea / plan), with evidence references. Now there are three candidates on the table, each carrying its own citations.</div>
+        </div>
+      </div>
+
+      <div class="node">
+        <div class="rail"><div class="dot">3</div><div class="line"></div></div>
+        <div class="nodebody">
+          <div class="nodehead"><span class="ph">Cross-critique</span><span class="nm">Peers critique each other</span><span class="who">3 peers, anonymized</span></div>
+          <div class="detail">Every peer critiques the other two on <strong>soundness, novelty, feasibility</strong>, citing evidence or flagging a claim for verification. Authorship is anonymized so no peer knows which candidate is its own &mdash; the core self-preference-bias control.</div>
+        </div>
+      </div>
+
+      <div class="node">
+        <div class="rail"><div class="dot">4</div><div class="line"></div></div>
+        <div class="nodebody">
+          <div class="nodehead"><span class="ph">Rebut / revise</span><span class="nm">Authors defend or revise</span><span class="who">3 peers</span></div>
+          <div class="detail">Each candidate's author responds to critiques &mdash; conceding, defending with evidence, or revising the candidate. Disagreements that hinge on a checkable fact are pushed to the verifier.</div>
+        </div>
+      </div>
+
+      <div class="node">
+        <div class="rail"><div class="dot">5</div><div class="line"></div></div>
+        <div class="nodebody">
+          <div class="nodehead"><span class="ph">Verify</span><span class="nm">Sandbox settles checkable claims</span><span class="who">verifier (tool)</span></div>
+          <div class="detail">The verifier runs the stage's concrete check (citation exists &amp; supports; scaffold runs; tests pass; metric vs. baseline) in an isolated sandbox. This <strong>ground-truth signal outweighs opinion</strong> &mdash; rhetoric cannot beat a failing build.</div>
+        </div>
+      </div>
+
+      <div class="node">
+        <div class="rail"><div class="dot">6</div><div class="line"></div></div>
+        <div class="nodebody">
+          <div class="nodehead"><span class="ph">Judge · loop</span><span class="nm">Anonymized panel vote → recommendation</span><span class="who">3 peers</span></div>
+          <div class="detail">Peers score all candidates (authorship hidden); the verifier signal weights the scores into a ranked recommendation. If no termination rule has fired, the debate loops back to phase 3 with the revised candidates.</div>
+        </div>
+      </div>
+
+      <div class="node human">
+        <div class="rail"><div class="dot">✓</div></div>
+        <div class="nodebody">
+          <div class="nodehead"><span class="ph">Confirm</span><span class="nm">You make the final call</span><span class="who">human</span></div>
+          <div class="detail">You see the ranked candidates, the verifier evidence, and the full debate transcript, then confirm / pick / send back for another round. The whole run is checkpointed, so you can stop and resume anytime.</div>
+        </div>
+      </div>
+    </div>
+
+    <h2>About the UI (deferred, kept in mind)</h2>
+    <div class="callout">
+      <div class="label">UX / UI is its own step later</div>
+      <p style="margin:6px 0 0">For v0 this runs as a checkpointed CLI. We will design the front-end / UX as a dedicated step. Architecturally it already fits: the orchestrator is a <strong>runner-agnostic async generator that yields each phase's result</strong>, so a UI simply subscribes to that stream &mdash; the diagram above is essentially the screen we'd build (live per-phase progress + the transcript + a confirm control). No rework needed to add it.</p>
+    </div>
+
+    <h2>What this confirmed / changed in the plan</h2>
+    <ul>
+      <li><strong>Added</strong> an explicit <em>independent parallel research</em> phase (phase 1) before peers convene &mdash; keeps the three perspectives diverse.</li>
+      <li><strong>Changed</strong> the panel from fixed roles (Proposer/Critic/Judge) to <strong>3 symmetric peers</strong>, each proposing <em>and</em> critiquing &mdash; matches the described scenario. Updated in <a href="2_architecture-design.html">Architecture §3&ndash;4</a> and <a href="3_design-decisions.html">Decisions Q1&ndash;Q2</a>.</li>
+      <li><strong>Confirmed</strong> judging = anonymized panel vote, verifier-weighted, human confirms (<a href="3_design-decisions.html">Decisions</a>).</li>
+      <li><strong>Noted</strong> UI as a future step; architecture already supports streaming to it.</li>
+    </ul>
+  </main>
+
+  <script>
+    document.querySelectorAll("#flow .node").forEach(node => {
+      node.addEventListener("click", () => node.classList.toggle("on"));
+    });
+  </script>
+</body>
+</html>

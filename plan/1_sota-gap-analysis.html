@@ -1,0 +1,111 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Phase 1 · SOTA & Gap Analysis · research-council</title>
+  <link rel="stylesheet" href="style.css">
+  <script src="nav.js"></script>
+</head>
+<body>
+  <main class="content">
+    <header>
+      <div class="eyebrow">Phase 1 · Research</div>
+      <h1>Autonomous Multi-Agent Research Platforms: State of the Art &amp; Gap Analysis</h1>
+      <div class="meta">Generated 2026-06-04 · 18 sources · Confidence: High (landscape), Medium (non-existence claim)</div>
+    </header>
+
+    <p class="lead">Do the individual capabilities we want already exist? Yes. Does any single public system combine all four of our pillars &mdash; full lifecycle, autonomous multi-agent debate, cross-vendor orchestration, and AI4SE specialization? No.</p>
+
+    <div class="callout good">
+      <div class="label">Bottom line</div>
+      <p style="margin:6px 0 0">Every leading system is missing at least one pillar. The widest unclaimed gap is <strong>heterogeneous cross-vendor debate</strong> (OpenAI&times;Claude&times;Gemini arguing with each other) joined to the research lifecycle. That is our differentiator.</p>
+    </div>
+
+    <h2>1. Full-lifecycle autonomous systems (closest analogues)</h2>
+    <ul>
+      <li><strong>The AI Scientist / v2 (Sakana AI)</strong> &mdash; the canonical reference. Idea &rarr; code &rarr; experiment &rarr; full paper &rarr; simulated review, iterating open-endedly. v2 added a progressive agentic tree search; one manuscript reportedly passed real workshop peer review (~$15/paper). <em>Runs a single LLM family at a time &mdash; no cross-provider debate.</em> <a href="https://arxiv.org/pdf/2408.06292">2408.06292</a>, <a href="https://arxiv.org/pdf/2504.08066">2504.08066</a>.</li>
+      <li><strong>Agent Laboratory (EMNLP 2025 Findings)</strong> &mdash; role-specialized agents (PhD / Postdoc / ML Engineer) over lit review &rarr; experiment &rarr; report, ~84% cheaper than prior methods. <em>Requires a human-provided idea; does not autonomously find the gap.</em> <a href="https://arxiv.org/abs/2501.04227">2501.04227</a>.</li>
+      <li><strong>FutureHouse Platform + Robin</strong> &mdash; most productized; specialized agents (Crow/Falcon/Owl/Phoenix/Finch) + PaperQA2. Robin showed end-to-end discovery (AI did hypotheses/analysis; humans ran wet-lab). Domain: bio/chem.</li>
+      <li><strong>DORA, MLR-Copilot, Jr. AI Scientist, Deep Researcher Agent</strong> &mdash; a wave of "virtual research team" systems over the same six-stage loop. <a href="https://arxiv.org/pdf/2408.14033">2408.14033</a>, <a href="https://arxiv.org/pdf/2511.04583">2511.04583</a>.</li>
+    </ul>
+
+    <h2>2. Multi-agent debate / tournament systems</h2>
+    <ul>
+      <li><strong>Google "AI co-scientist" (DeepMind, <em>Nature</em>)</strong> &mdash; strongest match to "LLMs discuss to reach the best solution": specialized agents generate, debate, and evolve hypotheses via a <strong>"tournament of ideas"</strong> with verified, cited claims. <em>Gemini-only, and stops at hypothesis generation &mdash; no experiments or paper.</em> <a href="https://deepmind.google/blog/co-scientist-a-multi-agent-ai-partner-to-accelerate-research/">DeepMind</a>.</li>
+      <li><strong>SciAgents (MIT, <em>Advanced Materials</em> 2025)</strong> &mdash; Ontologist / Scientist / Critic agents over a ~33k-node knowledge graph. Good model for KG-grounded gap-finding. <a href="https://arxiv.org/abs/2409.05556">2409.05556</a>.</li>
+      <li><strong>ResearchAgent (NAACL 2025)</strong> &mdash; idea generator + ReviewingAgents; confirms empirically that complementary experts + multi-turn refinement improve idea quality. <a href="https://arxiv.org/pdf/2404.07738">2404.07738</a>.</li>
+    </ul>
+
+    <h2>3. Cross-provider orchestration (our headline gap)</h2>
+    <p>The plumbing exists but is not joined to the research lifecycle.</p>
+    <ul>
+      <li>General frameworks (AutoGen, CrewAI, LangGraph, "LLM Orchestra") already abstract over Claude/GPT/Gemini and implement debate/supervisor/swarm patterns.</li>
+      <li><strong>Empirical hook:</strong> "Beyond the Strongest LLM" orchestrated Gemini 2.5 Pro, GPT-5, Grok 4, Claude Sonnet 4 and found multi-turn multi-agent orchestration <strong>matches or exceeds the strongest single model</strong> &mdash; but on benchmarks, not research tasks. <a href="https://arxiv.org/pdf/2509.23537">2509.23537</a>.</li>
+      <li>Multi-vendor CLI orchestrators (CLITrigger, nori-cli) already run Claude/Codex/Gemini with architect/developer/reviewer debate &mdash; for <em>coding</em>, not research.</li>
+    </ul>
+
+    <h2>4. Commodity gap-finding / lit tools (reuse, don't rebuild)</h2>
+    <p><strong>Elicit</strong> (systematic review, gap ID), <strong>Consensus</strong> (evidence Q&amp;A), <strong>Undermind</strong> (deep semantic search), <strong>Scite</strong> (supporting/contrasting citations). These are tools to wrap, not competitors.</p>
+
+    <h2>5. The skeptical turn (must engage in any paper)</h2>
+    <div class="callout warn">
+      <div class="label">Reviewer climate 2025&ndash;2026</div>
+      <p style="margin:6px 0 0">"Fully autonomous scientist" is now a red flag.</p>
+    </div>
+    <ul>
+      <li>AI Scientist produces <strong>"sophisticated hallucinations"</strong> + fake citations; needs heavy scaffolding. <a href="https://arxiv.org/html/2502.14297v2">2502.14297</a>.</li>
+      <li>"Why LLMs Aren't Scientists Yet": across four autonomous attempts, agents failed silently and hallucinated actions outside narrow coding. <a href="https://arxiv.org/pdf/2601.03315">2601.03315</a>.</li>
+      <li><strong>Ideation&ndash;execution gap:</strong> LLM ideas score more novel but less feasible than experts, and underperform on execution. <a href="https://arxiv.org/abs/2409.04109">2409.04109</a>, <a href="https://arxiv.org/html/2506.20803v1">2506.20803</a>.</li>
+      <li>Field consensus: the frontier is <strong>orchestration, reliability, evaluation, human trust</strong> &mdash; not more autonomy. That is exactly our niche.</li>
+    </ul>
+
+    <h2>Where we fit</h2>
+    <table>
+      <thead><tr><th>System</th><th>Lifecycle</th><th>Autonomous debate</th><th>Cross-vendor</th><th>AI4SE</th></tr></thead>
+      <tbody>
+        <tr><td>AI Scientist v2</td><td><span class="yes">✓</span></td><td><span class="part">partial</span></td><td><span class="no">✗</span> single-family</td><td><span class="no">✗</span> ML</td></tr>
+        <tr><td>Google co-scientist</td><td><span class="no">✗</span> ideas only</td><td><span class="yes">✓</span> tournament</td><td><span class="no">✗</span> Gemini-only</td><td><span class="no">✗</span> bio</td></tr>
+        <tr><td>Agent Laboratory</td><td><span class="yes">✓</span> (needs human idea)</td><td><span class="no">✗</span> roles, no debate</td><td><span class="no">✗</span></td><td><span class="no">✗</span> ML</td></tr>
+        <tr><td>FutureHouse Robin</td><td><span class="yes">✓</span></td><td><span class="part">partial</span></td><td><span class="no">✗</span></td><td><span class="no">✗</span> bio/chem</td></tr>
+        <tr><td><strong>research-council</strong></td><td><span class="yes">✓</span></td><td><span class="yes">✓</span></td><td><span class="yes">✓</span></td><td><span class="yes">✓</span></td></tr>
+      </tbody>
+    </table>
+
+    <div class="callout">
+      <div class="label">Positioning (one sentence)</div>
+      <p style="margin:6px 0 0">A human-in-the-loop <strong>AI4SE research copilot</strong> whose core novelty is a <strong>heterogeneous cross-vendor debate protocol</strong> (GPT &times; Claude &times; Gemini) <strong>grounded in executable verification</strong> &mdash; agents don't just argue, they compile, test, and benchmark to settle disagreements.</p>
+    </div>
+
+    <h2>Decisions locked (2026-06-04)</h2>
+    <div class="cards">
+      <div class="card"><h4>Domain scope</h4><p><strong>AI4SE only.</strong> SE artifacts are executable/verifiable &rarr; debate can be grounded in execution, countering the field's #1 weakness.</p></div>
+      <div class="card"><h4>Goal</h4><p><strong>Both, sequentially.</strong> Working personal tool first &rarr; harden + benchmark into a publishable system (ICSE/FSE/ASE/TSE).</p></div>
+      <div class="card"><h4>Differentiator</h4><p><strong>Cross-vendor debate</strong> as the headline. Full-lifecycle coverage is secondary.</p></div>
+    </div>
+
+    <hr class="divider">
+    <h2>Sources</h2>
+    <ol class="sources">
+      <li><a href="https://arxiv.org/pdf/2408.06292">The AI Scientist (2408.06292)</a></li>
+      <li><a href="https://arxiv.org/pdf/2504.08066">AI Scientist-v2 (2504.08066)</a></li>
+      <li><a href="https://arxiv.org/abs/2501.04227">Agent Laboratory (2501.04227)</a></li>
+      <li><a href="https://deepmind.google/blog/co-scientist-a-multi-agent-ai-partner-to-accelerate-research/">Google AI co-scientist (DeepMind)</a></li>
+      <li><a href="https://research.google/blog/accelerating-scientific-breakthroughs-with-an-ai-co-scientist/">Google Research: AI co-scientist</a></li>
+      <li><a href="https://arxiv.org/abs/2409.05556">SciAgents (2409.05556)</a></li>
+      <li><a href="https://arxiv.org/pdf/2404.07738">ResearchAgent (2404.07738)</a></li>
+      <li><a href="https://arxiv.org/html/2507.08350">Multi-Agent Dialogues for Ideation (2507.08350)</a></li>
+      <li><a href="https://www.futurehouse.org/research-announcements/demonstrating-end-to-end-scientific-discovery-with-robin-a-multi-agent-system">FutureHouse Robin</a></li>
+      <li><a href="https://arxiv.org/pdf/2509.23537">Beyond the Strongest LLM (2509.23537)</a></li>
+      <li><a href="https://www.digitalapplied.com/blog/multi-agent-orchestration-5-patterns-that-work">Multi-agent orchestration patterns</a></li>
+      <li><a href="https://arxiv.org/abs/2409.04109">Can LLMs Generate Novel Research Ideas? (2409.04109)</a></li>
+      <li><a href="https://arxiv.org/html/2506.20803v1">The Ideation&ndash;Execution Gap (2506.20803)</a></li>
+      <li><a href="https://arxiv.org/html/2502.14297v2">Evaluating Sakana's AI Scientist (2502.14297)</a></li>
+      <li><a href="https://arxiv.org/pdf/2601.03315">Why LLMs Aren't Scientists Yet (2601.03315)</a></li>
+      <li><a href="https://pmc.ncbi.nlm.nih.gov/articles/PMC12446425/">Risks of AI scientists (PMC)</a></li>
+      <li><a href="https://arxiv.org/pdf/2408.14033">MLR-Copilot (2408.14033)</a></li>
+      <li><a href="https://www.iatrox.com/blog/best-ai-tools-medical-research-2026-elicit-consensus-semantic-scholar-perplexity">Best AI research tools 2026 (iatrox)</a></li>
+    </ol>
+  </main>
+</body>
+</html>

@@ -1,0 +1,187 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Phase 2 · Design Decisions · research-council</title>
+  <link rel="stylesheet" href="style.css">
+  <script src="nav.js"></script>
+  <style>
+    /* simple interactive tabs — self-contained */
+    .tabs { border: 1px solid var(--border); border-radius: var(--radius); overflow: hidden; margin: 16px 0; }
+    .tabbar { display: flex; flex-wrap: wrap; background: var(--panel-2); border-bottom: 1px solid var(--border); }
+    .tabbar button { flex: 1 1 auto; background: none; border: 0; color: var(--ink-soft); padding: 11px 14px; cursor: pointer; font: inherit; font-size: 13px; font-weight: 600; border-bottom: 2px solid transparent; }
+    .tabbar button:hover { color: var(--ink); }
+    .tabbar button.on { color: #fff; border-bottom-color: var(--accent); background: var(--panel); }
+    .tabpanel { display: none; padding: 18px 20px; }
+    .tabpanel.on { display: block; }
+    .tabpanel h4 { margin: 0 0 8px; }
+    .pill { display:inline-block; font-size:11px; padding:2px 8px; border-radius:999px; margin-left:6px; }
+    .pill.rec { background:#15351f; color:var(--good); border:1px solid #2c5f3c; }
+    .pill.def { background: var(--accent-soft); color: var(--accent); border:1px solid #34507e; }
+    .pros { display:grid; grid-template-columns:1fr 1fr; gap:10px 22px; margin-top:10px; font-size:13.5px; }
+    .pros .p::before { content:"+ "; color:var(--good); font-weight:700; }
+    .pros .c::before { content:"− "; color:var(--bad); font-weight:700; }
+  </style>
+</head>
+<body>
+  <main class="content">
+    <header>
+      <div class="eyebrow">Phase 2 · Architecture &amp; Design</div>
+      <h1>Open Questions Resolved (Q1&ndash;Q4)</h1>
+      <div class="meta">Updated 2026-06-04 · All four resolved · Q3 = Hybrid/OpenAlex · Q4 = Checkpointed CLI</div>
+    </header>
+
+    <p class="lead">Resolving the four open design questions from <a href="2_architecture-design.html">Architecture &amp; Design</a> before any code. Two are decided; two are presented as options &mdash; click the tabs to compare.</p>
+
+    <h2>Q1 · Model per vendor seat <span class="pill def">decided: ask each run</span></h2>
+    <p>The panel is <strong>3 symmetric peers, one per vendor</strong> (peers, not fixed roles &mdash; each proposes <em>and</em> critiques; judging is a panel vote + human confirm). No hard-coded default model. At the start of a debate the CLI <strong>prompts for which model fills each vendor seat</strong> and <strong>which retrieval tools the council may use this round</strong> (see <a href="8_knowledge-layer.html">Knowledge Layer</a>), last-used offered as default, overridable by flags/config for repeatable runs.</p>
+    <pre><code>$ rc debate ideate --topic "..."
+  OpenAI seat  [gpt-5]:            ▸
+  Claude seat  [claude-opus-4-8]: ▸
+  Gemini seat  [gemini-2.5-pro]:  ▸
+  Retrieval tools  [x] wiki [x] openalex [x] arxiv [ ] semanticscholar
+                   [ ] github [ ] paperswithcode [ ] web        ▸
+# or non-interactive:
+$ rc debate ideate --topic "..." \
+    --seats openai=gpt-5,claude=opus-4-8,gemini=2.5-pro \
+    --tools wiki,openalex,arxiv</code></pre>
+
+    <h2>Q2 · Panel size &amp; structure <span class="pill def">decided: 3 symmetric peers</span></h2>
+    <p>v0 runs <strong>3 symmetric peer agents, one model per vendor</strong> (OpenAI, Claude, Gemini). Every peer researches independently, proposes, and critiques the other two; the judge is an anonymized panel vote that the human confirms. Clean symmetry, lowest cost, and the cleanest experimental contrast (heterogeneous-3 vs. homogeneous-3 of one vendor). Larger / repeated panels are a later knob.</p>
+
+    <hr class="divider">
+
+    <h2>Q3 · Retrieval backbone <span class="pill def">decided: LLM Wiki + OpenAlex hybrid</span></h2>
+    <div class="callout">
+      <div class="label">Evolved 2026-06-04</div>
+      <p style="margin:6px 0 0">The pluggable-interface principle below still holds, but the chosen composition is now a <strong>curated LLM-maintained wiki (synthesis) + OpenAlex (discovery)</strong> &mdash; see the dedicated <a href="8_knowledge-layer.html">Knowledge Layer</a> page. The options below are the original framing, kept for rationale.</p>
+    </div>
+    <div class="callout">
+      <div class="label">Principle</div>
+      <p style="margin:6px 0 0">Mirror the LLM provider design: define a thin <code>RetrievalProvider</code> interface and never bind the core to a vendor. The only decision is <strong>which reference adapter ships first</strong>. All options below implement the same interface, so switching later is one adapter.</p>
+    </div>
+    <pre><code>class RetrievalProvider(Protocol):
+    async def search(self, query: str, k: int) -> list[Paper]
+    async def get(self, id: str) -> Paper          # title, abstract, refs, year
+# Paper carries enough to ground a claim: id, title, abstract, venue, year, url</code></pre>
+
+    <div class="tabs" data-tabs>
+      <div class="tabbar">
+        <button class="on" data-tab="r1">A · Local corpus</button>
+        <button data-tab="r2">B · Open API</button>
+        <button data-tab="r3">C · Hybrid</button>
+      </div>
+      <div class="tabpanel on" id="r1">
+        <h4>A · Local corpus + embeddings <span class="pill">offline</span></h4>
+        <p>You drop in PDFs / BibTeX. We parse, chunk, embed (pluggable embedder), and index in a local vector store (e.g. sqlite-vec / FAISS / Chroma). Debate runs over your index. Zero external services.</p>
+        <div class="pros">
+          <div class="p">No lock-in, fully private &amp; reproducible</div>
+          <div class="c">You must supply the corpus</div>
+          <div class="p">Works offline; deterministic</div>
+          <div class="c">Coverage limited to what you ingest</div>
+        </div>
+      </div>
+      <div class="tabpanel" id="r2">
+        <h4>B · Open scholarly API <span class="pill">broad coverage</span></h4>
+        <p>Adapter over an <strong>open, free</strong> source &mdash; <strong>OpenAlex</strong> (CC0 data, no API key), arXiv, or Crossref. These are open datasets/APIs, not proprietary products like Elicit/Undermind. Swappable behind the same interface.</p>
+        <div class="pros">
+          <div class="p">Broad, current coverage; no corpus prep</div>
+          <div class="c">Network dependency + rate limits</div>
+          <div class="p">Free, no account/lock-in (OpenAlex)</div>
+          <div class="c">Less reproducible (index drifts over time)</div>
+        </div>
+      </div>
+      <div class="tabpanel" id="r3">
+        <h4>C · Hybrid <span class="pill rec">recommended default</span></h4>
+        <p>Discover candidates via the open API (OpenAlex), <strong>cache + embed locally</strong>, then debate over the local index. You get coverage when online and reproducibility once cached &mdash; and either half degrades gracefully to option A or B.</p>
+        <div class="pros">
+          <div class="p">Coverage of B + reproducibility of A</div>
+          <div class="c">Slightly more moving parts</div>
+          <div class="p">Cached corpus snapshot per project = citable</div>
+          <div class="c">Two code paths to maintain</div>
+        </div>
+      </div>
+    </div>
+    <p style="font-size:13.5px;color:var(--ink-soft)">All three share one interface. Recommendation: ship <strong>A + B adapters</strong>, wire <strong>C</strong> as the default composition. Default open source = <strong>OpenAlex</strong> (no key, CC0).</p>
+
+    <hr class="divider">
+
+    <h2>Q4 · Execution model <span class="pill def">decided: Checkpointed CLI</span></h2>
+    <p>This is <em>how a debate run executes and survives</em>. Debates are long and cost real money (many provider calls), so losing progress to a flaky API or Ctrl-C matters. The enabling design: keep the orchestrator a <strong>pure async generator that yields round results</strong>; a separate <em>runner</em> decides whether to stream, persist, or queue. That keeps all four options below a runner swap, not a rewrite.</p>
+
+    <div class="tabs" data-tabs>
+      <div class="tabbar">
+        <button class="on" data-tab="x1">1 · Sync CLI</button>
+        <button data-tab="x2">2 · Checkpointed</button>
+        <button data-tab="x3">3 · Job queue</button>
+        <button data-tab="x4">4 · Workflow engine</button>
+      </div>
+      <div class="tabpanel on" id="x1">
+        <h4>1 · Synchronous CLI <span class="pill">simplest</span></h4>
+        <p>One process runs all rounds, streams to terminal, writes the transcript at the end.</p>
+        <div class="pros">
+          <div class="p">Trivial to build &amp; debug</div>
+          <div class="c">Crash / Ctrl-C loses the whole run</div>
+          <div class="p">Great for the first slice</div>
+          <div class="c">No pause/resume; blocks the terminal</div>
+        </div>
+      </div>
+      <div class="tabpanel" id="x2">
+        <h4>2 · Checkpointed / resumable CLI <span class="pill rec">recommended for v0</span></h4>
+        <p>Same single-process run, but <strong>each round's state is persisted as it completes</strong>. A crash or Ctrl-C resumes from the last checkpoint (<code>rc resume &lt;run-id&gt;</code>).</p>
+        <div class="pros">
+          <div class="p">Never lose an expensive debate</div>
+          <div class="c">Need a small state schema + replay</div>
+          <div class="p">Still simple; one process</div>
+          <div class="c">No parallelism / background yet</div>
+        </div>
+      </div>
+      <div class="tabpanel" id="x3">
+        <h4>3 · Job queue + worker <span class="pill">platform-ready</span></h4>
+        <p>Debates submitted as jobs to a queue (local task table + worker loop, or arq/RQ/Celery). Background runs, parallelism, pause/resume, and a future web UI plug in here.</p>
+        <div class="pros">
+          <div class="p">Run many debates in parallel / background</div>
+          <div class="c">Infra overhead (worker, broker)</div>
+          <div class="p">Natural home for a later UI</div>
+          <div class="c">Overkill for a personal v0</div>
+        </div>
+      </div>
+      <div class="tabpanel" id="x4">
+        <h4>4 · Durable workflow engine <span class="pill">heaviest</span></h4>
+        <p>Temporal-style engine or a DB-persisted state machine with full replay guarantees.</p>
+        <div class="pros">
+          <div class="p">Strong reliability &amp; replay guarantees</div>
+          <div class="c">Heavy dependency; steep setup</div>
+          <div class="p">Scales to production</div>
+          <div class="c">Far beyond current need</div>
+        </div>
+      </div>
+    </div>
+    <p style="font-size:13.5px;color:var(--ink-soft)">Recommendation: <strong>Option 2 (checkpointed CLI)</strong> for v0 &mdash; minimal but resumable. Because the orchestrator is runner-agnostic, upgrading to Option 3 when a UI arrives is a runner swap, not an orchestrator rewrite (matches "personal tool first &rarr; platform later").</p>
+
+    <hr class="divider">
+    <h2>Status</h2>
+    <table>
+      <thead><tr><th>Question</th><th>Status</th><th>Decision</th></tr></thead>
+      <tbody>
+        <tr><td>Q1 vendor&rarr;role binding</td><td><span class="yes">✓ decided</span></td><td>Ask each run; overridable by flags/config</td></tr>
+        <tr><td>Q2 panel size</td><td><span class="yes">✓ decided</span></td><td>3, one model per vendor</td></tr>
+        <tr><td>Q3 retrieval backbone</td><td><span class="yes">✓ decided</span></td><td>Pluggable interface; composition = LLM Wiki (curated synthesis) + OpenAlex (discovery) — see Knowledge Layer</td></tr>
+        <tr><td>Q4 execution model</td><td><span class="yes">✓ decided</span></td><td>Checkpointed/resumable CLI; runner-agnostic orchestrator for later upgrade</td></tr>
+      </tbody>
+    </table>
+  </main>
+
+  <script>
+    document.querySelectorAll("[data-tabs]").forEach(group => {
+      const buttons = group.querySelectorAll(".tabbar button");
+      buttons.forEach(btn => btn.addEventListener("click", () => {
+        const id = btn.dataset.tab;
+        buttons.forEach(b => b.classList.toggle("on", b === btn));
+        group.querySelectorAll(".tabpanel").forEach(p => p.classList.toggle("on", p.id === id));
+      }));
+    });
+  </script>
+</body>
+</html>
