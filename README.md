@@ -8,20 +8,24 @@ Full design lives in [`plan/`](plan/1_sota-gap-analysis.html) (open in a browser
 
 The 7-phase debate loop runs **fully offline** via deterministic *stub peers* — no API keys required — and writes a JSONL trace. Real provider SDKs, live retrieval, and the sandbox verifier are wired behind interfaces but stubbed (see TODOs).
 
-## Quickstart
+## Quickstart (mise)
+
+[mise](https://mise.jdx.dev/) manages the toolchain, the `.venv`, env vars, and tasks — no `.env`.
 
 ```bash
-python -m venv .venv && source .venv/bin/activate
-pip install -e ".[dev]"
+cp mise.local.toml.example mise.local.toml   # fill in API keys (only needed for `live`)
+mise trust && mise install                   # install python + auto-create .venv
+mise run deps                                # install the package + deps
 
-# Offline run (stub peers, mock verifier) — no keys needed:
-rc debate --topic "Do LLM code-review agents catch security bugs better than SAST?"
+mise run test
+mise run debate -- --topic "Do WikiLLM concept retrieve better information than RAG concept?"
+# live (spends tokens; keys from mise.local.toml):
+mise run live -- --topic "..."
 
-# Inspect the trace:
-ls runs/                       # runs/<id>/trace.jsonl
+ls runs/                                     # runs/<id>/trace.jsonl
 ```
 
-`--live` switches to real providers (needs keys in `.env` + `pip install -e ".[providers]"`).
+Secrets come from `mise.local.toml` (gitignored). Without `mise activate`, run via `mise run`/`mise exec` so the venv + env apply.
 
 ## Layout
 

@@ -28,6 +28,7 @@ const PAGES = [
   { file: "8_knowledge-layer.html",       n: 8, phase: 4, title: "Knowledge Layer (LLM Wiki)" },
   { file: "9_librarian-design.html",      n: 9, phase: 4, title: "Wiki Librarian Design" },
   { file: "10_build-log.html",            n: 10, phase: 5, title: "Build Log — Increment 1" },
+  { file: "11_runner-service-arch.html",  n: 11, phase: 5, title: "Runner & Service Architecture" },
 ];
 
 const STATUS_ICON = { done: "✓", wip: "◐", next: "▸", todo: "○" };

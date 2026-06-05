@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import asyncio
 from collections import defaultdict
-from typing import Callable
+from typing import Awaitable, Callable
 
 from research_council.agents.base import Peer
 from research_council.debate.anonymize import anonymize
@@ -17,13 +17,25 @@ from research_council.retrieval.base import RetrievalProvider
 from research_council.store.checkpoint import TraceWriter
 from research_council.store.models import (
     Candidate,
+    Critique,
     Event,
     Recommendation,
+    ReviewAction,
     RunConfig,
     Score,
     VerifierSignal,
 )
 from research_council.verify.base import Verifier
+
+# Hard ceiling so human "revise" loops can't run away (cost + safety).
+SAFETY_MAX_ROUNDS = 8
+
+Reviewer = Callable[[Recommendation, list[Candidate], int], Awaitable[ReviewAction]]
+
+
+async def _auto_review(rec: Recommendation, candidates: list[Candidate], rnd: int) -> ReviewAction:
+    """Default reviewer: no human in the loop — defers to autonomous termination."""
+    return ReviewAction(action="auto")
 
 
 def _aggregate(scores: list[Score], signal_by_label: dict[str, VerifierSignal],
@@ -55,8 +67,10 @@ async def run_debate(
     verifier: Verifier,
     trace: TraceWriter,
     emit: Callable[[Event], None] | None = None,
+    reviewer: Reviewer | None = None,
 ) -> tuple[Recommendation, list[Candidate]]:
     by_vendor = {p.vendor: p for p in peers}
+    review = reviewer or _auto_review
 
     def out(phase: str, kind: str, payload: dict, **kw) -> None:
         ev = trace.emit(phase, kind, payload, **kw)
@@ -78,13 +92,27 @@ async def run_debate(
         out("propose", "candidate", c.model_dump(), author_vendor=c.vendor)
 
     rec: Recommendation | None = None
-    for rnd in range(1, cfg.n_rounds + 1):
+    pending_feedback: tuple[str, str | None] | None = None  # (text, target candidate id)
+    final_choice: str | None = None
+    rnd = 0
+    while True:
+        rnd += 1
         anon, id_map = anonymize(candidates, cfg.anonymize)
         label_of = {c.id: label for label, c in id_map.items()}
 
         # Phase 3 — cross-critique (anonymized).
         crit_lists = await asyncio.gather(*(p.critique(anon) for p in peers))
         critiques = [c for lst in crit_lists for c in lst]
+
+        # Inject the human's prior-round feedback as a high-severity critique.
+        if pending_feedback is not None:
+            text, target = pending_feedback
+            targets = [target] if target else [c.id for c in candidates]
+            for cid in targets:
+                critiques.append(Critique(critic_vendor="human", target_id=label_of[cid],
+                                          axis="feasibility", severity=4, claim=text))
+            pending_feedback = None
+
         for c in critiques:
             out("cross_critique", "critique", c.model_dump(), round=rnd, author_vendor=c.critic_vendor)
 
@@ -109,8 +137,28 @@ async def run_debate(
         rec = _aggregate(scores, signal_by_label, cfg.weights, id_map)
         out("judge", "recommendation", rec.model_dump(), round=rnd)
 
+        # Human review gate (plan/11). Default reviewer just proceeds.
+        action = await review(rec, candidates, rnd)
+        out("review", "human_action", action.model_dump(), round=rnd, author_vendor="human")
+
+        if action.action == "select":
+            final_choice = action.choice or (rec.ranked[0] if rec.ranked else None)
+            break
+        if action.action == "conclude":
+            break
+        if rnd >= SAFETY_MAX_ROUNDS:
+            break  # ceiling guards iterate/amend loops
+        if action.action == "amend":
+            pending_feedback = (action.feedback, action.choice)
+            continue
+        if action.action == "iterate":
+            continue
+        # "auto" (default reviewer): honour the autonomous termination policy.
         if not should_continue(rnd, cfg.n_rounds, critiques):
             break
+
+    if final_choice:
+        out("judge", "final_choice", {"candidate_id": final_choice}, round=rnd, author_vendor="human")
 
     assert rec is not None
     return rec, candidates

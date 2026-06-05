@@ -76,6 +76,22 @@ class Recommendation(BaseModel):
     rationale: str = ""
 
 
+class ReviewAction(BaseModel):
+    """Human decision at the round-boundary review gate (plan/11).
+
+    action:
+      iterate  — run another round (peers only, no human note)
+      amend    — run another round + inject `feedback` as a human critique
+      conclude — end now, take the panel's ranking (no human pick)
+      select   — end now, `choice` is the winner (defaults to rank-1)
+      auto     — default: defer to the autonomous termination policy
+    """
+
+    action: str = "auto"
+    choice: str | None = None  # candidate id to select (or target of an amendment)
+    feedback: str = ""  # injected into the next round as a human critique (amend)
+
+
 # --- run config & trace envelope ------------------------------------------
 DEFAULT_WEIGHTS = {"novelty": 0.35, "soundness": 0.25, "feasibility": 0.25, "clarity": 0.15}
 

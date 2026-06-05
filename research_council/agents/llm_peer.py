@@ -1,7 +1,8 @@
 """Live peer: drives a real LLMProvider with per-phase prompts + JSON parsing.
 
-Wired for completeness; exercised only with `--live` once an SDK adapter is
-implemented (providers/sdk.py). Offline runs use StubPeer instead.
+Parsing is defensive: models return imperfect JSON (e.g. a structured object where
+we asked for a string, or a missing key). We coerce/skip rather than crash the run.
+Offline runs use StubPeer instead; this is exercised with `--live`.
 """
 
 from __future__ import annotations
@@ -26,13 +27,14 @@ RESEARCH_SYS = (
 )
 PROPOSE_SYS = (
     "Turn your gap into a concrete, testable idea AND a MINIMAL experiment plan runnable "
-    "at toy scale (name dataset, baseline, method, metric, smallest runnable step). "
-    'Return JSON {"title","hypothesis","method","experiment_plan"}.'
+    "at toy scale. Return JSON with STRING values: "
+    '{"title","hypothesis","method","experiment_plan"} where experiment_plan is a single '
+    "string naming dataset, baseline, method, metric, and the smallest runnable step."
 )
 CRITIQUE_SYS = (
     "Review anonymized AI4SE candidates on novelty/soundness/feasibility. If a claim is "
     "checkable set needs_verification=true. Return JSON {\"items\":[{label,axis,severity,"
-    "claim,needs_verification}]}."
+    "claim,needs_verification}]} where each item's label matches a candidate."
 )
 SCORE_SYS = (
     "Score each anonymized candidate 0..1 on novelty/soundness/feasibility/clarity. The "
@@ -42,8 +44,38 @@ SCORE_SYS = (
 
 
 def _json(text: str) -> dict:
+    """Extract the outermost JSON object; return {} on failure (degrade, don't crash)."""
+    if not text:
+        return {}
     start, end = text.find("{"), text.rfind("}")
-    return json.loads(text[start : end + 1])
+    if start == -1 or end <= start:
+        return {}
+    try:
+        obj = json.loads(text[start : end + 1])
+    except json.JSONDecodeError:
+        return {}
+    return obj if isinstance(obj, dict) else {}
+
+
+def _text(v) -> str:
+    if v is None:
+        return ""
+    if isinstance(v, str):
+        return v
+    return json.dumps(v, ensure_ascii=False)  # object/array → compact string
+
+
+def _list_str(v) -> list[str]:
+    if isinstance(v, list):
+        return [x if isinstance(x, str) else _text(x) for x in v]
+    return [] if v in (None, "") else [_text(v)]
+
+
+def _num(v) -> float:
+    try:
+        return float(v)
+    except (TypeError, ValueError):
+        return 0.0
 
 
 class LLMPeer:
@@ -56,32 +88,44 @@ class LLMPeer:
         listing = "\n".join(f"{p.id} · {p.title} :: {p.abstract[:200]}" for p in papers)
         r = await self.provider.complete(RESEARCH_SYS, f"Topic: {topic}\nPapers:\n{listing}", kind="research")
         d = _json(r.text)
-        return ResearchBrief(vendor=self.vendor, landscape=d.get("landscape", ""),
-                             gap=d.get("gap", ""), rationale=d.get("rationale", ""),
-                             refs=d.get("refs", []))
+        return ResearchBrief(vendor=self.vendor, landscape=_text(d.get("landscape")),
+                             gap=_text(d.get("gap")), rationale=_text(d.get("rationale")),
+                             refs=_list_str(d.get("refs")))
 
     async def propose(self, brief: ResearchBrief) -> Candidate:
         r = await self.provider.complete(PROPOSE_SYS, f"Gap: {brief.gap}\nLandscape: {brief.landscape}", kind="propose")
         d = _json(r.text)
-        return Candidate(id=self.vendor, vendor=self.vendor, title=d.get("title", ""),
-                         gap=brief.gap, hypothesis=d.get("hypothesis", ""),
-                         method=d.get("method", ""), experiment_plan=d.get("experiment_plan", ""),
+        return Candidate(id=self.vendor, vendor=self.vendor, title=_text(d.get("title")),
+                         gap=brief.gap, hypothesis=_text(d.get("hypothesis")),
+                         method=_text(d.get("method")), experiment_plan=_text(d.get("experiment_plan")),
                          refs=brief.refs)
 
     async def critique(self, anon: list[dict]) -> list[Critique]:
-        r = await self.provider.complete(CRITIQUE_SYS, json.dumps(anon), kind="critique")
-        items = _json(r.text).get("items", [])
-        return [Critique(critic_vendor=self.vendor, target_id=i["label"], axis=i.get("axis", "soundness"),
-                         severity=int(i.get("severity", 1)), claim=i.get("claim", ""),
-                         needs_verification=bool(i.get("needs_verification", False))) for i in items]
+        out: list[Critique] = []
+        for i in _json(await self._text(CRITIQUE_SYS, json.dumps(anon), "critique")).get("items", []):
+            if not isinstance(i, dict) or "label" not in i:
+                continue  # skip items we can't attribute to a candidate
+            sev = int(_num(i.get("severity", 1))) or 1
+            out.append(Critique(critic_vendor=self.vendor, target_id=str(i["label"]),
+                                axis=str(i.get("axis", "soundness")), severity=max(1, min(5, sev)),
+                                claim=_text(i.get("claim")),
+                                needs_verification=bool(i.get("needs_verification", False))))
+        return out
 
     async def rebut(self, candidate: Candidate, critiques: list[Critique]) -> Rebuttal:
         return Rebuttal(candidate_id=candidate.id, notes=f"{len(critiques)} critiques considered")
 
     async def score(self, anon: list[dict], signal_by_label: dict[str, VerifierSignal]) -> list[Score]:
         sigs = {k: v.feasibility for k, v in signal_by_label.items()}
-        r = await self.provider.complete(SCORE_SYS, json.dumps({"candidates": anon, "verifier": sigs}), kind="score")
-        items = _json(r.text).get("items", [])
-        return [Score(judge_vendor=self.vendor, candidate_id=i["label"], novelty=float(i.get("novelty", 0)),
-                      soundness=float(i.get("soundness", 0)), feasibility=float(i.get("feasibility", 0)),
-                      clarity=float(i.get("clarity", 0))) for i in items]
+        payload = json.dumps({"candidates": anon, "verifier": sigs})
+        out: list[Score] = []
+        for i in _json(await self._text(SCORE_SYS, payload, "score")).get("items", []):
+            if not isinstance(i, dict) or "label" not in i:
+                continue
+            out.append(Score(judge_vendor=self.vendor, candidate_id=str(i["label"]),
+                             novelty=_num(i.get("novelty")), soundness=_num(i.get("soundness")),
+                             feasibility=_num(i.get("feasibility")), clarity=_num(i.get("clarity"))))
+        return out
+
+    async def _text(self, system: str, user: str, kind: str) -> str:
+        return (await self.provider.complete(system, user, kind=kind)).text

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 from pathlib import Path
 
 import yaml
@@ -10,11 +11,20 @@ from research_council.store.models import RunConfig
 
 CONFIG_DIR = Path(__file__).parent / "config"
 
+# Per-vendor model can be set via env (mise.toml [env]); overrides the yaml default.
+ENV_MODEL = {"openai": "RC_OPENAI_MODEL", "anthropic": "RC_ANTHROPIC_MODEL", "gemini": "RC_GEMINI_MODEL"}
+
 
 def load_config(stage: str = "ideation") -> RunConfig:
     path = CONFIG_DIR / f"{stage}.yaml"
     data = yaml.safe_load(path.read_text(encoding="utf-8")) if path.exists() else {}
-    return RunConfig(**(data or {}))
+    cfg = RunConfig(**(data or {}))
+    # precedence: yaml default < env (RC_*_MODEL) < --seats CLI flag (applied later)
+    for vendor, env in ENV_MODEL.items():
+        val = os.getenv(env)
+        if val and vendor in cfg.seats:
+            cfg.seats[vendor] = val
+    return cfg
 
 
 def parse_seats(spec: str) -> dict[str, str]:

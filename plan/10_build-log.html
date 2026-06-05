@@ -12,7 +12,7 @@
     <header>
       <div class="eyebrow">Phase 5 · Implementation</div>
       <h1>Build Log — Increment 1 (offline spine)</h1>
-      <div class="meta">2026-06-05 · Repo scaffolded · 7-phase debate runs offline · tests green</div>
+      <div class="meta">2026-06-05 · Repo scaffolded · debate streams live + review gate · live adapters · 6 tests green</div>
     </header>
 
     <p class="lead">The repo is scaffolded exactly to <a href="2_architecture-design.html">Architecture §7</a>. The full <strong>7-phase debate runs end to end offline</strong> (deterministic stub peers, mock verifier — no API keys), writes a JSONL trace, and prints a verifier-weighted ranking. <code>pytest</code> passes.</p>
@@ -35,38 +35,53 @@
       <thead><tr><th>Module</th><th>Status</th></tr></thead>
       <tbody>
         <tr><td><code>store/models.py</code> — all 8 contracts + RunConfig + Event</td><td><span class="yes">✓ real</span></td></tr>
-        <tr><td><code>debate/</code> — orchestrator (7 phases), anonymize, termination</td><td><span class="yes">✓ real</span></td></tr>
+        <tr><td><code>debate/</code> — orchestrator (7 phases), anonymize, termination, review gate</td><td><span class="yes">✓ real</span></td></tr>
+        <tr><td><code>cli.py</code> — round-start <strong>wizard</strong> (model selects w/ ← back → tool toggles → confirm hub: edit tools/models, ✗ exit; Esc/Ctrl-C aborts) + live streaming + review gate</td><td><span class="yes">✓ real (TTY-aware)</span></td></tr>
         <tr><td><code>store/checkpoint.py</code> — JSONL trace writer</td><td><span class="yes">✓ real</span></td></tr>
         <tr><td><code>verify/mock.py</code> — heuristic feasibility (incr 1)</td><td><span class="yes">✓ real</span></td></tr>
         <tr><td><code>agents/stub_peer.py</code> — deterministic offline peer</td><td><span class="yes">✓ real</span></td></tr>
-        <tr><td><code>retrieval/</code> — Protocol, registry, hybrid (fan-out + dedup)</td><td><span class="part">real shell, stub sources</span></td></tr>
+        <tr><td><code>retrieval/</code> — Protocol, registry, hybrid (fan-out + dedup)</td><td><span class="yes">✓ real</span></td></tr>
+        <tr><td>5 active adapters: <code>wiki</code> (local) · <code>openalex</code> · <code>arxiv</code> · <code>semanticscholar</code> · <code>github</code></td><td><span class="yes">✓ real</span> (OpenAlex + GitHub verified; SS unauth-throttled, key recommended)</td></tr>
+        <tr><td><code>paperswithcode.py</code> — kept but unregistered (anti-bot gated); <code>web</code> = stub (needs search key)</td><td><span class="part">deferred</span></td></tr>
+        <tr><td><code>rc search</code> — free retrieval probe (no LLM tokens)</td><td><span class="yes">✓ real</span></td></tr>
         <tr><td><code>config.py · cli.py</code> — load + <code>rc debate/resume/ingest/lint</code></td><td><span class="yes">✓ real (latter 3 are TODO stubs)</span></td></tr>
-        <tr><td><code>agents/llm_peer.py</code> + <code>providers/sdk.py</code> — live path</td><td><span class="part">wired, not implemented</span></td></tr>
+        <tr><td><code>providers/sdk.py</code> — OpenAI/Anthropic/Gemini adapters (lazy SDK, retry, cost)</td><td><span class="yes">✓ real (offline-tested)</span></td></tr>
+        <tr><td><code>agents/llm_peer.py</code> — live path (prompts + <strong>defensive</strong> JSON parse)</td><td><span class="yes">✓ real · object/missing-key tolerant</span></td></tr>
+        <tr><td>Models via mise (<code>RC_*_MODEL</code> env) + <code>rc check</code> provider ping</td><td><span class="yes">✓ real</span></td></tr>
+        <tr><td><code>service/app.py</code> — FastAPI backend (POST /debates · SSE /stream · POST /action · GET status); <code>mise run serve</code></td><td><span class="yes">✓ real</span> (real uvicorn boot verified)</td></tr>
         <tr><td><code>librarian/</code> — wiki write side</td><td><span class="no">✗ not yet (next)</span></td></tr>
         <tr><td><code>verify/sandbox.py</code> — real feasibility (incr 2)</td><td><span class="no">✗ not yet</span></td></tr>
       </tbody>
     </table>
 
-    <h2>How to run</h2>
-    <pre><code>python -m venv .venv && source .venv/bin/activate
-pip install -e ".[dev]"
-pytest -q
-rc debate --topic "…" --tools wiki,openalex,arxiv     # offline, no keys
-rc debate --topic "…" --no-anonymize                  # B5 ablation knob
-rc debate --topic "…" --seats openai=gpt-5,anthropic=claude-opus-4-8,gemini=gemini-2.5-pro</code></pre>
+    <h2>How to run <span class="tag">mise</span></h2>
+    <p>Dev environment is managed by <a href="https://mise.jdx.dev/">mise</a> (toolchain + <code>.venv</code> + env + tasks); secrets in <code>mise.local.toml</code> (gitignored), no <code>.env</code>.</p>
+    <pre><code>cp mise.local.toml.example mise.local.toml   # fill keys (only for `live`)
+mise trust && mise install                   # python + auto-create .venv
+mise run deps                                # package + deps
+mise run test
+mise run debate -- --topic "…" --tools wiki,openalex,arxiv   # offline, no keys
+mise run debate -- --topic "…" --no-anonymize               # B5 ablation knob
+mise run live   -- --topic "…"                              # real providers (spends tokens)</code></pre>
 
     <h2>Notes</h2>
     <ul>
       <li>Offline <em>debate</em> path uses <code>StubPeer</code> (bypasses providers) so the loop runs with zero keys; <code>StubProvider</code> exists for provider-layer parity.</li>
       <li>Stub peer/retrieval content is placeholder — it exercises the <em>flow + contracts + trace</em>, not real research output.</li>
       <li>Every baseline is a config of this one path: <code>--seats</code> all-one-vendor = B3; <code>--no-anonymize</code> = B5; verifier mode = B4 (<a href="5_research-framing-eval.html">Research Framing</a>).</li>
-      <li>Not yet a git repo — needed for the wiki snapshot/commit-hash discipline; <code>git init</code> is a sensible next step.</li>
+      <li>Now a git repo (<code>git init</code> done) — enables the wiki snapshot/commit-hash discipline the eval design relies on.</li>
     </ul>
+
+    <h2>Live path <span class="tag">done — providers in</span></h2>
+    <p><code>providers/sdk.py</code> implements OpenAI (<code>chat.completions</code>), Anthropic (<code>messages</code>), and Gemini (<code>genai.aio</code>) behind <code>LLMProvider</code> — lazy SDK imports, shared retry/backoff, token→cost from a price table. Adapters are protocol-tested offline; a real <code>--live</code> run needs API keys in <code>mise.local.toml</code> and (for grounded research) real retrieval. NOTE: a live run spends real tokens.</p>
 
     <h2>Next implementation steps</h2>
     <ol>
-      <li><strong>Real provider adapters</strong> (<code>providers/sdk.py</code>) + wire <code>LLMPeer</code> → first <code>--live</code> 3-vendor debate.</li>
-      <li><strong>Real retrieval</strong>: <code>openalex.py</code> + <code>arxiv.py</code> (then semanticscholar/github/paperswithcode).</li>
+      <li><strong>Real retrieval</strong> ✓ done — 5 active adapters: wiki (local) · openalex · arxiv · semanticscholar · github. <code>paperswithcode</code> deferred (anti-bot gated, file kept), <code>web</code> = stub. <code>rc search</code> to probe; <code>--live</code> uses real, offline uses stubs.</li>
+      <li><strong>First grounded <code>--live</code> debate</strong> — now uses real OpenAlex papers (user runs when convenient).</li>
+      <li><strong>MCP retrieval</strong> (backlog) — optional <code>MCPRetrieval</code> provider behind <code>RetrievalProvider</code> + research-council-as-MCP-server (interop). Direct adapters stay default for reproducibility; agentic tool-use is a separate future mode. See <a href="8_knowledge-layer.html">Knowledge Layer</a>.</li>
+      <li><strong>Per-debate retrieval cache</strong> (backlog) — memoize <code>(source, query)</code> so the 3 peers' identical phase-1 queries collapse to one call per source; fewer calls, faster, respects arXiv's 1-req/3s single-connection limit. Optional arXiv politeness throttle.</li>
+      <li><strong>FastAPI backend</strong> ✓ done — <code>service/app.py</code>, <code>mise run serve</code> (<a href="11_runner-service-arch.html">plan/11</a>). Next on this thread: a front-end consuming the SSE stream.</li>
       <li><strong>Librarian write side</strong> (<code>rc ingest</code>/<code>rc lint</code>) per <a href="9_librarian-design.html">plan/9</a>.</li>
       <li><strong>Sandbox verifier</strong> (incr 2) for objective feasibility.</li>
       <li><strong>Obs</strong>: metrics-from-trace + HTML run report (<a href="7_observability.html">plan/7</a>).</li>

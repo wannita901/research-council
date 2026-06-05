@@ -1,0 +1,38 @@
+# mise.toml — toolchain, venv, env, and tasks for research-council.
+# Secrets live in mise.local.toml (gitignored): `cp mise.local.toml.example mise.local.toml`.
+
+[tools]
+python = "3.14"
+
+[env]
+# Auto-create + activate the project venv. Applied under `mise activate`, `mise run`, or `mise exec`.
+_.python.venv = { path = ".venv", create = true }
+
+# Model per provider seat — change these freely (override per-machine in mise.local.toml).
+RC_OPENAI_MODEL = "gpt-5.4" # [ gpt-5.5 | gpt-5.4 | gpt-5.4-mini ]
+RC_ANTHROPIC_MODEL = "claude-sonnet-4-6" # [ claude-opus-4-8 | claude-sonnet-4-6 | claude-haiku-4-5 ]
+RC_GEMINI_MODEL = "gemini-3.5-flash" # [ gemini-3.1-pro-preview | gemini-3.5-flash | gemini-3.1-flash-lite ]
+
+[tasks.deps]
+description = "Install the package + dev, provider & service deps into the venv"
+run = "pip install -e '.[dev,providers,service]'"
+
+[tasks.serve]
+description = "Run the FastAPI backend at http://127.0.0.1:8000"
+run = "uvicorn research_council.service.app:app --host 127.0.0.1 --port 8000"
+
+[tasks.test]
+description = "Run the test suite"
+run = "pytest -q"
+
+[tasks.check]
+description = "Ping each provider with a tiny prompt (diagnose live setup; ~cents)"
+run = "rc check"
+
+[tasks.debate]
+description = "Offline debate. Pass args after --, e.g. mise run debate -- --topic '...'"
+run = "rc debate"
+
+[tasks.live]
+description = "Live 3-vendor debate (spends tokens; needs keys in mise.local.toml)"
+run = "rc debate --live"

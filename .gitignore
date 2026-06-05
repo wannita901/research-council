@@ -8,3 +8,4 @@ runs/
 .pytest_cache/
 .DS_Store
 *.pdf
+mise.local.toml

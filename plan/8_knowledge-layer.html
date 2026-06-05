@@ -56,9 +56,9 @@
         <tr><td><code>wiki</code></td><td>curated synthesis (internal memory)</td><td>no</td><td>on (frozen snapshot)</td></tr>
         <tr><td><code>openalex</code></td><td>scholarly metadata (CC0)</td><td>no</td><td>on</td></tr>
         <tr><td><code>arxiv</code></td><td>full-text preprints</td><td>no</td><td>on</td></tr>
-        <tr><td><code>semanticscholar</code></td><td>TLDRs + citation graph</td><td>optional</td><td>on</td></tr>
+        <tr><td><code>semanticscholar</code></td><td>TLDRs + citation graph</td><td>optional (unauth throttled — key recommended)</td><td>on</td></tr>
         <tr><td><code>github</code></td><td>code search (implementations / benchmarks)</td><td>token</td><td>on (if enabled)</td></tr>
-        <tr><td><code>paperswithcode</code></td><td>paper ↔ code ↔ benchmark links</td><td>no</td><td>on (if enabled)</td></tr>
+        <tr><td><code>paperswithcode</code></td><td>paper ↔ code ↔ benchmark links</td><td>—</td><td><strong>deferred</strong> — anti-bot gated, not registered</td></tr>
         <tr><td><code>web</code></td><td>general web search</td><td>key</td><td><strong>OFF</strong> — noisy / irreproducible</td></tr>
       </tbody>
     </table>
@@ -66,6 +66,11 @@
     <div class="callout warn">
       <div class="label">Eval discipline</div>
       <p style="margin:6px 0 0">The enabled tool-set is an explicit <strong>experimental variable</strong>: <strong>fixed across all conditions</strong> in an experiment batch and recorded in every run trace (next to the seats + wiki commit hash). <code>web</code> is <strong>off</strong> during eval. "Does richer retrieval help debate?" can later be studied deliberately by varying this set.</p>
+    </div>
+
+    <div class="callout">
+      <div class="label">MCP — optional, later (decided 2026-06-05)</div>
+      <p style="margin:6px 0 0">Tools connect via <strong>direct adapters</strong> today. <strong>MCP</strong> (Model Context Protocol) is recorded as a future <em>optional</em> implementation behind the same <code>RetrievalProvider</code> — an <code>MCPRetrieval</code> adapter that wraps an MCP server as just another selectable tool (dedup/provenance unchanged). Direct adapters stay the <strong>default</strong> because the controlled eval needs <em>pinned, reproducible</em> retrieval and third-party MCP servers drift. Letting peers call tools <em>agentically</em> via MCP is a separate future <em>mode</em> (non-deterministic → complicates the controlled comparison), not a drop-in. Exposing research-council itself as an MCP server is a future interop play.</p>
     </div>
 
     <h2>4. Reproducibility &amp; bias controls <span class="tag">eval-critical</span></h2>

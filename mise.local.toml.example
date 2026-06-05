@@ -1,0 +1,10 @@
+# Copy to mise.local.toml (gitignored). mise loads these as environment variables.
+# Only needed for `mise run live` / --live. The offline (stub) path needs none of them.
+[env]
+OPENAI_API_KEY = "sk-..."
+ANTHROPIC_API_KEY = "sk-ant-..."
+GEMINI_API_KEY = "..."
+
+# Optional retrieval credentials (a tool is only offered at setup if its key is present):
+GITHUB_TOKEN = ""
+SEMANTIC_SCHOLAR_API_KEY = ""

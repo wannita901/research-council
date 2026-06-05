@@ -121,7 +121,7 @@ Knowledge & State       wiki + OpenAlex · transcripts · artifacts · checkpoin
       <p style="margin:6px 0 0">Frameworks are mostly free OSS &mdash; the only real spend is LLM <em>tokens</em>, unavoidable regardless of stack. So the rule is: <strong>free OSS libraries where they save real work; hand-written code where token-control and paper-legibility matter.</strong> Avoid paid SaaS (LangSmith, AgentOps, hosted trackers) and heavyweight agent frameworks whose hidden prompting/retries silently inflate the token bill.</p>
     </div>
     <div class="cards">
-      <div class="card"><h4>Language</h4><p>Python 3.12, fully async (debate = many concurrent provider calls).</p></div>
+      <div class="card"><h4>Language</h4><p>Python 3.14 (floor <code>&gt;=3.12</code>), fully async (debate = many concurrent provider calls).</p></div>
       <div class="card"><h4>Providers</h4><p><strong>Official first-party SDKs</strong> (<code>openai</code>, <code>anthropic</code>, <code>google-genai</code>) behind our own <code>LLMProvider</code> Protocol + a shared retry/cost helper. Smallest, most trustworthy supply chain (LiteLLM had repeated 2026 CVEs + a PyPI supply-chain compromise). LiteLLM remains a drop-in option if we ever need 10+ providers.</p></div>
       <div class="card"><h4>Orchestration</h4><p><strong>Hand-written</strong> (~few hundred lines async). The debate is our contribution &mdash; full control of phases/termination/anonymization/budget; no hidden token overhead. <em>No LangGraph/AutoGen/CrewAI.</em></p></div>
       <div class="card"><h4>Contracts</h4><p>Pydantic for messages + structured outputs.</p></div>
@@ -133,7 +133,7 @@ Knowledge & State       wiki + OpenAlex · transcripts · artifacts · checkpoin
   providers/   base.py  openai.py  anthropic.py  gemini.py   # official SDKs
   retrieval/   base.py  registry.py  hybrid.py                # read side; per-round tool select
                wiki.py  openalex.py  arxiv.py  semanticscholar.py
-               github.py  paperswithcode.py  web.py
+               github.py  web.py            # paperswithcode.py = deferred (anti-bot gated, unregistered)
   librarian/   ingest.py  router.py  lint.py  schema.py       # wiki write side (Sonnet)
   agents/      peer.py                  # research/propose/critique/rebut/score prompts
   debate/      orchestrator.py  termination.py  anonymize.py

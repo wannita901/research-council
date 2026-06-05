@@ -1,0 +1,82 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Phase 5 · Runner & Service Architecture · research-council</title>
+  <link rel="stylesheet" href="style.css">
+  <script src="nav.js"></script>
+</head>
+<body>
+  <main class="content">
+    <header>
+      <div class="eyebrow">Phase 5 · Implementation</div>
+      <h1>Runner &amp; Service Architecture</h1>
+      <div class="meta">Drafted 2026-06-05 · How we go from one-shot CLI → watchable, interactive, served</div>
+    </header>
+
+    <p class="lead">The core orchestrator is <strong>runner-agnostic</strong>: it already emits a typed <code>Event</code> per phase via an <code>emit</code> callback. So "watch the agents debate", a backend service, and a front-end are all just <strong>different runners over the same event stream</strong> — no core redesign.</p>
+
+    <pre><code>                 ┌──────────────────────────────┐
+                 │   Debate Orchestrator (core)   │  emits Event per phase
+                 │   — already runner-agnostic —  │
+                 └──────────────┬─────────────────┘
+              emit(Event) ──────┼───────────────────────────────
+        ┌───────────────┬───────┴────────┬──────────────────────┐
+        ▼               ▼                 ▼                      ▼
+   CLI (batch)    CLI (live stream)   Service (FastAPI)     Front-end (future)
+   final ranking  prints each event   WS/SSE + jobs         subscribes to stream
+   [done]         [tiny add]          [next]                [pixel-agents?]</code></pre>
+
+    <h2>1. Interactivity — chosen: watch + rich review gate</h2>
+    <table>
+      <thead><tr><th>Level</th><th>What</th><th>Needs</th></tr></thead>
+      <tbody>
+        <tr><td><strong>L0 · Watch</strong></td><td>see research→propose→critique→… stream live</td><td>surface <code>emit</code> (CLI print, or SSE)</td></tr>
+        <tr><td><strong>L1 · Review gate ✓</strong></td><td>at each round's judge step: <strong>iterate</strong> (another round), <strong>amend</strong> (round + your feedback), <strong>conclude</strong> (end on ranking), or <strong>select</strong> (end + pick)</td><td>a reviewer hook (CLI prompt / POST endpoint)</td></tr>
+        <tr><td>L2 · Interject (later)</td><td>steer / veto <em>mid-round</em></td><td>bidirectional WebSocket + in-loop hooks</td></tr>
+      </tbody>
+    </table>
+    <p style="font-size:13.5px;color:var(--ink-soft)"><strong>Gate actions (editorial set):</strong> <code>iterate</code> — run another round (peers only) · <code>amend [comment]</code> — another round with your feedback injected as a human critique · <code>conclude</code> — end now, take the panel's ranking (no human pick) · <code>select [id]</code> — end now, you name the winner (defaults to rank-1). A no-human (autonomous) run uses an internal <code>auto</code> that defers to the termination policy. Loops are capped at <code>SAFETY_MAX_ROUNDS</code>.</p>
+
+    <div class="callout">
+      <div class="label">How human feedback enters the debate</div>
+      <p style="margin:6px 0 0">A comment at the gate becomes a <strong>high-severity "human critique"</strong> (<code>critic_vendor="human"</code>, severity 4) injected into the next round — so it flows through the existing critique → rebut → verify → re-judge machinery. No separate mechanism, and it keeps the debate going (severity ≥ 3 defeats consensus-stop). Because this happens at <em>round boundaries</em>, <strong>SSE (stream out) + a POST action (feedback in)</strong> suffices — WebSocket is only needed for true mid-round L2 interjection.</p>
+    </div>
+
+    <h2>2. Backend — FastAPI over the same core</h2>
+    <p><strong>FastAPI</strong> is the pick: async, <strong>Pydantic-native (reuses our existing models verbatim)</strong>, first-class WebSocket + SSE, background tasks. It's plumbing, not the contribution — consistent with "no heavy framework in the core". v0 needs <strong>no Redis/Celery</strong>: a per-run <code>asyncio.Queue</code> is the event bus (<code>emit</code> pushes, the stream drains). This is the "checkpointed CLI → job/service" upgrade flagged in <a href="3_design-decisions.html">Decisions Q4</a>.</p>
+    <pre><code>POST /debates            {topic, config}  → {run_id}     # starts a background task
+GET  /debates/{id}/stream  (SSE)                           # live Event stream (watch)
+POST /debates/{id}/action  {action: iterate|amend|conclude|select, choice?, feedback?}
+GET  /debates/{id}         → status + Recommendation
+# run_debate(...) already takes emit= AND reviewer=; the service routes emit→queue
+# and reviewer→a future resolved by POST /action. CLI routes them to stdout/stdin.</code></pre>
+    <div class="callout good">
+      <div class="label">Implemented 2026-06-05 — <code>research_council/service/app.py</code></div>
+      <p style="margin:6px 0 0">FastAPI app with all four endpoints; per-run <code>asyncio.Queue</code> bus + reviewer-future, exactly as sketched. <code>interactive:false</code> runs autonomously (auto-proceed); <code>true</code> awaits <code>POST /action</code> at each round. Run it with <code>mise run serve</code> (uvicorn). Verified: real server boots, autonomous run streams to <code>done</code> over SSE, and the interactive review gate resolves over HTTP. 23 tests green (offline, stub peers). No Redis/Celery — in-process per v0.</p>
+    </div>
+
+    <h2>3. Front-end (future)</h2>
+    <p>A pure <strong>consumer of the event stream</strong> — fully decoupled. Our typed, stable <code>Event</code> schema is the contract; any UI (a plain web dashboard, or a visual/animated one like <a href="https://github.com/pixel-agents-hq/pixel-agents">pixel-agents</a>) subscribes and renders. Deferred until the backend stream is proven; pixel-agents is one rendering option to evaluate then, not a commitment.</p>
+
+    <h2>4. mise's role <span class="tag">clarified</span></h2>
+    <p>Once served, mise <strong>launches infrastructure, not individual debates</strong>: <code>mise run serve</code> (backend), later <code>mise run web</code> (front-end), plus <code>deps</code>/<code>test</code>. Debates are triggered through the API (front-end / <code>curl</code> / thin client). <code>rc debate</code> remains a <strong>dev / in-process convenience</strong> and the offline test path.</p>
+
+    <h2>5. What stays unchanged</h2>
+    <ul>
+      <li>The orchestrator, contracts, anonymization, verifier, checkpoint — all reused as-is.</li>
+      <li><code>emit</code> already exists; the service just routes it to a queue instead of stdout.</li>
+      <li>Every baseline is still a config of the same core (the service starts the same <code>run_debate</code>).</li>
+    </ul>
+
+    <div class="callout good">
+      <div class="label">Decisions locked (2026-06-05)</div>
+      <ul style="margin:8px 0 0">
+        <li><strong>Sequencing:</strong> live-streaming CLI + review gate <em>first</em> (now), then the FastAPI backend.</li>
+        <li><strong>Interactivity:</strong> watch + rich review gate (proceed / accept / comment→re-run). Transport = SSE + POST action; WebSocket deferred to L2.</li>
+      </ul>
+    </div>
+  </main>
+</body>
+</html>
