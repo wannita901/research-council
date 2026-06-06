@@ -16,16 +16,33 @@ from functools import cached_property
 from research_council.providers.base import Response, Usage
 
 # Approximate prices, USD per 1M tokens (input, output). Edit to taste; unknown -> free.
+# Values for unreleased/rumoured 2026 models are rough placeholders — adjust as real pricing lands.
 PRICES: dict[str, tuple[float, float]] = {
     "gpt-5": (1.25, 10.0),
+    "gpt-5.5": (1.25, 10.0),
+    "gpt-5.4": (1.25, 10.0),
+    "gpt-5.4-mini": (0.25, 2.0),
     "claude-opus-4-8": (15.0, 75.0),
     "claude-sonnet-4-6": (3.0, 15.0),
+    "claude-haiku-4-5": (1.0, 5.0),
     "gemini-2.5-pro": (1.25, 10.0),
+    "gemini-3.1-pro-preview": (1.25, 10.0),
+    "gemini-3.5-flash": (0.30, 2.5),
+    "gemini-3.1-flash-lite": (0.10, 0.40),
 }
 
 
+def _price_of(model: str) -> tuple[float, float]:
+    """Exact match, else the longest known prefix (so e.g. 'gpt-5.4-2026xx' still costs ~gpt-5.4),
+    else free."""
+    if model in PRICES:
+        return PRICES[model]
+    cands = [k for k in PRICES if model.startswith(k)]
+    return PRICES[max(cands, key=len)] if cands else (0.0, 0.0)
+
+
 def _cost(model: str, prompt: int, completion: int) -> float:
-    pin, pout = PRICES.get(model, (0.0, 0.0))
+    pin, pout = _price_of(model)
     return round(prompt / 1e6 * pin + completion / 1e6 * pout, 6)
 
 

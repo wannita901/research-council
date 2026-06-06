@@ -45,6 +45,32 @@ async def test_ideation_amend_then_select_reenters(tmp_path: Path):
     assert text.count('"kind":"research_brief"') >= 6  # research ran in both rounds
 
 
+async def test_usage_summary_emitted_for_metered_peers(tmp_path: Path):
+    import pytest
+
+    pytest.importorskip("pydantic_ai")
+    from pydantic_ai.models.test import TestModel
+
+    from research_council.agents.agent_peer import AgentPeer
+    from research_council.retrieval.registry import build_stub_retrieval
+
+    r = build_stub_retrieval(["wiki"])
+    peers = {cn: AgentPeer(v, cn, TestModel(), r, price_model="gpt-5.4")
+             for v, cn in CODENAMES.items()}
+    trace = TraceWriter.new("ideation", runs_dir=tmp_path)
+    await run_ideation("t", peers, trace, max_rounds=1, max_turns=1)
+    text = trace.path.read_text()
+    assert '"kind":"usage_summary"' in text
+    import json
+    ev = [json.loads(l) for l in text.splitlines()]
+    summ = next(e for e in ev if e["kind"] == "usage_summary")
+    assert set(summ["payload"]["by"]) >= set(CODENAMES.values())  # one row per peer
+    assert summ["payload"]["totals"]["requests"] > 0
+    # tool calls are logged with the calling peer's codename
+    tcs = [e for e in ev if e["kind"] == "tool_call"]
+    assert tcs and all("codename" in e["payload"] and "tool" in e["payload"] for e in tcs)
+
+
 async def test_intake_runs_when_facilitator_present(tmp_path: Path):
     from research_council.store.models import Constraints, IntakeQuestion
 

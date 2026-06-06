@@ -95,10 +95,15 @@ async def run_ideation(
         rnd += 1
         ctx = "\n\n".join(x for x in [constraints_text, digest_text] if x)
 
+        def emit_tools(phase: str, cn: str, tcs: list[dict]) -> None:
+            for tc in tcs:
+                out(phase, "tool_call", {**tc, "codename": cn}, round=rnd)
+
         briefs = await asyncio.gather(*(p.research(topic, ctx) for _, p in order))
-        for (cn, _), b in zip(order, briefs):
+        for (cn, p), b in zip(order, briefs):
             out("research", "research_brief", {**b.model_dump(), "codename": cn},
                 round=rnd, author_vendor=b.vendor)
+            emit_tools("research", cn, getattr(p, "last_tool_calls", []) or [])
 
         candidates = list(await asyncio.gather(
             *(p.propose(b, constraints_text) for (_, p), b in zip(order, briefs))))
@@ -109,6 +114,7 @@ async def run_ideation(
         thread = await run_deliberation(
             peers, candidates, round_no=rnd, max_turns=max_turns,
             emit=lambda m: out("deliberate", "discussion_message", m.model_dump(), round=rnd),
+            emit_tool=lambda cn, tcs: emit_tools("deliberate", cn, tcs),
         )
         # candidates revised mid-deliberation (version bumped) are re-emitted before judging
         for c in candidates:
@@ -140,5 +146,22 @@ async def run_ideation(
 
     if final_choice:
         out("judge", "final_choice", {"candidate_id": final_choice}, round=rnd, author_vendor="human")
+
+    # cost/usage summary — peers/facilitator that track usage (offline stubs are skipped)
+    by: dict[str, dict] = {}
+    for cn, p in peers.items():
+        m = getattr(p, "usage", None)
+        if m is not None and (m.requests or m.input_tokens or m.output_tokens):
+            by[cn] = m.as_dict()
+    fac_m = getattr(facilitator, "usage", None) if facilitator is not None else None
+    if fac_m is not None and (fac_m.requests or fac_m.input_tokens):
+        by["facilitator"] = fac_m.as_dict()
+    if by:
+        totals: dict[str, float] = {}
+        for m in by.values():
+            for k, v in m.items():
+                totals[k] = round(totals.get(k, 0) + v, 6)
+        out("run", "usage_summary", {"by": by, "totals": totals})
+
     assert rec is not None
     return rec, candidates

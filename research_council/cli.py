@@ -46,9 +46,18 @@ def _stream(ev: Event) -> None:
     elif ev.kind == "verifier_signal":
         extra = f"{p.get('candidate_id')} feas={p.get('feasibility')} runnable={p.get('runnable')}"
     elif ev.kind == "discussion_message":
-        extra = f"{p.get('from_codename')} [{p.get('kind')}{('→' + p['to']) if p.get('to') else ''}] {p.get('content', '')[:50]}"
+        addr = p.get("to") or p.get("targets")  # question→to, critique/revise→targets (==codename)
+        tag = f"→@{addr}" if addr else ""
+        extra = f"{p.get('from_codename')} [{p.get('kind')}{tag}] {p.get('content', '')[:60]}"
+    elif ev.kind == "tool_call":
+        extra = f"{p.get('codename')} ⟶ {p.get('tool')}({p.get('args', '')[:60]})"
+    elif ev.kind == "setup":
+        extra = f"seats={p.get('seats')} tools={p.get('tools')} facilitator={p.get('facilitator_model')}"
     elif ev.kind == "recommendation":
         extra = " > ".join(p.get("ranked", []))
+    elif ev.kind == "usage_summary":
+        t = p.get("totals", {})
+        extra = f"${t.get('cost_usd', 0):.4f} · {t.get('input_tokens', 0)+t.get('output_tokens', 0)} tok · {t.get('tool_calls', 0)} tool calls"
     elif ev.kind == "human_action":
         extra = f"{p.get('action')} {p.get('feedback', '')}".strip()
     who = f" {ev.author_vendor}" if ev.author_vendor else ""
@@ -244,7 +253,8 @@ def ideate(
         if live:
             from research_council.agents.agent_peer import AgentPeer, agent_model_name
             peers[cn] = AgentPeer(vendor, cn, agent_model_name(vendor, model), retrieval,
-                                  max_iters=cfg.max_iters, max_tool_calls=cfg.max_tool_calls)
+                                  max_iters=cfg.max_iters, max_tool_calls=cfg.max_tool_calls,
+                                  price_model=model)
         else:
             from research_council.agents.stub_agent_peer import StubV2Peer
             peers[cn] = StubV2Peer(vendor, cn, retrieval)
@@ -254,7 +264,8 @@ def ideate(
     if live:
         from research_council.agents.agent_peer import agent_model_name
         from research_council.agents.facilitator import Facilitator
-        facilitator = Facilitator(agent_model_name("anthropic", cfg.facilitator_model))
+        facilitator = Facilitator(agent_model_name("anthropic", cfg.facilitator_model),
+                                  price_model=cfg.facilitator_model)
     if interactive and tty and facilitator is not None:
         async def answer_fn(q):  # noqa: E306
             return input(f"  {q.question} ").strip()
@@ -264,6 +275,16 @@ def ideate(
     typer.echo(f"council  {[(cn, p.vendor) for cn, p in peers.items()]}")
     fac = f"   facilitator={cfg.facilitator_model}" if facilitator is not None else ""
     typer.echo(f"tools    {cfg.tools}   live={live}   rounds={cfg.max_rounds}{fac}\n")
+
+    # record the full setup as the first trace event (seats, tools, caps, facilitator)
+    setup_ev = trace.emit("intake", "setup", {
+        "seats": cfg.seats, "tools": cfg.tools, "live": live, "anonymize": cfg.anonymize,
+        "facilitator_model": cfg.facilitator_model if facilitator is not None else None,
+        "max_rounds": cfg.max_rounds, "max_turns": cfg.max_turns,
+        "max_iters": cfg.max_iters, "max_tool_calls": cfg.max_tool_calls,
+    })
+    if stream:
+        _stream(setup_ev)
 
     try:
         rec, candidates = asyncio.run(run_ideation(
@@ -278,6 +299,27 @@ def ideate(
     typer.echo("\nFinal ranking (anonymized panel vote):")
     for i, cid in enumerate(rec.ranked, 1):
         typer.echo(f"  {i}. {rec.composites[cid]:.3f}  {cid}: {titles.get(cid, '')}")
+
+    # cost / usage summary (live only; offline stubs don't spend)
+    metered = [(cn, p) for cn, p in peers.items() if getattr(getattr(p, "usage", None), "requests", 0)]
+    if metered:
+        typer.echo("\nUsage (approx — see PRICES in providers/sdk.py):")
+        total = 0.0
+        for cn, p in metered:
+            u = p.usage
+            total += u.cost_usd
+            typer.echo(f"  {cn:8} ${u.cost_usd:7.4f}  {u.input_tokens:>7}+{u.output_tokens:<6} tok  "
+                       f"{u.requests} reqs  {u.tool_calls} tool calls")
+        if facilitator is not None and getattr(facilitator.usage, "requests", 0):
+            fu = facilitator.usage
+            total += fu.cost_usd
+            typer.echo(f"  {'facil.':8} ${fu.cost_usd:7.4f}  {fu.input_tokens:>7}+{fu.output_tokens:<6} tok  {fu.requests} reqs")
+        hits = getattr(retrieval, "hits", 0)
+        misses = getattr(retrieval, "misses", 0)
+        if hits or misses:
+            rate = 100 * hits / (hits + misses)
+            typer.echo(f"  retrieval cache: {hits} hits / {misses} misses ({rate:.0f}% saved)")
+        typer.echo(f"  {'TOTAL':8} ${total:7.4f}")
     typer.echo(f"\ntrace: {trace.path}")
 
 

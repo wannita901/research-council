@@ -33,6 +33,34 @@ async def test_agent_peer_research_runs_offline():
     assert isinstance(brief.gap, str) and isinstance(brief.refs, list)
 
 
+async def test_usage_is_tracked_and_costed():
+    peer = AgentPeer(
+        vendor="openai", codename="Aiden", model=TestModel(),
+        retrieval=build_stub_retrieval(["wiki"]), price_model="gpt-5.4",
+    )
+    await peer.research("does X beat Y?")
+    await peer.propose(await peer.research("again"))
+    u = peer.usage
+    assert u.requests > 0 and u.input_tokens > 0
+    assert u.cost_usd > 0  # gpt-5.4 priced in PRICES → non-zero
+    # without a price_model, tokens still counted but cost stays 0
+    free = AgentPeer("gemini", "Julien", TestModel(), build_stub_retrieval(["wiki"]))
+    await free.research("x")
+    assert free.usage.requests > 0 and free.usage.cost_usd == 0.0
+
+
+async def test_tool_calls_are_recorded():
+    # TestModel calls every available tool once → research should record search + verify_claim.
+    peer = AgentPeer(
+        vendor="openai", codename="Aiden", model=TestModel(),
+        retrieval=build_stub_retrieval(["wiki"]),
+    )
+    await peer.research("does X beat Y?")
+    tools = {tc["tool"] for tc in peer.last_tool_calls}
+    assert "search" in tools  # actually called the search tool
+    assert all("tool" in tc and "args" in tc for tc in peer.last_tool_calls)
+
+
 async def test_research_finalizes_gracefully_when_tool_budget_hit():
     # tool_calls cap of 0 → the first tool call would exceed it. The peer must NOT crash;
     # it should finalize tool-lessly and still return a ResearchBrief (this is the bug the

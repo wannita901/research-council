@@ -57,6 +57,7 @@ async def run_deliberation(
     round_no: int = 1,
     max_turns: int = 4,
     emit: Callable[[DiscussionMessage], None] | None = None,
+    emit_tool: Callable[[str, list[dict]], None] | None = None,
 ) -> list[DiscussionMessage]:
     thread: list[DiscussionMessage] = []
     open_qs: dict[str, list[str]] = defaultdict(list, {c: [] for c in peers})
@@ -69,6 +70,8 @@ async def run_deliberation(
         order = [c for c in codenames if open_qs[c]] + [c for c in codenames if not open_qs[c]]
         for c in order:
             contrib = await peers[c].deliberate(thread, candidates, list(open_qs[c]))
+            if emit_tool:
+                emit_tool(c, getattr(peers[c], "last_tool_calls", []) or [])
             if contrib.kind == "pass" or (contrib.done and not open_qs[c]):
                 continue
             msg = DiscussionMessage(round=round_no, turn=turn, from_codename=c, kind=contrib.kind,

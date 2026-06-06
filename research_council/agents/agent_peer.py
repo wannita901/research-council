@@ -14,6 +14,25 @@ from pydantic_ai.exceptions import UsageLimitExceeded
 from pydantic_ai.messages import ModelResponse, ToolCallPart
 from pydantic_ai.usage import UsageLimits
 
+from research_council.obs.telemetry import UsageMeter, usage_of
+from research_council.providers.sdk import _cost
+
+
+def _extract_tool_calls(msgs: list) -> list[dict]:
+    """Pull every tool call the agent made out of its message history, as
+    {tool, args} records — so the trace shows what each peer actually searched/verified."""
+    out: list[dict] = []
+    for m in msgs:
+        for part in getattr(m, "parts", []):
+            if isinstance(part, ToolCallPart):
+                try:
+                    d = part.args_as_dict()
+                    arg = d.get("query") or d.get("claim") or (str(d) if d else "")
+                except Exception:
+                    arg = str(getattr(part, "args", ""))
+                out.append({"tool": getattr(part, "tool_name", "?"), "args": str(arg)[:200]})
+    return out
+
 
 def _drop_pending_tool_calls(msgs: list) -> list:
     """When a cap is hit, the partial history can end with a model turn that requested tools
@@ -56,6 +75,8 @@ def agent_model_name(vendor: str, model: str) -> str:
 RESEARCH_SYS = (
     "You are {codename}, an AI4SE research scientist on a council. Independently survey the "
     "literature with the `search` tool and ground uncertain claims with `verify_claim`. "
+    "ALWAYS run at least two `search` calls with different queries before settling on a gap — "
+    "do not answer from memory alone — and verify any specific benchmark/paper/repo you rely on. "
     "Identify ONE specific, underexplored research gap. Cite sources by their id in `refs`; "
     "never invent citations. Be rigorous and concrete."
 )
@@ -73,11 +94,13 @@ JUDGE_SYS = (
 )
 
 DELIBERATE_SYS = (
-    "You are {codename} on an AI4SE research council, in a group discussion. Read the candidates "
-    "and the thread, then contribute ONE message: critique (set `targets` to a candidate id), ask "
-    "a question (set `to` a codename), answer a question addressed to you, defend, concede, or "
-    "revise. Use `verify_claim` to ground disputed claims. Be specific and brief. Set done=true "
-    "only when you have nothing substantive to add."
+    "You are {codename} on an AI4SE research council, in a group discussion. Each candidate's id "
+    "IS its author's codename (e.g. candidate 'Aiden' is Aiden's idea). Read the candidates and "
+    "the thread, then contribute ONE message ADDRESSED to a specific peer — start your text with "
+    "their @codename (e.g. '@Aiden ...'). Then: critique a candidate (set `targets` to its "
+    "codename), ask a question (set `to` the codename), answer a question addressed to you, "
+    "defend, concede, or revise YOUR OWN candidate. Use `verify_claim` to ground disputed claims. "
+    "Be specific and brief. Set done=true only when you have nothing substantive to add."
 )
 
 
@@ -99,9 +122,13 @@ async def verify_claim(ctx: RunContext[ResearchDeps], claim: str, kind: str = "e
 
 class AgentPeer:
     def __init__(self, vendor: str, codename: str, model, retrieval: RetrievalProvider,
-                 *, max_iters: int = 5, max_tool_calls: int = 8, k: int = 8):
+                 *, max_iters: int = 5, max_tool_calls: int = 8, k: int = 8,
+                 price_model: str | None = None):
         self.vendor = vendor
         self.codename = codename
+        self._price_model = price_model  # bare seat id (e.g. "gpt-5.4") for costing; None → free
+        self.usage = UsageMeter()
+        self.last_tool_calls: list[dict] = []  # tool calls of the most recent research/deliberate
         self._deps = ResearchDeps(SearchTool(retrieval, k), VerifyTool(retrieval))
         self._limits = UsageLimits(request_limit=max_iters, tool_calls_limit=max_tool_calls)
         self._research_agent: Agent = Agent(
@@ -133,6 +160,20 @@ class AgentPeer:
             model, output_type=Contribution, system_prompt=DELIBERATE_SYS.format(codename=codename),
         )
 
+    def _track(self, x) -> None:
+        """Add one PydanticAI run's usage (tokens/calls + costed $) to this peer's tally."""
+        u = usage_of(x)
+        if u is None:
+            return
+        it = getattr(u, "input_tokens", 0) or 0
+        ot = getattr(u, "output_tokens", 0) or 0
+        self.usage.add(
+            requests=getattr(u, "requests", 0) or 0,
+            input_tokens=it, output_tokens=ot,
+            tool_calls=getattr(u, "tool_calls", 0) or 0,
+            cost_usd=_cost(self._price_model, it, ot) if self._price_model else 0.0,
+        )
+
     async def _capped(self, agent: Agent, finalizer: Agent, prompt: str):
         """Run an agentic (tool-using) agent under its caps. If a cap is hit before a final
         result, don't crash — finalize tool-lessly from the gathered context. The caps thus
@@ -144,10 +185,13 @@ class AgentPeer:
             except UsageLimitExceeded:
                 pass  # budget reached — fall through to finalize
             result = run.result
+            self._track(run)
             try:
-                msgs = _drop_pending_tool_calls(run.all_messages())
+                all_msgs = run.all_messages()
+                self.last_tool_calls = _extract_tool_calls(all_msgs)
+                msgs = _drop_pending_tool_calls(all_msgs)
             except Exception:
-                msgs = None
+                self.last_tool_calls, msgs = [], None
         if result is not None:
             return result.output
         kwargs = {"message_history": msgs} if msgs else {}
@@ -156,6 +200,7 @@ class AgentPeer:
             "produce the required structured output now — do NOT call any tools.",
             **kwargs,
         )
+        self._track(fin)
         return fin.output
 
     async def research(self, topic: str, context: str = "") -> ResearchBrief:
@@ -173,7 +218,9 @@ class AgentPeer:
         prompt = f"Gap: {brief.gap}\nLandscape: {brief.landscape}"
         if constraints_text:
             prompt += f"\n\n{constraints_text}"
-        d: CandidateDraft = (await self._propose_agent.run(prompt)).output
+        r = await self._propose_agent.run(prompt)
+        self._track(r)
+        d: CandidateDraft = r.output
         return Candidate(id=self.codename, vendor=self.vendor, title=d.title, gap=brief.gap,
                          hypothesis=d.hypothesis, method=d.method, experiment_plan=d.experiment_plan,
                          refs=brief.refs)
@@ -182,7 +229,9 @@ class AgentPeer:
         listing = "\n".join(
             f"{a['label']}: {a.get('title', '')} — {a.get('gap', '')}" for a in anon_candidates
         )
-        sheet: ScoreSheet = (await self._judge_agent.run(f"Candidates:\n{listing}")).output
+        r = await self._judge_agent.run(f"Candidates:\n{listing}")
+        self._track(r)
+        sheet: ScoreSheet = r.output
         return [Score(judge_vendor=self.vendor, candidate_id=i.label, novelty=i.novelty,
                       soundness=i.soundness, feasibility=i.feasibility, clarity=i.clarity)
                 for i in sheet.items]
