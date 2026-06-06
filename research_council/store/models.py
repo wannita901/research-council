@@ -24,8 +24,40 @@ class ResearchBrief(BaseModel):
     refs: list[str] = Field(default_factory=list)
 
 
+class BriefDraft(BaseModel):
+    """Agent output for the research phase (vendor is set by the orchestrator, not the model)."""
+
+    landscape: str = ""
+    gap: str = ""
+    rationale: str = ""
+    refs: list[str] = Field(default_factory=list)
+
+
+class CandidateDraft(BaseModel):
+    """Agent output for the propose phase (id/vendor/gap set by the orchestrator)."""
+
+    title: str = ""
+    hypothesis: str = ""
+    method: str = ""
+    experiment_plan: str = ""
+
+
+class ScoreItem(BaseModel):
+    label: str
+    novelty: float = 0.0
+    soundness: float = 0.0
+    feasibility: float = 0.0
+    clarity: float = 0.0
+
+
+class ScoreSheet(BaseModel):
+    """Agent output for the judge phase (per anonymized candidate label)."""
+
+    items: list[ScoreItem] = Field(default_factory=list)
+
+
 class Candidate(BaseModel):
-    id: str  # unique per debate; we use the authoring vendor seat
+    id: str  # unique per debate; v2 uses the authoring codename
     vendor: str
     title: str
     gap: str
@@ -34,6 +66,61 @@ class Candidate(BaseModel):
     experiment_plan: str
     refs: list[str] = Field(default_factory=list)
     version: int = 1
+
+
+class Contribution(BaseModel):
+    """One peer's turn in a deliberation (the agent's output)."""
+
+    kind: str = "pass"  # critique | question | answer | defend | concede | revise | pass
+    to: str | None = None  # codename addressed (for question/answer)
+    content: str = ""
+    refs: list[str] = Field(default_factory=list)
+    targets: str | None = None  # candidate id this is about
+    revision: CandidateDraft | None = None  # for kind="revise": updated fields of one's OWN candidate
+    done: bool = False  # nothing substantive left to add
+
+
+class DiscussionMessage(BaseModel):
+    """A recorded deliberation message (Contribution + envelope)."""
+
+    round: int = 0
+    turn: int = 0
+    from_codename: str
+    kind: str
+    to: str | None = None
+    content: str = ""
+    refs: list[str] = Field(default_factory=list)
+    targets: str | None = None
+
+
+class RoundDigest(BaseModel):
+    """Structured memory carried into the next round's research (plan/15 #3)."""
+
+    round: int = 0
+    gaps: list[str] = Field(default_factory=list)         # "Codename: gap"
+    candidates: list[str] = Field(default_factory=list)   # "id: title"
+    top_critiques: list[str] = Field(default_factory=list)  # "from → target: claim"
+    verifier: list[str] = Field(default_factory=list)     # grounding signals
+    human_comment: str = ""
+
+
+class IntakeQuestion(BaseModel):
+    id: str = ""
+    question: str
+    why: str = ""
+
+
+class IntakeQuestions(BaseModel):
+    """Facilitator output wrapper (plan/15 #5)."""
+
+    questions: list[IntakeQuestion] = Field(default_factory=list)
+
+
+class Constraints(BaseModel):
+    """Answers captured at a stage's intake; injected into the council's context."""
+
+    stage: str = "ideation"
+    answers: dict[str, str] = Field(default_factory=dict)  # question -> answer
 
 
 class Critique(BaseModel):
@@ -107,10 +194,18 @@ class RunConfig(BaseModel):
         }
     )
     tools: list[str] = Field(default_factory=lambda: ["wiki", "openalex"])
+    # Intake facilitator (writes the clarifying questions) — a Claude model by default;
+    # override via RC_FACILITATOR_MODEL in mise. Vendor is fixed to anthropic.
+    facilitator_model: str = "claude-sonnet-4-6"
     weights: dict[str, float] = Field(default_factory=lambda: dict(DEFAULT_WEIGHTS))
     usd_max: float = 5.0
     anonymize: bool = True
     verifier_mode: str = "mock"  # mock (incr 1) | sandbox (incr 2)
+    # v2 agentic caps (plan/15 #1)
+    max_iters: int = 5         # per-peer research loop iterations
+    max_tool_calls: int = 8    # per-peer tool calls
+    max_turns: int = 4         # deliberation sub-rounds
+    max_rounds: int = 4        # full ideation rounds
 
 
 class Event(BaseModel):

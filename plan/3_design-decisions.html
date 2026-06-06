@@ -36,14 +36,14 @@
 
     <h2>Q1 · Model per vendor seat <span class="pill def">decided: ask each run</span></h2>
     <p>The panel is <strong>3 symmetric peers, one per vendor</strong> (peers, not fixed roles &mdash; each proposes <em>and</em> critiques; judging is a panel vote + human confirm). No hard-coded default model. At the start of a debate the CLI <strong>prompts for which model fills each vendor seat</strong> and <strong>which retrieval tools the council may use this round</strong> (see <a href="8_knowledge-layer.html">Knowledge Layer</a>), last-used offered as default, overridable by flags/config for repeatable runs.</p>
-    <pre><code>$ rc debate ideate --topic "..."
+    <pre><code>$ council debate ideate --topic "..."
   OpenAI seat  [gpt-5]:            ▸
   Claude seat  [claude-opus-4-8]: ▸
   Gemini seat  [gemini-2.5-pro]:  ▸
   Retrieval tools  [x] wiki [x] openalex [x] arxiv [ ] semanticscholar
                    [ ] github [ ] paperswithcode [ ] web        ▸
 # or non-interactive:
-$ rc debate ideate --topic "..." \
+$ council debate ideate --topic "..." \
     --seats openai=gpt-5,claude=opus-4-8,gemini=2.5-pro \
     --tools wiki,openalex,arxiv</code></pre>
 
@@ -129,7 +129,7 @@ $ rc debate ideate --topic "..." \
       </div>
       <div class="tabpanel" id="x2">
         <h4>2 · Checkpointed / resumable CLI <span class="pill rec">recommended for v0</span></h4>
-        <p>Same single-process run, but <strong>each round's state is persisted as it completes</strong>. A crash or Ctrl-C resumes from the last checkpoint (<code>rc resume &lt;run-id&gt;</code>).</p>
+        <p>Same single-process run, but <strong>each round's state is persisted as it completes</strong>. A crash or Ctrl-C resumes from the last checkpoint (<code>council resume &lt;run-id&gt;</code>).</p>
         <div class="pros">
           <div class="p">Never lose an expensive debate</div>
           <div class="c">Need a small state schema + replay</div>

@@ -34,7 +34,7 @@
 
     <h2>2. Write side vs read side <span class="tag">key split</span></h2>
     <div class="cards">
-      <div class="card"><h4>Write side — automated ops</h4><p><strong>Ingest</strong> (drop a source → a librarian agent updates 10&ndash;15 pages, cross-links, flags) and <strong>lint</strong> (find contradictions, stale claims, orphans, gaps) run as platform ops &mdash; <code>rc ingest</code> / <code>rc lint</code> &mdash; with the guardrails in §5. Offline/async; <em>not</em> in the debate hot path.</p></div>
+      <div class="card"><h4>Write side — automated ops</h4><p><strong>Ingest</strong> (drop a source → a librarian agent updates 10&ndash;15 pages, cross-links, flags) and <strong>lint</strong> (find contradictions, stale claims, orphans, gaps) run as platform ops &mdash; <code>council ingest</code> / <code>council lint</code> &mdash; with the guardrails in §5. Offline/async; <em>not</em> in the debate hot path.</p></div>
       <div class="card"><h4>Read side — the platform</h4><p><code>WikiProvider.search/query</code> navigates <code>index.md</code>, pulls relevant pages, and returns synthesized notes <strong>with citations back to <code>raw/</code></strong>. Debates read a committed snapshot.</p></div>
     </div>
     <p class="hint" style="color:var(--ink-faint);font-size:12.5px">Decision (revised 2026-06-04): ingest/lint are <strong>automated from the start</strong> as platform ops, with the guardrails in §5 &mdash; not a manual Claude Code workflow. The maintainer agent, taxonomy, and routing rules are specified in <a href="9_librarian-design.html">Wiki Librarian Design</a>.</p>
@@ -119,7 +119,7 @@ research_council/
     <h2>7. Scope for v0</h2>
     <ul>
       <li><strong>Build (read):</strong> <code>WikiProvider</code>, <code>OpenAlexProvider</code>, <code>HybridRetrieval</code> behind the Protocol.</li>
-      <li><strong>Build (write):</strong> <code>rc ingest</code> / <code>rc lint</code> via a fixed librarian model; git stage&rarr;validate&rarr;merge; <code>external/</code> vs <code>internal/</code> namespaces.</li>
+      <li><strong>Build (write):</strong> <code>council ingest</code> / <code>council lint</code> via a fixed librarian model; git stage&rarr;validate&rarr;merge; <code>external/</code> vs <code>internal/</code> namespaces.</li>
       <li><strong>Seed:</strong> ingest a small AI4SE corpus to test against.</li>
       <li><strong>Record:</strong> wiki commit hash in the run trace from day one.</li>
       <li><strong>Defer:</strong> human-review UI for merges; reranking; full-text PDF RAG.</li>

@@ -1,0 +1,84 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Phase 6 · Macro Lifecycle — 3 Stages · research-council</title>
+  <link rel="stylesheet" href="style.css">
+  <script src="nav.js"></script>
+</head>
+<body>
+  <main class="content">
+    <header>
+      <div class="eyebrow">Phase 6 · Macro Design</div>
+      <h1>Macro Lifecycle — The 3 Research Stages</h1>
+      <div class="meta">2026-06-06 · The ultimate goal is a paper · The council loop is the engine inside each stage</div>
+    </header>
+
+    <p class="lead">The product runs a research project end to end toward a <strong>submittable paper</strong>, through three human-gated stages. The <a href="12_product-regrounding.html">agentic council loop</a> is the <strong>engine</strong> reused in every stage — but its <em>shape changes</em>: Ideation is a <strong>debate</strong> (compete for the best idea); Experimentation and Writing are <strong>collaboration</strong> (cooperate to build/verify, then to draft/review).</p>
+
+    <pre><code>PROJECT INTAKE  (council asks clarifying questions → constraints)
+   │
+   ▼
+A · IDEATION ───────────  council DEBATES: lit review · motivation · novelty ·
+   │                       feasibility · soundness · research plan
+   │  ▣ HUMAN APPROVAL GATE
+   ▼
+B · EXPERIMENTATION ────  council COLLABORATES: implement code · data prep ·
+   │                       run experiments · sandbox/verify artifacts ·
+   │                       validate soundness · code review · tests · fallback
+   │  ▣ HUMAN APPROVAL GATE
+   ▼
+C · PAPER WRITING ──────  council CO-AUTHORS from scaffold-paper template,
+   │                       then reviewer-critiques against the TARGET VENUE's bar
+   ▼
+SUBMISSION-READY PAPER</code></pre>
+
+    <h2>Cross-cutting: intake, gates, memory</h2>
+    <ul>
+      <li><strong>Clarifying-question intake</strong> opens the project <em>and</em> each stage — a dedicated <strong>facilitator agent</strong> (separate from the council, cheap model) asks the human to set constraints <em>before</em> working (e.g. before Ideation: area, success criteria, compute/data limits; before Writing: <strong>target venue</strong> → drives <code>scaffold-paper --class/--venue</code>). <em>(Council-generated questions are a documented alternative — plan/15 #5.)</em></li>
+      <li><strong>Human approval gates</strong> between stages (A→B→C). Plus the within-loop review gate (iterate/amend/conclude/select) from the council loop.</li>
+      <li><strong>Memory carries across stages</strong>: Ideation's plan feeds Experimentation; results feed Writing. Two tiers — within-project (trace/notes) + the long-term <a href="8_knowledge-layer.html">LLM-Wiki</a>.</li>
+    </ul>
+
+    <h2>The stages at a glance</h2>
+    <table>
+      <thead><tr><th>Stage</th><th>Council mode</th><th>Key tools</th><th>Artifact out</th><th>Sample intake Qs</th></tr></thead>
+      <tbody>
+        <tr><td><strong>A · Ideation</strong></td><td><strong>Debate</strong> (divergent → best idea; the <a href="12_product-regrounding.html">research→propose→deliberate→judge</a> loop)</td><td>retrieval + wiki (lit review); grounding-verify</td><td>research plan: gap · motivation · hypothesis · experiment plan · lit-review notes</td><td>area? success criteria? known prior work? rough venue/timeline? constraints?</td></tr>
+        <tr><td><strong>B · Experimentation</strong></td><td><strong>Collaborate + verify</strong> (cooperate to a goal; critique → <em>code review</em>, judge → <em>does it run &amp; is it sound</em>)</td><td>sandbox / code-exec · repo · test runner · data tools</td><td>code repo · datasets · results · figures · logs</td><td>compute/budget? datasets? language/stack? baselines? metrics? fallback tolerance?</td></tr>
+        <tr><td><strong>C · Writing</strong></td><td><strong>Co-author + reviewer-critique</strong> (cooperate to draft; critique vs the <em>venue rubric</em>)</td><td><code>scaffold-paper</code> · figure plotting · references/citations · venue rubric</td><td>LaTeX paper project (submittable)</td><td><strong>target venue?</strong> page limit? deadline? authors? emphasis/story?</td></tr>
+      </tbody>
+    </table>
+
+    <h2>A · Ideation</h2>
+    <p>The canonical debate (plan/12): peers research independently (agentic, tools), propose ideas, deliberate (critique novelty/feasibility/soundness, ground claims), and judge → a recommended <strong>research plan</strong>. Output is what you approve to take into experimentation.</p>
+
+    <h2>B · Experimentation</h2>
+    <p>The loop flips from <em>competing</em> to <em>cooperating toward a shared goal</em>. Peers decompose the plan, implement code, prepare data, run experiments, and <strong>review each other's code + tests</strong>. Here "critique" = code review / soundness validation, and "judge" = <em>did we hit the experiment goal &amp; are the results sound</em>. This is where the deferred <strong>sandbox "run it" verification</strong> lives (real execution, tests, metrics) — plus fallback plans when an experiment fails.</p>
+
+    <h2>C · Paper writing</h2>
+    <p>Starts by asking the <strong>target venue</strong>, then runs <code>scaffold-paper.sh --class &lt;acmart|ieeetran|elsarticle|article&gt; --venue …</code> to lay down the LaTeX project. Peers co-author the sections (incl. figure plots from Stage B results), then switch to <strong>reviewer mode</strong>: critique the draft against that venue's acceptance criteria (novelty/soundness/evaluation/clarity/threats) and iterate until submission-ready.</p>
+
+    <h2>The generalization (why one engine fits all three)</h2>
+    <p>A <strong>stage</strong> = <code>{ intake questions, council-mode, tools, target artifact, approval gate }</code>. The council primitives — research · propose · deliberate · judge — are <strong>re-skinned per mode</strong>:</p>
+    <table>
+      <thead><tr><th>Primitive</th><th>Ideation</th><th>Experimentation</th><th>Writing</th></tr></thead>
+      <tbody>
+        <tr><td>propose</td><td>an idea + plan</td><td>an implementation / experiment step</td><td>a section draft</td></tr>
+        <tr><td>deliberate/critique</td><td>novelty · feasibility · soundness</td><td>code review · run-it · soundness</td><td>vs venue rubric</td></tr>
+        <tr><td>judge / done</td><td>best plan (vote + you)</td><td>goal met &amp; results sound</td><td>submission-ready</td></tr>
+        <tr><td>verify tool</td><td>grounding (citations)</td><td><strong>sandbox execution</strong></td><td>claims trace to results/refs</td></tr>
+      </tbody>
+    </table>
+
+    <h2>Open specifics</h2>
+    <ul>
+      <li>Experimentation collaboration model: shared-artifact + reviewers vs role split (implementer / reviewer / tester) vs task-claiming.</li>
+      <li>How much Stage-A/B artifact context to carry into the next stage (full vs summarized).</li>
+      <li>Where the project's "state machine" lives (relates to the framework choice — see chat / next page).</li>
+      <li>Venue rubric source: curated per-venue checklists vs the council deriving them.</li>
+    </ul>
+  </main>
+</body>
+</html>

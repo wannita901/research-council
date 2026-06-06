@@ -1,0 +1,159 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Phase 6 · Product Re-grounding (Agentic v2) · research-council</title>
+  <link rel="stylesheet" href="style.css">
+  <script src="nav.js"></script>
+</head>
+<body>
+  <main class="content">
+    <header>
+      <div class="eyebrow">Phase 6 · Re-grounding</div>
+      <h1>Product Re-grounding — Agentic Council (v2)</h1>
+      <div class="meta">2026-06-05 · North-star after the pivot · Supersedes the eval-first framing where they conflict</div>
+    </header>
+
+    <p class="lead">The goal has shifted: build a <strong>working agentic system that actually helps do AI4SE research in the wild</strong> — a PoC that keeps working — rather than a controlled study built to satisfy a publication. Same backbone (cross-vendor multi-agent debate, LLM-Wiki, tools, UI); but the peers become <strong>autonomous agents</strong>, and we drop "deterministic + absolute-minimal + eval-first" as design constraints.</p>
+
+    <div class="callout">
+      <div class="label">The pivot, from → to</div>
+      <table style="margin:8px 0 0">
+        <thead><tr><th>Dimension</th><th>Before (v1, eval-first)</th><th>Now (v2, product)</th></tr></thead>
+        <tbody>
+          <tr><td>Primary goal</td><td>Publishable controlled study</td><td><strong>Working product / PoC for real AI4SE research</strong></td></tr>
+          <tr><td>Determinism</td><td>Required (retrieval pinned, constant)</td><td><strong>Not required</strong> — agentic &amp; nondeterministic is fine</td></tr>
+          <tr><td>Minimalism</td><td>Absolute minimal core</td><td>Pragmatic — add what makes it work well</td></tr>
+          <tr><td>Retrieval</td><td>One fixed call, identical query per peer</td><td><strong>Agent-driven</strong>: each peer decides tools, queries, depth</td></tr>
+          <tr><td>Rounds</td><td>Loop phases 3–6 over fixed candidates</td><td><strong>Loop from Phase 1</strong> with accumulated memory + your comment</td></tr>
+          <tr><td>Eval</td><td>The design driver (baseline ladder, RQs)</td><td><strong>Optional / later</strong> — we keep full tracing so we *can* evaluate</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <h2>1. What stays (backbone, unchanged)</h2>
+    <ul>
+      <li><strong>Cross-vendor multi-agent debate</strong> — 3 peers, one per vendor (OpenAI · Claude · Gemini). Still the differentiator.</li>
+      <li><strong>LLM-Wiki</strong> knowledge layer + librarian (<a href="8_knowledge-layer.html">8</a>/<a href="9_librarian-design.html">9</a>) — long-term memory across debates.</li>
+      <li><strong>Tools / retrieval</strong> — wiki · openalex · arxiv · semanticscholar · github, selectable per round.</li>
+      <li><strong>Human-in-the-loop</strong> review gate — iterate / amend / conclude / select.</li>
+      <li><strong>Anonymized panel judging</strong> (quality control, not just an eval knob).</li>
+      <li><strong>Provider abstraction · mise · trace/observability · FastAPI backend · future UI</strong> (<a href="11_runner-service-arch.html">11</a>).</li>
+    </ul>
+
+    <h2>2. What changes (the agentic turn)</h2>
+    <ul>
+      <li><strong>Peers are autonomous agents.</strong> In research, each peer runs its own <em>think → call tool → observe</em> loop, deciding which tools to call, what to query, and <strong>how many loops to run</strong> — bounded by caps.</li>
+      <li><strong>Independent research, for real.</strong> Each peer explores differently (its own queries/tools), not the same handout.</li>
+      <li><strong>Rounds re-enter from Phase 1 with memory.</strong> A new round re-runs research carrying forward each peer's own prior work, the peers' candidates/critiques/verifier signals, and <strong>your comment</strong>.</li>
+      <li><strong>Phases 3–5 collapse into <em>Deliberate</em>.</strong> Critique + rebut become a real multi-party, multi-turn discussion (agents address each other, ask/answer, defend, concede, revise). <strong>Verification stops being a fixed phase</strong> — it becomes a grounding tool agents call to settle disputed claims.</li>
+      <li><strong>Caps everywhere</strong> to stay safe in the wild (no runaway loops / overspend).</li>
+      <li><strong>Determinism dropped</strong>; minimalism relaxed; eval demoted to optional.</li>
+    </ul>
+
+    <h2>3. Execution model v2</h2>
+    <pre><code>INTAKE  topic + selected models & tools (setup wizard)
+   │
+   ▼
+ROUND r ───────────────────────────────────────────────────────────
+  1 RESEARCH  (agentic · parallel per peer)
+        context_in = topic + (r>1 ? own prior brief/candidate
+                     + peers' candidates + critiques + verifier signals
+                     + YOUR comment : nothing)
+        each peer: ReAct loop { think → call tool(s) → observe } ≤ cap
+        → grounded ResearchBrief (gap + evidence)
+  2 PROPOSE        → candidate (idea + minimal experiment plan)
+  3 DELIBERATE     → multi-party, multi-turn group discussion (capped):
+                     critique · ask · answer · defend · concede · REVISE;
+                     a message may address a peer by codename ("@cathy …");
+                     agents call tools incl. a grounding/verify check.
+                     ends on convergence (no new points / open Qs) or cap.
+  4 JUDGE          → ANONYMIZED panel vote (authorship hidden) → recommendation
+   │
+   ▼
+  HUMAN GATE: iterate · amend(comment) · conclude · select
+   │
+   ├─ iterate / amend → ROUND r+1  (loop to Phase 1 WITH accumulated memory)
+   └─ conclude / select → DONE
+  caps: max_rounds · debate $/token budget</code></pre>
+
+    <h2>4. The agentic peer (research phase)</h2>
+    <pre><code>peer.research(topic, context, tools, budget):
+    scratch = context                       # own + peers' prior + your comment (r>1)
+    for step in 1..MAX_ITERS:               # ← loop cap
+        plan = think(scratch)               # decide: search? which tool? what query? done?
+        if plan.done or budget.spent: break
+        obs  = call(plan.tool, plan.query)  # agent-chosen tool + query (any selected tool)
+        scratch += obs
+    return synthesize_brief(scratch)        # grounded gap + evidence refs
+# caps: MAX_ITERS · MAX_TOOL_CALLS · per-agent token/$ budget · hard deadlock stop</code></pre>
+    <p>Tool-calling is the mechanism (native per-vendor now; <a href="8_knowledge-layer.html">MCP</a> an optional backend later). The same loop pattern powers deliberation below.</p>
+
+    <h2>4b. Deliberation — the group discussion (was phases 3–5)</h2>
+    <p>A shared, all-visible thread where the three peers actually argue, capped and convergence-aware:</p>
+    <pre><code>state: thread (all see it) · candidates (revisable) · open_questions
+loop sub-rounds (≤ MAX_TURNS, within budget):
+   for each peer (round-robin; a peer with an open question to it speaks first):
+       msg = peer.contribute(thread)      # critique | ask(@peer) | answer | defend | concede | revise
+       if msg.kind == revise:  update that peer's candidate
+       if msg.needs_grounding: result = verify_tool(claim)  → into thread
+   stop when: no open questions AND no new substantive point this sub-round  (converged)
+              or MAX_TURNS / budget reached
+→ (possibly revised) candidates + full discussion transcript</code></pre>
+    <ul>
+      <li><strong>Addressing:</strong> messages carry an optional <code>to</code>; an addressed peer answers next.</li>
+      <li><strong>Identity:</strong> peers speak under stable <em>codenames</em> (pseudonyms); the codename→vendor mapping is hidden from the agents (shown only to you / in the trace), curbing cross-vendor favoritism. Judging strips authorship entirely (anonymized).</li>
+      <li><strong>Verification = a tool here</strong>, not a phase: grounding checks (citation/benchmark/repo exists) on demand; the heavy "run a scaffold/tests" check belongs to the later <em>execution</em> stage.</li>
+      <li><strong>Nondeterministic but bounded</strong> by turns + budget; candidates may change during the discussion.</li>
+    </ul>
+
+    <h2>5. Memory model (two tiers)</h2>
+    <div class="cards">
+      <div class="card"><h4>Within-debate (working)</h4><p>The run trace + each peer's scratchpad. Carried across <strong>rounds</strong> so the council builds on itself and on your feedback.</p></div>
+      <div class="card"><h4>Across-debate (long-term)</h4><p>The <strong>LLM-Wiki</strong> — curated, compounding knowledge ingested between debates; peers consult it as a tool.</p></div>
+    </div>
+
+    <h2>6. Budgets &amp; safety (works-in-the-wild)</h2>
+    <table>
+      <thead><tr><th>Scope</th><th>Cap</th></tr></thead>
+      <tbody>
+        <tr><td>Per-agent research loop</td><td><code>MAX_ITERS</code>, <code>MAX_TOOL_CALLS</code>, per-agent token/$ budget, hard deadlock stop</td></tr>
+        <tr><td>Per debate</td><td><code>usd_max</code> (exists) · <code>max_rounds</code> · graceful abort on breach (checkpointed)</td></tr>
+        <tr><td>Per tool call</td><td>timeouts + degrade-to-empty (already in adapters)</td></tr>
+        <tr><td>Human</td><td>conclude / select ends anytime; Esc/Ctrl-C aborts</td></tr>
+      </tbody>
+    </table>
+
+    <h2>7. Impact on existing components</h2>
+    <table>
+      <thead><tr><th>Component</th><th>Change</th></tr></thead>
+      <tbody>
+        <tr><td>Orchestrator</td><td>Rounds re-enter Phase 1; thread accumulated memory + human comment into each round</td></tr>
+        <tr><td>Peer</td><td>From fixed <em>retrieve→reason</em> to a <strong>capped agentic tool-use loop</strong></td></tr>
+        <tr><td>Tools</td><td>Exposed to agents for dynamic calling (per-vendor tool-calling; MCP optional)</td></tr>
+        <tr><td>Critique + rebut</td><td><strong>Merged into Deliberate</strong> — a capped multi-party discussion (orchestrator runs turn-taking + convergence)</td></tr>
+        <tr><td>Verifier</td><td><strong>Repositioned</strong>: no longer a fixed phase — a grounding/feasibility <em>tool</em> agents call during deliberation; sandbox "run it" deferred to the execution stage</td></tr>
+        <tr><td>Trace / UI / backend</td><td>Unchanged shape; stream now also carries agent think/tool-call events</td></tr>
+        <tr><td>Eval (<a href="5_research-framing-eval.html">5</a>)</td><td><strong>Demoted to optional/later</strong> — tracing stays so we can measure if we choose to publish</td></tr>
+      </tbody>
+    </table>
+
+    <h2>8. Open specifics to lock before resuming build</h2>
+    <ul>
+      <li>Default caps: <code>MAX_ITERS</code> / <code>MAX_TOOL_CALLS</code> per peer; <code>max_rounds</code>; per-agent vs per-debate budget split.</li>
+      <li>Tool-calling: native per-vendor now vs a shared tool-call abstraction; which tools are agent-exposed (retrieval only? + verifier?).</li>
+      <li>How much prior context to inject each round (full transcript vs summarized) — token cost vs continuity.</li>
+      <li><strong>✓ Turn-taking:</strong> round-robin + open-question routing (code-orchestrated); converge or cap.</li>
+      <li><strong>✓ Verification:</strong> grounding tool during deliberation now; sandbox "run it" deferred to the execution stage.</li>
+      <li><strong>✓ Identity:</strong> pseudonymous codenames in discussion (vendor mapping hidden from agents); anonymized judging.</li>
+      <li><strong>✓ Codenames:</strong> <strong>Aiden · Julien · Cathy</strong> (codename↔vendor mapping hidden from agents; arbitrary default, optionally shuffled per run).</li>
+    </ul>
+
+    <div class="callout good">
+      <div class="label">Status</div>
+      <p style="margin:6px 0 0">Implementation paused for this re-grounding. Backbone already built (core debate, CLI wizard+streaming+gate, live providers, real retrieval, FastAPI backend) carries over; the main new work when we resume is the <strong>agentic peer loop</strong> + <strong>round re-entry with memory</strong>.</p>
+    </div>
+  </main>
+</body>
+</html>

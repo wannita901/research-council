@@ -12,9 +12,11 @@ const PHASES = [
   { n: 2, name: "Architecture & Design",   status: "done" },
   { n: 3, name: "Research Framing & Eval", status: "done" },
   { n: 4, name: "Build Specs",             status: "done" },
-  { n: 5, name: "Implementation",          status: "wip" },
-  { n: 6, name: "Evaluation",              status: "todo" },
+  { n: 5, name: "Implementation (v1)",      status: "done" },
+  { n: 6, name: "Re-grounding (v2 design)", status: "done" },
+  { n: 7, name: "Implementation (v2)",      status: "wip" },
 ];
+// Note: standalone "Evaluation" demoted to optional after the product pivot (see plan/5, plan/12).
 
 // Plan documents, in creation order. `phase` maps each doc to a phase above.
 const PAGES = [
@@ -29,6 +31,10 @@ const PAGES = [
   { file: "9_librarian-design.html",      n: 9, phase: 4, title: "Wiki Librarian Design" },
   { file: "10_build-log.html",            n: 10, phase: 5, title: "Build Log — Increment 1" },
   { file: "11_runner-service-arch.html",  n: 11, phase: 5, title: "Runner & Service Architecture" },
+  { file: "12_product-regrounding.html",  n: 12, phase: 6, title: "Product Re-grounding (Agentic v2)" },
+  { file: "13_research-lifecycle.html",   n: 13, phase: 6, title: "Macro Lifecycle — 3 Stages" },
+  { file: "14_build-stack-v2.html",       n: 14, phase: 6, title: "Build Stack v2 — Frameworks" },
+  { file: "15_design-backlog.html",       n: 15, phase: 6, title: "Design Backlog (open decisions)" },
 ];
 
 const STATUS_ICON = { done: "✓", wip: "◐", next: "▸", todo: "○" };
@@ -67,14 +73,14 @@ function buildSidebar() {
       </div>
 
       <div class="roadmap">
-        <div class="rm-title">Roadmap — 6 phases</div>
+        <div class="rm-title">Roadmap — ${PHASES.length} phases</div>
         ${roadmap}
       </div>
 
       <div class="nav-title">Plan docs — newest first (${PAGES.length})</div>
       <nav>${links}</nav>
 
-      <div class="sidebar-foot">Phases 1–4 done · phase 5 (Implementation) is next.</div>
+      <div class="sidebar-foot">P1–6 done · P7 v2 build in progress — agentic ideation runs end-to-end.</div>
     </aside>`;
 }
 

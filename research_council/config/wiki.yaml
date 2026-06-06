@@ -1,4 +1,4 @@
-# Wiki librarian config (plan/9). Write side is a separate, offline op (rc ingest/lint).
+# Wiki librarian config (plan/9). Write side is a separate, offline op (council ingest/lint).
 model: claude-sonnet-4-6          # one fixed librarian model for consistency
 gate: hybrid                      # auto-merge clean + lint pass; human review on contradiction
 taxonomy: [papers, tasks, approaches, methods, concepts, motivations, benchmarks, findings, gaps]

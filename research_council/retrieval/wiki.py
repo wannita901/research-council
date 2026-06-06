@@ -1,7 +1,7 @@
 """Wiki reader — the curated synthesis layer's READ side (plan/8).
 
 Network-free: reads markdown under knowledge/wiki/ and ranks pages by keyword
-overlap. Returns [] until the wiki is seeded (write side = rc ingest, future).
+overlap. Returns [] until the wiki is seeded (write side = council ingest, future).
 """
 
 from __future__ import annotations

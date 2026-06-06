@@ -37,6 +37,48 @@ async def test_stub_retrieval_returns_tagged_papers():
     assert papers and {p.source for p in papers} == {"wiki", "openalex"}
 
 
+async def test_cache_collapses_repeat_and_concurrent_queries():
+    import asyncio
+
+    from research_council.retrieval.cache import CachedRetrieval
+    from research_council.store.models import Paper
+
+    class Counter:
+        name = "counter"
+        providers = ["sentinel"]  # for delegation check
+
+        def __init__(self):
+            self.calls = 0
+
+        async def search(self, query, k=10):
+            self.calls += 1
+            await asyncio.sleep(0)  # force a yield so concurrent callers overlap
+            return [Paper(id=f"p{self.calls}", title="t", source="counter")]
+
+    inner = Counter()
+    cached = CachedRetrieval(inner)
+
+    # two concurrent identical searches → a single underlying call (shared in-flight future)
+    r1, r2 = await asyncio.gather(cached.search("same q", 5), cached.search("same q", 5))
+    assert inner.calls == 1 and r1 == r2
+    # repeated query later → served from cache, still one call
+    await cached.search("Same   Q", 5)  # normalized to the same key
+    assert inner.calls == 1
+    # a different query → a fresh call
+    await cached.search("other", 5)
+    assert inner.calls == 2
+    assert cached.misses == 2 and cached.hits >= 2
+    # transparent delegation of undefined attributes
+    assert cached.providers == ["sentinel"]
+    assert cached.name.startswith("cached(")
+
+
+async def test_build_retrieval_is_cached_but_transparent():
+    r = build_retrieval(["openalex", "arxiv"])
+    assert r.__class__.__name__ == "CachedRetrieval"
+    assert {p.name for p in r.providers} == {"openalex", "arxiv"}  # delegates to hybrid
+
+
 async def test_wiki_provider_empty_seed_is_network_free():
     from research_council.retrieval.wiki import WikiProvider
 

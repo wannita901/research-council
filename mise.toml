@@ -13,6 +13,10 @@ RC_OPENAI_MODEL = "gpt-5.4" # [ gpt-5.5 | gpt-5.4 | gpt-5.4-mini ]
 RC_ANTHROPIC_MODEL = "claude-sonnet-4-6" # [ claude-opus-4-8 | claude-sonnet-4-6 | claude-haiku-4-5 ]
 RC_GEMINI_MODEL = "gemini-3.5-flash" # [ gemini-3.1-pro-preview | gemini-3.5-flash | gemini-3.1-flash-lite ]
 
+# Intake facilitator (writes the clarifying questions) — a Claude model; vendor fixed to anthropic.
+# claude-haiku-4-5 is cheaper if your account has it enabled.
+RC_FACILITATOR_MODEL = "claude-sonnet-4-6" # [ claude-opus-4-8 | claude-sonnet-4-6 | claude-haiku-4-5 ]
+
 [tasks.deps]
 description = "Install the package + dev, provider & service deps into the venv"
 run = "pip install -e '.[dev,providers,service]'"
@@ -27,12 +31,16 @@ run = "pytest -q"
 
 [tasks.check]
 description = "Ping each provider with a tiny prompt (diagnose live setup; ~cents)"
-run = "rc check"
+run = "council check"
 
 [tasks.debate]
 description = "Offline debate. Pass args after --, e.g. mise run debate -- --topic '...'"
-run = "rc debate"
+run = "council debate"
 
 [tasks.live]
 description = "Live 3-vendor debate (spends tokens; needs keys in mise.local.toml)"
-run = "rc debate --live"
+run = "council debate --live"
+
+[tasks.ideate]
+description = "v2 agentic ideation (offline stub; add -- --live for real)"
+run = "council ideate"

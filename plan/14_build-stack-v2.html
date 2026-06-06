@@ -1,0 +1,76 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Phase 6 · Build Stack v2 — Frameworks · research-council</title>
+  <link rel="stylesheet" href="style.css">
+  <script src="nav.js"></script>
+</head>
+<body>
+  <main class="content">
+    <header>
+      <div class="eyebrow">Phase 6 · Build Stack</div>
+      <h1>Build Stack v2 — Frameworks Decision</h1>
+      <div class="meta">2026-06-06 · Minimal now, swappable later · Cross-vendor is non-negotiable</div>
+    </header>
+
+    <p class="lead">Now that we're product-first and agentic, we add frameworks <strong>surgically</strong> — only where they remove real toil — and keep clean interfaces so any layer swaps later. The single-vendor agent SDKs (OpenAI / Claude) are ruled out as the <em>brain</em> because cross-vendor is our identity; they can still be stage-scoped muscle.</p>
+
+    <div class="callout">
+      <div class="label">Decisions from the requirements (2026-06-06)</div>
+      <table style="margin:8px 0 0">
+        <thead><tr><th>Question</th><th>Answer → decision</th></tr></thead>
+        <tbody>
+          <tr><td>Persistence / resume</td><td>session-by-session now (a paper won't finish in one sitting, but no cross-day resume yet) → <strong>JSONL checkpoint is enough; defer LangGraph</strong></td></tr>
+          <tr><td>Minimal vs batteries</td><td>prefer minimal, go big later → <strong>PydanticAI (light) + our orchestrator</strong>, not LangGraph/ADK now</td></tr>
+          <tr><td>Stage B experiments</td><td>not production; downloads data, runs, evaluates → <strong>Docker sandbox</strong>; no SDK; MCP optional later</td></tr>
+          <tr><td>Solo + switchable</td><td>solo now; must be flexible → <strong>clean Protocol seams = swap any layer later</strong></td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <h2>The stack (layered)</h2>
+    <table>
+      <thead><tr><th>Layer</th><th>Choice now</th><th>Why</th><th>Swap-later path</th></tr></thead>
+      <tbody>
+        <tr><td>Providers</td><td><strong>ours</strong> (cross-vendor)</td><td>only thing single-vendor SDKs can't give</td><td>LiteLLM if many providers</td></tr>
+        <tr><td>Agent / tool-loop</td><td><strong>PydanticAI</strong></td><td>typed · model-agnostic · light; native structured outputs kill JSON-shape bugs; built-in tool-calling + caps</td><td>hand-rolled · LangGraph agents</td></tr>
+        <tr><td>Orchestration<br>(stages·rounds·deliberation·HITL)</td><td><strong>hand-written</strong> (ours)</td><td>control over the debate (our differentiator); minimal</td><td>LangGraph when multi-session resume hurts</td></tr>
+        <tr><td>Tools</td><td><code>RetrievalProvider</code>s + <strong>Docker-exec</strong> (Stage B)</td><td>direct, minimal</td><td>MCP servers later</td></tr>
+        <tr><td>Persistence</td><td><strong>JSONL checkpoint</strong> (ours)</td><td>enough for session-by-session</td><td>LangGraph checkpointer / DB</td></tr>
+        <tr><td>Memory</td><td>trace + <a href="8_knowledge-layer.html">LLM-Wiki</a></td><td>within-project + long-term</td><td>vector memory if needed</td></tr>
+      </tbody>
+    </table>
+
+    <h2>Stage B sandbox — Docker (no SDK, MCP later)</h2>
+    <ul>
+      <li><strong>Docker = the experiment sandbox.</strong> One container per experiment; mounted workdir; CPU/mem/timeout caps; network only during a controlled dataset-fetch step. This is the deferred "run-it" verification, scoped to Stage B.</li>
+      <li><strong>No agent SDK.</strong> "Agent with a computer" = a few tools (<code>run_in_docker</code>, <code>read/write_file</code>, <code>run_tests</code>) any peer can call. The Claude Agent SDK does this well but is Claude-only + heavier — against minimal/cross-vendor.</li>
+      <li><strong>MCP = optional, later.</strong> Community shell/fs/git/code-exec MCP servers could be reused, but they add server lifecycle + protocol overhead. Direct Docker tools are simpler now; revisit MCP to reuse servers or expose our tools to other agents.</li>
+    </ul>
+
+    <h2>Flexibility = clean seams (the "switch later" guarantee)</h2>
+    <p>Each layer sits behind a Protocol/interface; swapping an implementation is local. Stable seams:</p>
+    <pre><code>LLMProvider        vendor calls            (ours → LiteLLM)
+Peer / Agent       the reasoning+tool loop (PydanticAI → hand-rolled/LangGraph)
+Tool               a callable capability   (retrieval, docker-exec, …)
+RetrievalProvider  a kind of Tool          (ours → MCP)
+Verifier           grounding / sandbox     (mock → Docker)
+Runner             CLI · service           (already runner-agnostic)
+Checkpoint/Store   persistence             (JSONL → LangGraph/DB)</code></pre>
+
+    <h2>What changes vs what stays</h2>
+    <div class="cards">
+      <div class="card"><h4>Adopt now</h4><p><strong>PydanticAI</strong> for the agentic peers (research/deliberate/propose). <strong>Docker</strong> tool for Stage B.</p></div>
+      <div class="card"><h4>Keep</h4><p>Provider layer, retrieval adapters (wrapped as tools), hand-written orchestrator (extend for deliberation + stages + round re-entry), FastAPI backend, CLI, wiki, trace.</p></div>
+      <div class="card"><h4>Defer (revisit triggers)</h4><p><strong>LangGraph</strong> → when cross-session resume hurts. <strong>MCP</strong> → to reuse servers / expose tools. <strong>Claude Agent SDK</strong> → not planned (cross-vendor + minimal).</p></div>
+    </div>
+
+    <div class="callout good">
+      <div class="label">Updates earlier guidance</div>
+      <p style="margin:6px 0 0">This relaxes the v1 "no agent framework in core" rule (<a href="2_architecture-design.html">plan/2 §7</a>): we now use <strong>PydanticAI as a lightweight agent/tool-call lib</strong>, while <strong>orchestration stays hand-written</strong> — so the minimal-core spirit holds. Determinism/eval-first are already dropped (<a href="12_product-regrounding.html">plan/12</a>).</p>
+    </div>
+  </main>
+</body>
+</html>

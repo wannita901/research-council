@@ -9,6 +9,7 @@ to a stub so selecting them still works — transparently a placeholder.
 from __future__ import annotations
 
 from research_council.retrieval.arxiv import ArxivProvider
+from research_council.retrieval.cache import CachedRetrieval
 from research_council.retrieval.github import GitHubProvider
 from research_council.retrieval.hybrid import HybridRetrieval
 from research_council.retrieval.openalex import OpenAlexProvider
@@ -56,9 +57,11 @@ def _validate(tools: list[str]) -> None:
         raise ValueError(f"unknown retrieval tools {unknown}; known: {KNOWN_TOOLS}")
 
 
-def build_retrieval(tools: list[str]) -> HybridRetrieval:
+def build_retrieval(tools: list[str]) -> CachedRetrieval:
+    """Real (network) retrieval, memoized per debate (collapses duplicate queries)."""
     _validate(tools)
-    return HybridRetrieval([(_REAL[t]() if t in _REAL else StubRetrieval(t)) for t in tools])
+    hybrid = HybridRetrieval([(_REAL[t]() if t in _REAL else StubRetrieval(t)) for t in tools])
+    return CachedRetrieval(hybrid)
 
 
 def build_stub_retrieval(tools: list[str]) -> HybridRetrieval:

@@ -9,3 +9,6 @@ runs/
 .DS_Store
 *.pdf
 mise.local.toml
+
+# Playwright MCP scratch artifacts
+.playwright-mcp/

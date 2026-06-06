@@ -19,7 +19,7 @@
 
     <div class="callout good">
       <div class="label">Verified working</div>
-      <pre style="margin:8px 0 0"><code>$ rc debate --topic "Do LLM code-review agents catch security bugs better than SAST?" \
+      <pre style="margin:8px 0 0"><code>$ council debate --topic "Do LLM code-review agents catch security bugs better than SAST?" \
             --tools wiki,openalex,arxiv
   seats  {openai: gpt-5, anthropic: claude-opus-4-8, gemini: gemini-2.5-pro}
   tools  ['wiki','openalex','arxiv']   anonymize=True   rounds=2
@@ -43,11 +43,11 @@
         <tr><td><code>retrieval/</code> — Protocol, registry, hybrid (fan-out + dedup)</td><td><span class="yes">✓ real</span></td></tr>
         <tr><td>5 active adapters: <code>wiki</code> (local) · <code>openalex</code> · <code>arxiv</code> · <code>semanticscholar</code> · <code>github</code></td><td><span class="yes">✓ real</span> (OpenAlex + GitHub verified; SS unauth-throttled, key recommended)</td></tr>
         <tr><td><code>paperswithcode.py</code> — kept but unregistered (anti-bot gated); <code>web</code> = stub (needs search key)</td><td><span class="part">deferred</span></td></tr>
-        <tr><td><code>rc search</code> — free retrieval probe (no LLM tokens)</td><td><span class="yes">✓ real</span></td></tr>
-        <tr><td><code>config.py · cli.py</code> — load + <code>rc debate/resume/ingest/lint</code></td><td><span class="yes">✓ real (latter 3 are TODO stubs)</span></td></tr>
+        <tr><td><code>council search</code> — free retrieval probe (no LLM tokens)</td><td><span class="yes">✓ real</span></td></tr>
+        <tr><td><code>config.py · cli.py</code> — load + <code>council debate/resume/ingest/lint</code></td><td><span class="yes">✓ real (latter 3 are TODO stubs)</span></td></tr>
         <tr><td><code>providers/sdk.py</code> — OpenAI/Anthropic/Gemini adapters (lazy SDK, retry, cost)</td><td><span class="yes">✓ real (offline-tested)</span></td></tr>
         <tr><td><code>agents/llm_peer.py</code> — live path (prompts + <strong>defensive</strong> JSON parse)</td><td><span class="yes">✓ real · object/missing-key tolerant</span></td></tr>
-        <tr><td>Models via mise (<code>RC_*_MODEL</code> env) + <code>rc check</code> provider ping</td><td><span class="yes">✓ real</span></td></tr>
+        <tr><td>Models via mise (<code>RC_*_MODEL</code> env) + <code>council check</code> provider ping</td><td><span class="yes">✓ real</span></td></tr>
         <tr><td><code>service/app.py</code> — FastAPI backend (POST /debates · SSE /stream · POST /action · GET status); <code>mise run serve</code></td><td><span class="yes">✓ real</span> (real uvicorn boot verified)</td></tr>
         <tr><td><code>librarian/</code> — wiki write side</td><td><span class="no">✗ not yet (next)</span></td></tr>
         <tr><td><code>verify/sandbox.py</code> — real feasibility (incr 2)</td><td><span class="no">✗ not yet</span></td></tr>
@@ -77,15 +77,55 @@ mise run live   -- --topic "…"                              # real providers (
 
     <h2>Next implementation steps</h2>
     <ol>
-      <li><strong>Real retrieval</strong> ✓ done — 5 active adapters: wiki (local) · openalex · arxiv · semanticscholar · github. <code>paperswithcode</code> deferred (anti-bot gated, file kept), <code>web</code> = stub. <code>rc search</code> to probe; <code>--live</code> uses real, offline uses stubs.</li>
+      <li><strong>Real retrieval</strong> ✓ done — 5 active adapters: wiki (local) · openalex · arxiv · semanticscholar · github. <code>paperswithcode</code> deferred (anti-bot gated, file kept), <code>web</code> = stub. <code>council search</code> to probe; <code>--live</code> uses real, offline uses stubs.</li>
       <li><strong>First grounded <code>--live</code> debate</strong> — now uses real OpenAlex papers (user runs when convenient).</li>
       <li><strong>MCP retrieval</strong> (backlog) — optional <code>MCPRetrieval</code> provider behind <code>RetrievalProvider</code> + research-council-as-MCP-server (interop). Direct adapters stay default for reproducibility; agentic tool-use is a separate future mode. See <a href="8_knowledge-layer.html">Knowledge Layer</a>.</li>
       <li><strong>Per-debate retrieval cache</strong> (backlog) — memoize <code>(source, query)</code> so the 3 peers' identical phase-1 queries collapse to one call per source; fewer calls, faster, respects arXiv's 1-req/3s single-connection limit. Optional arXiv politeness throttle.</li>
       <li><strong>FastAPI backend</strong> ✓ done — <code>service/app.py</code>, <code>mise run serve</code> (<a href="11_runner-service-arch.html">plan/11</a>). Next on this thread: a front-end consuming the SSE stream.</li>
-      <li><strong>Librarian write side</strong> (<code>rc ingest</code>/<code>rc lint</code>) per <a href="9_librarian-design.html">plan/9</a>.</li>
+      <li><strong>Librarian write side</strong> (<code>council ingest</code>/<code>council lint</code>) per <a href="9_librarian-design.html">plan/9</a>.</li>
       <li><strong>Sandbox verifier</strong> (incr 2) for objective feasibility.</li>
       <li><strong>Obs</strong>: metrics-from-trace + HTML run report (<a href="7_observability.html">plan/7</a>).</li>
     </ol>
+
+    <h2>Phase 7 · v2 ideation build <span class="tag">in progress</span></h2>
+    <p>Building the agentic v2 loop per <a href="12_product-regrounding.html">12</a> / <a href="15_design-backlog.html">15</a>. Done so far (offline-tested, 28 tests green):</p>
+    <ul>
+      <li><strong>Tool layer</strong> — <code>tools/base.py</code> (Tool Protocol + ToolResult) · <code>search.py</code> (over the retrieval registry) · <code>verify.py</code> (<code>verify_claim</code> grounding).</li>
+      <li><strong>Agentic research peer</strong> — <code>agents/agent_peer.py</code>: a <strong>PydanticAI</strong> agent (think→tool→observe) with <code>UsageLimits</code> caps (iters / tool-calls), typed <code>BriefDraft</code>→<code>ResearchBrief</code> output, cross-vendor model strings; verified offline with <code>TestModel</code> (no tokens).</li>
+      <li><strong>Deliberation loop</strong> — <code>debate/deliberation.py</code>: multi-party round-robin + open-question routing + convergence/caps over <code>DiscussionMessage</code>; <code>AgentPeer.deliberate()</code> emits a <code>Contribution</code> (critique/question/answer/defend/concede/revise). Routing/convergence tested deterministically + agent path via <code>TestModel</code>.</li>
+      <li><strong>Round memory</strong> — <code>debate/memory.py</code>: <code>build_round_digest()</code> → <code>RoundDigest</code> (gaps by codename · candidates · top critiques · grounding · your comment) and <code>render_digest()</code> → the context string the next round's <code>research(topic, context)</code> consumes. Offline-tested.</li>
+      <li><strong>Intake</strong> — <code>agents/facilitator.py</code>: a cheap <code>Facilitator</code> generates ≤5 stage-specific clarifying questions; <code>run_intake()</code> (runner-agnostic via an async <code>answer_fn</code>) → <code>Constraints</code>; <code>render_constraints()</code> injects them. Tested scripted + <code>TestModel</code>.</li>
+      <li><strong>v2 orchestrator + integration</strong> — <code>debate/orchestrator_v2.py</code> <code>run_ideation()</code>: intake → research(+constraints/digest) → propose → deliberate → judge(anonymized) → human gate → re-enter with <code>RoundDigest</code>. Codename map (Aiden/Cathy/Julien, hidden), <code>AgentPeer.propose/score</code> added, deterministic offline <code>StubV2Peer</code>, and <code>council ideate</code> CLI (offline stub / <code>--live</code>). New event kinds streamed. v1 left fully intact.</li>
+    </ul>
+    <div class="callout good">
+      <div class="label">v2 agentic ideation — runs end-to-end (offline)</div>
+      <pre style="margin:8px 0 0"><code>$ council ideate --topic "Do LLM code-review agents catch security bugs better than SAST?" --rounds 1
+  council [(Aiden,openai)(Cathy,anthropic)(Julien,gemini)]
+  r1 research → propose → deliberate (@-addressed critiques) → judge(anon) → recommendation
+  Final ranking: Julien > Cathy > Aiden          # offline, no keys</code></pre>
+    </div>
+    <h3>Stage A hardening — making ideation usable live <span class="tag">2026-06-06 · 44 tests green</span></h3>
+    <ul>
+      <li><strong>Candidate revision applied on <code>revise</code></strong> — a peer that issues a <code>revise</code> contribution now actually <em>patches its own candidate</em> in place (non-empty fields of a <code>CandidateDraft</code>; <code>version</code> bumps) so the revised text is what gets judged that round. A peer may revise <strong>only its own</strong> candidate (v2 invariant: candidate id == codename) — a guard blocks editing a peer's idea. The orchestrator re-emits a <code>candidate_revised</code> event before judging. (<code>deliberation.py</code>, <code>orchestrator_v2.py</code>, <code>models.py</code> Contribution.revision.)</li>
+      <li><strong>Per-debate retrieval cache</strong> — <code>retrieval/cache.py</code> <code>CachedRetrieval</code> wraps the hybrid provider and memoizes <code>(query, k)</code>, collapsing the 3 peers' overlapping parallel queries (and repeats across rounds) into a single fan-out via a shared in-flight future. Cuts calls and respects strict public APIs (arXiv 1 req/3 s). Transparent (delegates <code>.providers</code>); scoped per debate via <code>build_retrieval</code>.</li>
+      <li><strong>Live path validated</strong> — <code>mise run check</code> pinged all three vendors OK (gpt-5.4 · claude-sonnet-4-6 · gemini-3.5-flash, ~$0). Keys + model ids good; live ideation is ready to run.</li>
+    </ul>
+    <h3>First live run — bugs fixed <span class="tag">2026-06-06 · 45 tests green</span></h3>
+    <p>The first <code>--live</code> attempt reached intake (all 5 questions answered) then crashed in research. Four fixes:</p>
+    <ul>
+      <li><strong>Cap crash (blocker)</strong> — a peer wanting a 9th tool call hit the cap of 8 and PydanticAI <em>raised</em> <code>UsageLimitExceeded</code>, killing the whole debate. Caps must <em>bound</em> the loop, not abort it. <code>AgentPeer</code> now drives the agent via <code>agent.iter()</code>, catches the limit, and <strong>finalizes tool-lessly</strong> — a twin agent with no tools coerces the structured output from what was already gathered (trailing un-executed tool-call turns are scrubbed first). Regression test forces the budget to 0 and asserts a brief still comes back.</li>
+      <li><strong>Setup wizard skipped</strong> — <code>ideate</code> never called <code>_interactive_setup</code> (only <code>debate</code> did), so seat-model + tool selection was bypassed. Now wired (arrow-key models on <code>--live</code> + tool checklist).</li>
+      <li><strong>Facilitator model surfaced</strong> — was hardcoded to the Anthropic seat. Now a config value <code>RC_FACILITATOR_MODEL</code> (mise, vendor fixed to anthropic), default <code>claude-sonnet-4-6</code>, shown in the run header.</li>
+      <li><strong>Deprecation warnings</strong> — model prefixes updated to non-deprecated <code>openai-chat:</code> / <code>google:</code>.</li>
+    </ul>
+    <div class="callout">
+      <div class="label">Your turn — run it live (retry)</div>
+      <pre style="margin:8px 0 0"><code>mise run ideate -- --topic "…your AI4SE question…" --live --rounds 1
+# you'll get: seat-model pickers → tool checklist → intake Qs → the run
+# add real sources at the tool step, or: --tools wiki,openalex,arxiv,semanticscholar,github
+# facilitator model: set RC_FACILITATOR_MODEL in mise.toml</code></pre>
+    </div>
+    <p>Next: wire v2 into the FastAPI backend (SSE) · Tier 2 = Stages B (experimentation) &amp; C (writing).</p>
   </main>
 </body>
 </html>

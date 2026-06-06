@@ -4,9 +4,9 @@ Heterogeneous **cross-vendor** multi-agent debate for **AI4SE research**, ground
 
 Full design lives in [`plan/`](plan/1_sota-gap-analysis.html) (open in a browser). This repo is the implementation.
 
-## Status — Increment 1 (offline spine)
+## Status — v2 agentic ideation (offline-runnable)
 
-The 7-phase debate loop runs **fully offline** via deterministic *stub peers* — no API keys required — and writes a JSONL trace. Real provider SDKs, live retrieval, and the sandbox verifier are wired behind interfaces but stubbed (see TODOs).
+The agentic **ideation** loop — intake → research → propose → deliberate → judge → human gate, with per-round memory — runs **fully offline** via deterministic stub peers (no API keys) and streams a JSONL trace. Cross-vendor live providers (OpenAI · Claude · Gemini), real retrieval (OpenAlex / arXiv / Semantic Scholar / GitHub), and a FastAPI backend are built. Experimentation & writing stages are next. Full design in [`plan/`](plan/1_sota-gap-analysis.html).
 
 ## Quickstart (mise)
 
@@ -18,14 +18,15 @@ mise trust && mise install                   # install python + auto-create .ven
 mise run deps                                # install the package + deps
 
 mise run test
-mise run debate -- --topic "Do WikiLLM concept retrieve better information than RAG concept?"
-# live (spends tokens; keys from mise.local.toml):
-mise run live -- --topic "..."
+mise run ideate -- --topic "Do LLM code-review agents catch security bugs better than SAST?"  # v2, offline
+mise run check                               # ping providers (needs keys)
+# live (spends real tokens; keys from mise.local.toml):
+mise run ideate -- --topic "..." --live
 
 ls runs/                                     # runs/<id>/trace.jsonl
 ```
 
-Secrets come from `mise.local.toml` (gitignored). Without `mise activate`, run via `mise run`/`mise exec` so the venv + env apply.
+The CLI binary is **`council`** (e.g. `council ideate`, `council debate`, `council check`); `mise run <task>` just invokes it inside the managed env (toolchain + `.venv` + keys). Secrets come from `mise.local.toml` (gitignored), so always run via `mise run`/`mise exec` (or `mise activate`) — that's why bare `council check` outside mise reports "key not set".
 
 ## Layout
 

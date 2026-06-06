@@ -1,0 +1,97 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Phase 6 · Design Backlog · research-council</title>
+  <link rel="stylesheet" href="style.css">
+  <script src="nav.js"></script>
+  <style>
+    .st-done { color: var(--good); font-weight: 700; }
+    .st-now  { color: var(--accent); font-weight: 700; }
+    .st-soon { color: var(--warn); font-weight: 700; }
+    .st-defer{ color: var(--ink-faint); font-weight: 700; }
+    td.item { font-weight: 600; white-space: nowrap; }
+  </style>
+</head>
+<body>
+  <main class="content">
+    <header>
+      <div class="eyebrow">Phase 6 · Design</div>
+      <h1>Design Backlog — Open Decisions</h1>
+      <div class="meta">Living tracker · Tier 1 LOCKED 2026-06-06 · Tier 2/3 still open</div>
+    </header>
+
+    <p class="lead">Single place to track what's still undecided before/while building v2. Legend: <span class="st-done">✅ decided</span> · <span class="st-now">🔵 open — needed for v2 ideation</span> · <span class="st-soon">🟡 open — macro lifecycle</span> · <span class="st-defer">⚪ deferred</span>.</p>
+
+    <h2>✅ Decided (anchors)</h2>
+    <ul>
+      <li>Council: 3 cross-vendor agentic peers; codenames <strong>Aiden · Julien · Cathy</strong> (<a href="12_product-regrounding.html">12</a>).</li>
+      <li>Loop: research(agentic) → propose → deliberate (round-robin + question routing) → judge (anonymized) → human gate → round re-entry with memory (<a href="12_product-regrounding.html">12</a>).</li>
+      <li>Verify: grounding tool now; Docker sandbox at the execution stage (<a href="12_product-regrounding.html">12</a>/<a href="14_build-stack-v2.html">14</a>).</li>
+      <li>Identity: pseudonymous discussion + anonymized judging (<a href="12_product-regrounding.html">12</a>).</li>
+      <li>Macro: 3 human-gated stages + clarifying-question intake + scaffold-paper for C (<a href="13_research-lifecycle.html">13</a>).</li>
+      <li>Stack: ours providers · PydanticAI agents · hand-written orchestrator · JSONL · Docker · clean Protocol seams (<a href="14_build-stack-v2.html">14</a>).</li>
+    </ul>
+
+    <h2>🔵 Tier 1 — LOCKED (2026-06-06)</h2>
+    <table>
+      <thead><tr><th>#</th><th class="item">Decision</th><th>Locked default</th><th>Status</th></tr></thead>
+      <tbody>
+        <tr><td>1</td><td class="item">Agent caps</td><td><code>MAX_ITERS=5</code> · <code>MAX_TOOL_CALLS=8</code>/peer · deliberation <code>MAX_TURNS=4</code> · <code>max_rounds=4</code> (hard ceiling 8) · per-debate <code>usd_max</code> budget (soft per-agent share); stop on cap/budget/convergence</td><td><span class="st-done">✅</span></td></tr>
+        <tr><td>2</td><td class="item">Tool interface</td><td><code>Tool</code> Protocol {name, description, args_schema, async run}; ideation exposes <strong>2 tools</strong>: <code>search</code> (round's enabled retrieval set) + <code>verify_claim</code></td><td><span class="st-done">✅</span></td></tr>
+        <tr><td>3</td><td class="item">Per-round context</td><td>structured <strong>round-digest</strong> (gaps · candidate titles · top critiques · verifier results) + your comment verbatim + peer's own scratchpad; full detail in trace; <em>no</em> summarizer call</td><td><span class="st-done">✅</span></td></tr>
+        <tr><td>4</td><td class="item">Data contracts v2</td><td>add <code>DiscussionMessage</code>, <code>AgentStep</code>, <code>Constraints</code>, <code>IntakeQuestion</code>, <code>RoundDigest</code>; <code>Critique</code> folded into <code>DiscussionMessage</code>; keep Candidate/Score/Recommendation/ReviewAction</td><td><span class="st-done">✅</span></td></tr>
+        <tr><td>5</td><td class="item">Intake / clarifying Qs</td><td>fixed cheap <strong>facilitator</strong> model → ≤5 stage-specific Qs → human answers (CLI / backend <code>/intake</code>) → <code>Constraints</code> recorded + injected; at project start &amp; each stage</td><td><span class="st-done">✅</span></td></tr>
+        <tr><td>6</td><td class="item">Grounding-verify tool</td><td><code>verify_claim(claim, kind∈{citation,benchmark,repo,existence}) → {grounded, confidence, evidence[refs], note}</code> via retrieval providers; agent-callable in deliberation</td><td><span class="st-done">✅</span></td></tr>
+        <tr><td>7</td><td class="item">Codename↔vendor</td><td>fixed default <code>openai→Aiden · anthropic→Cathy · gemini→Julien</code> (hidden from agents, in trace); opt-in <code>shuffle</code> per run (default off)</td><td><span class="st-done">✅</span></td></tr>
+      </tbody>
+    </table>
+
+    <h3>Tier 1 — locked detail (implementation-ready)</h3>
+    <pre><code># config (extends config/ideation.yaml)
+caps:   { max_iters: 5, max_tool_calls: 8, max_turns: 4, max_rounds: 4, hard_max_rounds: 8 }
+budget: { usd_max: 5.0 }                 # per debate; soft per-agent share = usd_max / seats
+intake: { facilitator: &lt;cheap model&gt;, max_questions: 5 }
+codenames: { openai: Aiden, anthropic: Cathy, gemini: Julien, shuffle: false }
+ideation_tools: [search, verify_claim]
+
+# contracts (v2 additions, Pydantic)
+Tool(Protocol):     name; description; args_schema; async run(**args) -> ToolResult
+ToolResult:         content: str; refs: list[str] = []
+DiscussionMessage:  run_id; round; turn; from_codename; to: str|None;
+                    kind: critique|question|answer|defend|concede|revise;
+                    content; refs[]; targets: str|None        # candidate id
+AgentStep:          thought; tool?: str; args?: dict; observation?: str   # peer scratchpad
+IntakeQuestion:     id; question; why?
+Constraints:        stage; answers: dict[str, str]
+RoundDigest:        gaps[]; candidates[(id,title)]; top_critiques[]; verifier[]; human_comment
+
+verify_claim(claim, kind) -> { grounded: bool, confidence: 0..1, evidence: [refs], note }</code></pre>
+
+    <h2>🟡 Tier 2 — macro lifecycle (after ideation works)</h2>
+    <table>
+      <thead><tr><th>#</th><th class="item">Decision</th><th>Options / note</th><th>Status</th></tr></thead>
+      <tbody>
+        <tr><td>8</td><td class="item">Stage state machine + gates</td><td>how A→B→C state + human approval gate are modeled in CLI + backend endpoints</td><td><span class="st-soon">open</span></td></tr>
+        <tr><td>9</td><td class="item">Cross-stage memory</td><td>which artifacts carry forward (full vs summary) A→B→C</td><td><span class="st-soon">open</span></td></tr>
+        <tr><td>10</td><td class="item">Venue rubric source</td><td>curated per-venue checklists vs council-derived</td><td><span class="st-soon">open</span></td></tr>
+      </tbody>
+    </table>
+
+    <h2>⚪ Tier 3 — deferred until we build those stages</h2>
+    <table>
+      <thead><tr><th>#</th><th class="item">Decision</th><th>Note</th><th>Status</th></tr></thead>
+      <tbody>
+        <tr><td>11</td><td class="item">Experimentation internals</td><td>collaboration model (shared-artifact+reviewers vs roles vs task-claiming) · experiment repo layout · Docker runner details · fallback handling</td><td><span class="st-defer">deferred</span></td></tr>
+        <tr><td>12</td><td class="item">Writing internals</td><td>section assignment · figure pipeline (Stage-B results → plots) · citation/reference mgmt · rubric application</td><td><span class="st-defer">deferred</span></td></tr>
+      </tbody>
+    </table>
+
+    <div class="callout">
+      <div class="label">How to use this page</div>
+      <p style="margin:6px 0 0"><strong>Tier 1 is locked ✅</strong> — the v2 ideation loop is now unblocked. Next action: start <strong>Phase 7 (v2 ideation implementation)</strong> using the locked detail above. Tier 2 gets decided once ideation works; Tier 3 when we build those stages.</p>
+    </div>
+  </main>
+</body>
+</html>

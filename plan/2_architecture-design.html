@@ -83,6 +83,7 @@ Knowledge & State       wiki + OpenAlex · transcripts · artifacts · checkpoin
 6 JUDGE           anonymized panel vote, verifier-weighted → recommendation;
                   human confirms the final pick
    (loop 3→6 until a termination rule fires)</code></pre>
+    <p class="hint" style="color:var(--ink-faint);font-size:12.5px"><strong>v2 (product) update:</strong> rounds now re-enter from <strong>Phase 1</strong> with accumulated memory + your comment, and peers research <strong>agentically</strong> (capped tool-use loop). See <a href="12_product-regrounding.html">Product Re-grounding</a>.</p>
 
     <h3>Termination rules (pick per stage)</h3>
     <ol>
@@ -141,7 +142,7 @@ Knowledge & State       wiki + OpenAlex · transcripts · artifacts · checkpoin
   obs/         telemetry.py  logging.py  metrics.py  report.py
   store/       models.py  checkpoint.py # pydantic contracts + JSONL resume
   config/      ideation.yaml  wiki.yaml
-  cli.py                                # rc debate / resume / ingest / lint
+  cli.py                                # council debate / resume / ingest / lint
 knowledge/                         # data (git-versioned; snapshot per run)
   raw/external/   raw/internal/        # external = prior art; internal never cited
   wiki/           # index.md log.md papers/ tasks/ approaches/ methods/

@@ -66,7 +66,7 @@ updated: 2026-06-04
 ## Contradictions / open questions</code></pre>
 
     <h2>3. Ingest pipeline (the librarian's loop)</h2>
-    <pre><code>rc ingest &lt;source&gt;:
+    <pre><code>council ingest &lt;source&gt;:
   1 load + SANITIZE      # untrusted input: strip injected instructions; treat as data
   2 extract → papers/    # create the anchor note
   3 route + synthesize   # create/update the typed pages (tasks/approaches/methods/…),
@@ -79,7 +79,7 @@ updated: 2026-06-04
     <h3>When does ingest fire? — triggers &amp; timing</h3>
     <p>Ingestion is always <strong>offline and after</strong> a debate (or on demand) &mdash; never in the debate hot path. A debate reads a <strong>committed snapshot</strong>; papers discovered mid-debate are <em>read</em> transiently, not written. v0 triggers:</p>
     <ul>
-      <li><strong>Manual</strong> &mdash; <code>rc ingest &lt;path&gt;</code>: papers you add yourself. Always on.</li>
+      <li><strong>Manual</strong> &mdash; <code>council ingest &lt;path&gt;</code>: papers you add yourself. Always on.</li>
       <li><strong>Post-debate harvest (opt-in)</strong> &mdash; after a debate ends, the <em>external</em> (OpenAlex) papers the peers discovered are queued and ingested into <code>raw/external/</code>, so the wiki <strong>compounds from use</strong>. Runs through the hybrid gate like any ingest.</li>
       <li><strong>Eval freeze (non-negotiable)</strong> &mdash; during an experiment batch the wiki is <strong>frozen</strong> (auto-harvest OFF) so runs stay comparable; the wiki commit hash is pinned in every run trace.</li>
       <li><strong>Deferred:</strong> watch-folder / scheduled ingest.</li>
@@ -120,10 +120,10 @@ updated: 2026-06-04
 
     <h2>5. Defaults we can iterate</h2>
     <ul>
-      <li><strong>Trigger:</strong> manual <code>rc ingest</code> + opt-in post-debate harvest (external-only, gated, frozen during eval) &mdash; see "When does ingest fire?" above; watch-folder deferred.</li>
+      <li><strong>Trigger:</strong> manual <code>council ingest</code> + opt-in post-debate harvest (external-only, gated, frozen during eval) &mdash; see "When does ingest fire?" above; watch-folder deferred.</li>
       <li><strong>Identity &amp; links:</strong> kebab-case slugs; <code>[[type:slug]]</code> wikilinks; dedup by source hash + title similarity.</li>
       <li><strong>Peer search over the wiki:</strong> <code>index.md</code> navigation + BM25 now; add embeddings only if recall suffers.</li>
-      <li><strong>Lint cadence:</strong> every ingest, plus on-demand <code>rc lint</code>.</li>
+      <li><strong>Lint cadence:</strong> every ingest, plus on-demand <code>council lint</code>.</li>
     </ul>
 
     <h2>6. Where it lives (write side)</h2>

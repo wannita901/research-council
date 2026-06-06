@@ -39,10 +39,14 @@ def _stream(ev: Event) -> None:
         extra = p.get("gap", "")[:64]
     elif ev.kind == "candidate":
         extra = p.get("title", "")[:64]
+    elif ev.kind == "candidate_revised":
+        extra = f"v{p.get('version')} {p.get('title', '')[:48]}"
     elif ev.kind == "critique":
         extra = f"{p.get('axis')} sev{p.get('severity')} → {p.get('target_id')}"
     elif ev.kind == "verifier_signal":
         extra = f"{p.get('candidate_id')} feas={p.get('feasibility')} runnable={p.get('runnable')}"
+    elif ev.kind == "discussion_message":
+        extra = f"{p.get('from_codename')} [{p.get('kind')}{('→' + p['to']) if p.get('to') else ''}] {p.get('content', '')[:50]}"
     elif ev.kind == "recommendation":
         extra = " > ".join(p.get("ranked", []))
     elif ev.kind == "human_action":
@@ -204,6 +208,76 @@ def debate(
     typer.echo("\nFinal ranking (verifier-weighted panel vote):")
     for i, cid in enumerate(rec.ranked, 1):
         typer.echo(f"  {i}. {rec.composites[cid]:.3f}  {titles.get(cid, cid)}")
+    typer.echo(f"\ntrace: {trace.path}")
+
+
+@app.command()
+def ideate(
+    topic: str = typer.Option(..., "--topic", "-t", help="research question / topic"),
+    stage: str = typer.Option("ideation", help="lifecycle stage (config name)"),
+    seats: str = typer.Option(None, help="vendor=model,... override"),
+    tools: str = typer.Option(None, help="comma list, e.g. wiki,openalex,arxiv"),
+    rounds: int = typer.Option(None, help="max ideation rounds"),
+    live: bool = typer.Option(False, help="use real providers (needs keys + SDKs)"),
+    stream: bool = typer.Option(True, help="print each phase event live"),
+    interactive: bool = typer.Option(True, help="intake questions + review gate (TTY only)"),
+):
+    """v2 agentic ideation: intake → research → propose → deliberate → judge → gate."""
+    from research_council.debate.orchestrator_v2 import CODENAMES, run_ideation
+
+    cfg = load_config(stage)
+    if seats:
+        cfg.seats = parse_seats(seats)
+    if tools:
+        cfg.tools = parse_tools(tools)
+    if rounds is not None:
+        cfg.max_rounds = rounds
+
+    tty = sys.stdin.isatty()
+    if interactive and tty:
+        _interactive_setup(cfg, live)  # arrow-key seat models (live) + retrieval tools
+
+    retrieval = build_retrieval(cfg.tools) if live else build_stub_retrieval(cfg.tools)
+    peers: dict = {}
+    for vendor, model in cfg.seats.items():
+        cn = CODENAMES.get(vendor, vendor)
+        if live:
+            from research_council.agents.agent_peer import AgentPeer, agent_model_name
+            peers[cn] = AgentPeer(vendor, cn, agent_model_name(vendor, model), retrieval,
+                                  max_iters=cfg.max_iters, max_tool_calls=cfg.max_tool_calls)
+        else:
+            from research_council.agents.stub_agent_peer import StubV2Peer
+            peers[cn] = StubV2Peer(vendor, cn, retrieval)
+
+    facilitator = None
+    answer_fn = None
+    if live:
+        from research_council.agents.agent_peer import agent_model_name
+        from research_council.agents.facilitator import Facilitator
+        facilitator = Facilitator(agent_model_name("anthropic", cfg.facilitator_model))
+    if interactive and tty and facilitator is not None:
+        async def answer_fn(q):  # noqa: E306
+            return input(f"  {q.question} ").strip()
+
+    reviewer = _cli_reviewer if (interactive and tty) else None
+    trace = TraceWriter.new(cfg.stage)
+    typer.echo(f"council  {[(cn, p.vendor) for cn, p in peers.items()]}")
+    fac = f"   facilitator={cfg.facilitator_model}" if facilitator is not None else ""
+    typer.echo(f"tools    {cfg.tools}   live={live}   rounds={cfg.max_rounds}{fac}\n")
+
+    try:
+        rec, candidates = asyncio.run(run_ideation(
+            topic, peers, trace, facilitator=facilitator, answer_fn=answer_fn, reviewer=reviewer,
+            weights=cfg.weights, max_rounds=cfg.max_rounds, max_turns=cfg.max_turns,
+            anonymize_on=cfg.anonymize, emit=(_stream if stream else None),
+        ))
+    except KeyboardInterrupt:
+        raise typer.Abort()
+
+    titles = {c.id: c.title for c in candidates}
+    typer.echo("\nFinal ranking (anonymized panel vote):")
+    for i, cid in enumerate(rec.ranked, 1):
+        typer.echo(f"  {i}. {rec.composites[cid]:.3f}  {cid}: {titles.get(cid, '')}")
     typer.echo(f"\ntrace: {trace.path}")
 
 

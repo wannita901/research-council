@@ -61,7 +61,7 @@ GET  /debates/{id}         → status + Recommendation
     <p>A pure <strong>consumer of the event stream</strong> — fully decoupled. Our typed, stable <code>Event</code> schema is the contract; any UI (a plain web dashboard, or a visual/animated one like <a href="https://github.com/pixel-agents-hq/pixel-agents">pixel-agents</a>) subscribes and renders. Deferred until the backend stream is proven; pixel-agents is one rendering option to evaluate then, not a commitment.</p>
 
     <h2>4. mise's role <span class="tag">clarified</span></h2>
-    <p>Once served, mise <strong>launches infrastructure, not individual debates</strong>: <code>mise run serve</code> (backend), later <code>mise run web</code> (front-end), plus <code>deps</code>/<code>test</code>. Debates are triggered through the API (front-end / <code>curl</code> / thin client). <code>rc debate</code> remains a <strong>dev / in-process convenience</strong> and the offline test path.</p>
+    <p>Once served, mise <strong>launches infrastructure, not individual debates</strong>: <code>mise run serve</code> (backend), later <code>mise run web</code> (front-end), plus <code>deps</code>/<code>test</code>. Debates are triggered through the API (front-end / <code>curl</code> / thin client). <code>council debate</code> remains a <strong>dev / in-process convenience</strong> and the offline test path.</p>
 
     <h2>5. What stays unchanged</h2>
     <ul>

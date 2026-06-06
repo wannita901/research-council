@@ -24,6 +24,9 @@ def load_config(stage: str = "ideation") -> RunConfig:
         val = os.getenv(env)
         if val and vendor in cfg.seats:
             cfg.seats[vendor] = val
+    fac = os.getenv("RC_FACILITATOR_MODEL")
+    if fac:
+        cfg.facilitator_model = fac
     return cfg
 
 
