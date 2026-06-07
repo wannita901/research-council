@@ -32,26 +32,52 @@ from research_council.store.models import (
 # Fixed default codename↔vendor mapping (hidden from agents; plan/15 #7).
 CODENAMES = {"openai": "Aiden", "anthropic": "Cathy", "gemini": "Julien"}
 
+# Hard ceiling on rounds (human-driven or auto) so nothing can loop forever.
+SAFETY_MAX_ROUNDS = 8
 
-async def _auto_conclude(rec: Recommendation, candidates: list[Candidate], rnd: int) -> ReviewAction:
-    return ReviewAction(action="conclude")
+
+def _auto_policy(auto_rounds: int):
+    """Default (no-human) reviewer: auto-iterate until `auto_rounds`, then conclude.
+    auto_rounds=1 → a single round (the system never continues without approval)."""
+    async def review(rec: Recommendation, candidates: list[Candidate], rnd: int) -> ReviewAction:
+        return ReviewAction(action="iterate" if rnd < auto_rounds else "conclude")
+    return review
 
 
-def aggregate_v2(scores: list[Score], weights: dict[str, float], id_map) -> Recommendation:
+_AXES = ("novelty", "soundness", "feasibility", "clarity")
+
+
+def aggregate_v2(scores: list[Score], weights: dict[str, float], id_map,
+                 *, drop_self: bool = True) -> Recommendation:
+    """Mean of judges' weighted scores per candidate. Self-scores (a judge scoring its own
+    candidate) are excluded by default — the self-preference guard alongside anonymization."""
     by: dict[str, list[Score]] = defaultdict(list)
     for s in scores:
-        if s.candidate_id in id_map:  # ignore labels we don't recognise
-            by[s.candidate_id].append(s)
+        if s.candidate_id not in id_map:  # ignore labels we don't recognise
+            continue
+        if drop_self and s.judge_vendor == id_map[s.candidate_id].vendor:
+            continue  # a peer doesn't get to score its own idea
+        by[s.candidate_id].append(s)
+    # fallback: if dropping self left a candidate with no scores, re-include all for it
+    for label in id_map:
+        if label not in by:
+            by[label] = [s for s in scores if s.candidate_id == label]
+
     composites: dict[str, float] = {}
+    breakdown: dict[str, dict] = {}
     for label, sl in by.items():
+        cid = id_map[label].id
+        if not sl:
+            composites[cid] = 0.0
+            breakdown[cid] = {a: 0.0 for a in _AXES}
+            continue
         n = len(sl)
-        comp = (weights["novelty"] * sum(s.novelty for s in sl) / n
-                + weights["soundness"] * sum(s.soundness for s in sl) / n
-                + weights["feasibility"] * sum(s.feasibility for s in sl) / n
-                + weights["clarity"] * sum(s.clarity for s in sl) / n)
-        composites[id_map[label].id] = round(comp, 4)
+        ax = {a: round(sum(getattr(s, a) for s in sl) / n, 3) for a in _AXES}
+        composites[cid] = round(sum(weights[a] * ax[a] for a in _AXES), 4)
+        breakdown[cid] = ax
     ranked = sorted(composites, key=composites.get, reverse=True)
-    return Recommendation(ranked=ranked, composites=composites, rationale="anonymized panel vote (v2)")
+    return Recommendation(ranked=ranked, composites=composites, breakdown=breakdown,
+                          rationale="anonymized panel vote · self-scores excluded")
 
 
 async def run_ideation(
@@ -63,13 +89,13 @@ async def run_ideation(
     answer_fn: Callable[[IntakeQuestion], Awaitable[str]] | None = None,
     reviewer: Callable[[Recommendation, list[Candidate], int], Awaitable[ReviewAction]] | None = None,
     weights: dict[str, float] | None = None,
-    max_rounds: int = 4,
+    auto_rounds: int = 1,   # no-human runs auto-iterate this many rounds, then conclude
     max_turns: int = 4,
     anonymize_on: bool = True,
     emit: Callable[[Event], None] | None = None,
 ) -> tuple[Recommendation, list[Candidate]]:
     weights = weights or dict(DEFAULT_WEIGHTS)
-    review = reviewer or _auto_conclude
+    review = reviewer or _auto_policy(auto_rounds)
     vendor_to_cn = {p.vendor: cn for cn, p in peers.items()}
 
     def out(phase: str, kind: str, payload: dict, **kw) -> None:
@@ -123,7 +149,7 @@ async def run_ideation(
                     {**c.model_dump(), "codename": vendor_to_cn.get(c.vendor, c.id)},
                     round=rnd, author_vendor=c.vendor)
 
-        anon, id_map = anonymize(candidates, anonymize_on)
+        anon, id_map = anonymize(candidates, anonymize_on, seed=rnd)
         score_lists = await asyncio.gather(*(p.score(anon) for _, p in order))
         scores = [s for sl in score_lists for s in sl]
         for s in scores:
@@ -136,7 +162,12 @@ async def run_ideation(
         if action.action == "select":
             final_choice = action.choice or (rec.ranked[0] if rec.ranked else None)
             break
-        if action.action == "conclude" or rnd >= max_rounds:
+        if action.action == "conclude":
+            break
+        # iterate / amend (human-driven, or the auto-policy) → another round, bounded only by
+        # the hard safety ceiling so nothing can loop forever.
+        if rnd >= SAFETY_MAX_ROUNDS:
+            out("review", "capped", {"hard_max_rounds": SAFETY_MAX_ROUNDS}, round=rnd)
             break
 
         comment = action.feedback if action.action == "amend" else ""

@@ -159,6 +159,7 @@ class Score(BaseModel):
 class Recommendation(BaseModel):
     ranked: list[str] = Field(default_factory=list)  # candidate ids, best first
     composites: dict[str, float] = Field(default_factory=dict)
+    breakdown: dict[str, dict] = Field(default_factory=dict)  # id -> per-axis mean (transparency)
     verifier_weighted: bool = True
     rationale: str = ""
 

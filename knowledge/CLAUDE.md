@@ -1,14 +1,24 @@
 # Wiki schema — librarian conventions
 
-This directory is the **LLM Wiki** (plan/8, plan/9): an LLM-maintained synthesis over a
-curated AI4SE corpus. The librarian (Claude Sonnet) ingests sources and maintains the
-typed pages below. **Read side** (peers querying) and **write side** (`rc ingest`/`rc lint`)
-are separate; debates read a committed snapshot.
+This directory is the **LLM Wiki** (plan/8, plan/9, revisited in plan/16): an LLM-maintained
+synthesis over a curated AI4SE corpus. The librarian (Claude Sonnet) ingests sources and
+maintains the typed pages below. **Read side** (peers querying via the `search` tool) and
+**write side** (`council ingest` / `council lint` / post-run harvest) are separate. Ingest
+**auto-merges** into `wiki/` and appends `log.md`; it does **not** git-commit — review with
+`git diff` and commit on your own cadence. Writes are offline / post-run, never mid-debate.
 
 ## Layers
-- `raw/external/` — real sources (papers, notes). **Only these count as prior art for novelty.**
-- `raw/internal/` — system-generated notes. **Never** cited as literature.
-- `wiki/` — the maintained markdown (this is what peers read).
+- `raw/external/` — real sources only (papers, notes). **Immutable**: the librarian reads them
+  and saves harvested source copies here, but never rewrites them.
+- `wiki/` — the LLM-owned synthesis (this is what peers read). The librarian owns it entirely.
+
+**Contamination guard (the `origin` flag, not the folder):** every `wiki/` page carries
+`origin: external | internal`.
+- `origin: external` — derived from real sources → **counts as prior art for novelty**.
+- `origin: internal` — the council's own synthesis, filed back from a run (Karpathy: "good
+  answers are filed back into the wiki as new pages") → **never** counted as prior art.
+A page touched by any external source escalates to `origin: external`. Gap-finding reads
+everything; novelty-scoring filters to `origin: external`. (There is no `raw/internal/`.)
 
 ## Page taxonomy (route content here)
 | Folder | Holds — the question it answers |
@@ -26,7 +36,11 @@ are separate; debates read a committed snapshot.
 **Routing disambiguation:** approaches = built · methods = validated · concepts = idea · motivations = why.
 
 ## Conventions
-- Pages are markdown + YAML frontmatter: `type`, `title`, `papers:[citekeys]`, `related:[[type:slug]]`, `updated`.
-- Slugs are kebab-case; cross-links use `[[type:slug]]`.
-- `index.md` is the catalog; `log.md` is the append-only ingest/lint history.
-- Maintainer model + merge gate live in `research_council/config/wiki.yaml`.
+- Pages are markdown + YAML frontmatter: `type`, `title`, `origin` (`external`|`internal`),
+  `papers:[citekeys]`, `related:[[type:slug]]`, `updated`.
+- Slugs are kebab-case; cross-links use `[[type:slug]]`. The `papers/` anchor links to every
+  typed page produced from its source.
+- `index.md` is the catalog (regenerated from the tree on every ingest); `log.md` is the
+  append-only ingest/lint history.
+- Maintainer model lives in `research_council/config/wiki.yaml`; merge = auto-merge + `log.md`
+  audit (no git commit). `council lint` checks broken links, orphans, index drift, empty pages.

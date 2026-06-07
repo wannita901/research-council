@@ -35,6 +35,7 @@ const PAGES = [
   { file: "13_research-lifecycle.html",   n: 13, phase: 6, title: "Macro Lifecycle — 3 Stages" },
   { file: "14_build-stack-v2.html",       n: 14, phase: 6, title: "Build Stack v2 — Frameworks" },
   { file: "15_design-backlog.html",       n: 15, phase: 6, title: "Design Backlog (open decisions)" },
+  { file: "16_llmwiki-spec-revisit.html", n: 16, phase: 7, title: "LLM-Wiki Spec Revisit (grounded)" },
 ];
 
 const STATUS_ICON = { done: "✓", wip: "◐", next: "▸", todo: "○" };

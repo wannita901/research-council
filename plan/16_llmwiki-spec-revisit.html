@@ -1,0 +1,114 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Phase 7 · LLM-Wiki Spec Revisit · research-council</title>
+  <link rel="stylesheet" href="style.css">
+  <script src="nav.js"></script>
+</head>
+<body>
+  <main class="content">
+    <header>
+      <div class="eyebrow">Phase 7 · Implementation (v2)</div>
+      <h1>LLM-Wiki — Spec Revisit (grounded)</h1>
+      <div class="meta">Revisited 2026-06-07 · re-grounded in Karpathy's LLM-Wiki pattern · refreshes <a href="8_knowledge-layer.html">8</a> + <a href="9_librarian-design.html">9</a> for the v2/product-first system</div>
+    </header>
+
+    <p class="lead">The wiki spec was drafted 2026-06-04, before the product-first agentic pivot. The read side now works (peers call it via the <code>search</code> tool); it just returns <code>[]</code> because the corpus is empty. The gap is <strong>content + the write side</strong> — the <strong>librarian</strong>. This page re-grounds the design in Karpathy's pattern and locks the build.</p>
+
+    <h2>1 · What changed since the spec (2026-06-04)</h2>
+    <table>
+      <thead><tr><th>Spec assumption (then)</th><th>Reality now</th><th>Effect on the wiki</th></tr></thead>
+      <tbody>
+        <tr><td>Eval-first: freeze wiki per batch, wiki-on/off ablation, strict contamination rigor</td><td>Product-first pivot (<a href="12_product-regrounding.html">12</a>); eval demoted</td><td>Drop the freeze/ablation ceremony from v0. <strong>Keep</strong> the cheap, honest part: external vs internal (novelty grounding).</td></tr>
+        <tr><td>Read path = a design</td><td><strong>Live</strong>: <code>WikiProvider.search</code> behind <code>HybridRetrieval</code>+<code>CachedRetrieval</code>; peers reach it via the <code>search</code> tool</td><td>No read-side work needed. Empty corpus → <code>[]</code>.</td></tr>
+        <tr><td><code>rc ingest</code> / <code>rc lint</code></td><td>CLI renamed <code>council</code>; both are <strong>stubs</strong>; no <code>librarian/</code> module</td><td>Write side is the real build. Fix stale <code>rc</code> in <code>knowledge/CLAUDE.md</code>.</td></tr>
+        <tr><td>Peers get a handout</td><td>v2 agentic: research briefs carry <code>refs</code>; deliberation produces findings</td><td>Two live ingest <strong>sources</strong>: discovered papers + the council's discussion.</td></tr>
+      </tbody>
+    </table>
+
+    <h2>2 · Grounded in Karpathy's LLM-Wiki <span class="tag">re-read 2026-06-07</span></h2>
+    <p>Re-read the pattern (<a href="https://gist.github.com/karpathy/442a6bf555914893e9891c11519de94f">gist</a>). Most of our design matches it; two points sharpen it.</p>
+    <table>
+      <thead><tr><th>Karpathy says</th><th>Our design</th></tr></thead>
+      <tbody>
+        <tr><td>3 layers: <code>raw/</code> (immutable) · <code>wiki/</code> (LLM-owned) · <code>index.md</code> catalog · <code>log.md</code> append-only · <code>CLAUDE.md</code> schema</td><td><span class="yes">✓</span> matches exactly</td></tr>
+        <tr><td>Ingest: add to raw → LLM reads + states takeaways → write summary page → update index → revise 10–15 entity/concept pages → append log</td><td><span class="yes">✓</span> this is the librarian pipeline (<a href="9_librarian-design.html">9</a>)</td></tr>
+        <tr><td>Read: index.md first → drill into pages → synthesize with citations</td><td><span class="yes">✓</span> WikiProvider ranks pages; cites back to source ids</td></tr>
+        <tr><td><strong>"Good answers can be filed back into the wiki as new pages."</strong></td><td><span class="yes">✓</span> <em>this is the blessing</em> for harvesting the council's discussion/findings into the wiki — not just external papers</td></tr>
+        <tr><td><strong>"Raw sources are immutable — the LLM reads but never modifies them; the LLM owns <code>wiki/</code> entirely."</strong></td><td><span class="part">~</span> refinement → see §4. System-generated notes do <strong>not</strong> belong in <code>raw/</code>.</td></tr>
+        <tr><td>Human owns sourcing &amp; direction; "stay involved — read the summaries, check the updates" <em>or</em> batch with less supervision</td><td>→ drives the merge gate: <strong>auto-merge, human reviews after</strong> (not a blocking gate)</td></tr>
+      </tbody>
+    </table>
+
+    <h2>3 · Locked decisions (this session)</h2>
+    <div class="callout good">
+      <div class="label">Decided 2026-06-07</div>
+      <ul style="margin:6px 0 0">
+        <li><strong>Scope:</strong> build the <strong>full librarian</strong> pipeline (route → cross-link → lint), per <a href="9_librarian-design.html">9</a>.</li>
+        <li><strong>Taxonomy:</strong> the <strong>full 9 folders</strong> (papers · tasks · motivations · concepts · approaches · methods · benchmarks · findings · gaps) + <code>index.md</code> / <code>log.md</code>.</li>
+        <li><strong>Librarian = the agent</strong> (Claude Sonnet, <code>wiki.yaml</code>) that ingests <em>and</em> maintains — not a file copy.</li>
+        <li><strong>Triggers:</strong> manual <code>council ingest &lt;source&gt;</code> <strong>+</strong> opt-in <strong>auto-harvest after a run</strong>. Always offline / post-run, never mid-debate.</li>
+        <li><strong>Merge/safety:</strong> <strong>auto-merge</strong> into <code>wiki/</code>, <strong>no auto-commit, no push</strong>; every change recorded in <code>log.md</code>; you review with <code>git diff</code> and commit on your own cadence (Karpathy "stay involved"). <span class="tag">confirm</span></li>
+      </ul>
+    </div>
+
+    <h2>4 · Contamination model — reconciled with Karpathy</h2>
+    <p>The original split put system notes in <code>raw/internal/</code>. But Karpathy is explicit: <em>the LLM never writes <code>raw/</code></em>. So we move the council's own synthesis into the LLM-owned <code>wiki/</code> layer, marked by frontmatter — keeping the novelty guard without breaking the pattern.</p>
+    <table>
+      <thead><tr><th>Content</th><th>Lands in</th><th>Counts as prior art?</th></tr></thead>
+      <tbody>
+        <tr><td>Real external sources (papers you add; papers the council discovered via <code>search</code>/<code>refs</code>)</td><td><code>raw/external/</code> → librarian synthesizes into <code>wiki/</code> pages with <code>origin: external</code></td><td><span class="yes">✓ yes</span></td></tr>
+        <tr><td>The council's own discussion / findings (filed back, per Karpathy)</td><td><code>wiki/</code> pages with <code>origin: internal</code> (no <code>raw/</code> entry)</td><td><span class="no">✗ never</span> — excluded from novelty checks</td></tr>
+      </tbody>
+    </table>
+    <div class="callout warn">
+      <div class="label">Why it matters</div>
+      Novelty must be judged against <em>external</em> literature only. The <code>origin:</code> frontmatter flag (not the folder) is the contamination guard; gap-finding reads everything, novelty-scoring filters to <code>origin: external</code>. <code>raw/internal/</code> is retired.
+    </div>
+
+    <h2>5 · The librarian — role &amp; pipeline</h2>
+    <p>One Sonnet agent, two entry points, one pipeline. Auto-harvest sorts sources by origin before the same ingest runs.</p>
+    <pre><code>SOURCES ──────────────────────────────────────────────┐
+  manual:  council ingest &lt;pdf | url | note&gt;            │
+  harvest (post-run, opt-in):                           │
+    brief.refs / discovered papers  → raw/external/     │  external
+    council discussion + findings   → (text)            │  internal
+                                                         ▼
+LIBRARIAN PIPELINE (Claude Sonnet)                  research_council/librarian/
+  1 load + sanitize source (treat text as DATA, no tool/exec)   ingest.py
+  2 read → state takeaways → write papers/&lt;anchor&gt;.md           ingest.py
+  3 ROUTE + synthesize into the 9 typed pages                   router.py + schema.py
+       approaches=built · methods=validated · concepts=idea · motivations=why
+  4 cross-link [[type:slug]] both ways; set origin: ext|int     router.py
+  5 update index.md (catalog) + append log.md (audit)           ingest.py
+  6 auto-merge into wiki/ (transactional write; NO git commit)  ingest.py
+  ── council lint ──────────────────────────────────────────── lint.py
+       contradictions · stale claims · orphans · gaps → report + log.md</code></pre>
+    <p>Guardrails (from <a href="9_librarian-design.html">9</a> §5, still apply): fixed cheap librarian model for consistency; source text is <strong>data</strong> (prompt-injection safe, no tool/exec from ingested content); dedup/idempotency; transactional writes; offline (no debate hot path).</p>
+
+    <h2>6 · Files to touch</h2>
+    <table>
+      <thead><tr><th>Path</th><th>Action</th></tr></thead>
+      <tbody>
+        <tr><td><code>research_council/librarian/{ingest,router,schema,lint}.py</code></td><td><strong>new</strong> — the pipeline above</td></tr>
+        <tr><td><code>research_council/cli.py</code> <code>ingest</code>/<code>lint</code></td><td>replace stubs → call the librarian; add post-run harvest prompt to <code>ideate</code></td></tr>
+        <tr><td><code>knowledge/CLAUDE.md</code></td><td>fix <code>rc</code>→<code>council</code>; add <code>origin: external|internal</code> convention; add the "file good answers back" read-side rule; retire <code>raw/internal/</code></td></tr>
+        <tr><td><code>research_council/config/wiki.yaml</code></td><td>keep (model=sonnet, gate=auto-merge, 9-folder taxonomy); note gate semantics = auto-merge + log audit</td></tr>
+        <tr><td><code>retrieval/wiki.py</code></td><td>read side done; later let novelty-scoring filter <code>origin: external</code></td></tr>
+      </tbody>
+    </table>
+
+    <h2>7 · Build order &amp; deferred</h2>
+    <ol>
+      <li><code>schema.py</code> — page model + frontmatter (<code>type, title, origin, papers, related, updated</code>) + render/parse.</li>
+      <li><code>router.py</code> — the Sonnet routing prompt (the 4-way disambiguation verbatim) → typed pages + cross-links.</li>
+      <li><code>ingest.py</code> — orchestrate load→anchor→route→index→log→merge; <code>council ingest</code>.</li>
+      <li>Harvest hook in <code>ideate</code> (opt-in, post-run): externals→<code>raw/external/</code>+ingest; findings→<code>wiki/</code> <code>origin:internal</code>.</li>
+      <li><code>lint.py</code> — contradictions/orphans/gaps; <code>council lint</code>.</li>
+    </ol>
+    <p><strong>Deferred:</strong> embeddings (BM25/keyword first at small scale) · watch-folder ingest · eval-freeze + wiki-on/off ablation (only if we return to the controlled study). <strong>Open for confirm:</strong> the merge/safety mechanism in §3 (auto-merge + manual commit) — say the word if you'd prefer a local snapshot/undo or a staging-and-apply step instead.</p>
+  </main>
+</body>
+</html>

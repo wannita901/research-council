@@ -33,6 +33,14 @@ class CachedRetrieval:
             raise AttributeError(item)
         return getattr(self._inner, item)
 
+    def cached_papers(self) -> dict[str, Paper]:
+        """Every distinct paper fetched this run, by id — the source pool for post-run harvest."""
+        out: dict[str, Paper] = {}
+        for papers in self._done.values():
+            for p in papers:
+                out[p.id] = p
+        return out
+
     @staticmethod
     def _key(query: str, k: int) -> tuple[str, int]:
         return (" ".join(query.split()).lower(), k)

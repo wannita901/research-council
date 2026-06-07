@@ -13,6 +13,7 @@ from pathlib import Path
 
 import typer
 
+from research_council import cli_ui as ui
 from research_council.agents.stub_peer import StubPeer
 from research_council.config import load_config, parse_seats, parse_tools
 from research_council.debate.orchestrator import run_debate
@@ -60,8 +61,7 @@ def _stream(ev: Event) -> None:
         extra = f"${t.get('cost_usd', 0):.4f} · {t.get('input_tokens', 0)+t.get('output_tokens', 0)} tok · {t.get('tool_calls', 0)} tool calls"
     elif ev.kind == "human_action":
         extra = f"{p.get('action')} {p.get('feedback', '')}".strip()
-    who = f" {ev.author_vendor}" if ev.author_vendor else ""
-    typer.echo(f"  r{ev.round} [{ev.phase}] {ev.kind}{who}  {extra}".rstrip())
+    ui.stream_line(ev.round, ev.phase, ev.kind, ev.author_vendor, extra)
 
 
 def _parse_model_choices(text: str) -> dict[str, list[str]]:
@@ -86,8 +86,7 @@ _EDIT_MODELS = "↩ edit models"
 
 def _select_models(cfg: RunConfig, vendors: list[str], choices_map: dict[str, list[str]]) -> None:
     """Linear model picker with ← back / ✗ exit. Aborts the program on exit/cancel."""
-    import questionary
-
+    ui.rule("① Models — one seat per vendor")
     i = 0
     while i < len(vendors):
         v = vendors[i]
@@ -96,9 +95,7 @@ def _select_models(cfg: RunConfig, vendors: list[str], choices_map: dict[str, li
         if cur not in opts:
             opts = [cur, *opts]
         nav = ([] if i == 0 else [_BACK]) + [_EXIT]
-        ans = questionary.select(
-            f"{v} model", choices=[*opts, questionary.Separator(), *nav], default=cur
-        ).ask()
+        ans = ui.ask_select(f"{v} model", choices=[*opts, ui.sep(), *nav], default=cur)
         if ans is None or ans == _EXIT:
             raise typer.Abort()
         if ans == _BACK:
@@ -112,10 +109,11 @@ def _select_tools(cfg: RunConfig) -> None:
     import questionary
     from research_council.retrieval.registry import real_tools
 
-    picks = questionary.checkbox(
-        "retrieval tools (↑↓ move · space toggle · enter continue)",
+    ui.rule("② Retrieval tools")
+    picks = ui.ask_checkbox(
+        "tools the council may use",
         choices=[questionary.Choice(t, checked=(t in cfg.tools)) for t in real_tools()],
-    ).ask()
+    )
     if picks is None:
         raise typer.Abort()
     if picks:
@@ -127,8 +125,6 @@ def _interactive_setup(cfg: RunConfig, live: bool) -> None:
 
     Cancel (Esc/Ctrl-C) or the ✗ exit option aborts the whole command.
     """
-    import questionary
-
     vendors = [*cfg.seats] if live else []
     choices_map = _model_choices() if live else {}
 
@@ -137,9 +133,10 @@ def _interactive_setup(cfg: RunConfig, live: bool) -> None:
     _select_tools(cfg)
 
     while True:  # confirm hub — revise either selection, confirm, or exit
-        summary = (f"models {cfg.seats} · " if live else "") + f"tools {cfg.tools}"
+        ui.setup_summary(cfg.seats, cfg.tools, live=live,
+                         facilitator=cfg.facilitator_model if live else None)
         actions = [_CONFIRM, _EDIT_TOOLS] + ([_EDIT_MODELS] if live else []) + [_EXIT]
-        ans = questionary.select(f"Ready?  {summary}", choices=actions).ask()
+        ans = ui.ask_select("ready?", choices=actions)
         if ans is None or ans == _EXIT:
             raise typer.Abort()
         if ans == _CONFIRM:
@@ -151,21 +148,45 @@ def _interactive_setup(cfg: RunConfig, live: bool) -> None:
     typer.echo("")
 
 
+_GATE = {
+    "iterate": "↻ iterate — another round, peers only",
+    "amend": "✎ amend — another round + my note",
+    "conclude": "✓ conclude — take the panel ranking",
+    "select": "★ select — I pick the winner",
+}
+
+
 async def _cli_reviewer(rec: Recommendation, candidates: list[Candidate], rnd: int) -> ReviewAction:
+    from research_council.debate.orchestrator_v2 import SAFETY_MAX_ROUNDS
+
     titles = {c.id: c.title for c in candidates}
-    typer.echo(f"\n— round {rnd} recommendation —")
-    for i, cid in enumerate(rec.ranked, 1):
-        typer.echo(f"  {i}. {rec.composites[cid]:.3f}  {cid}: {titles.get(cid, '')}")
-    resp = input("gate [i]terate / [a]mend / [c]onclude / [s]elect <id>: ").strip()
-    k = resp[:1].lower()
-    if k == "s":
-        parts = resp.split(maxsplit=1)
-        return ReviewAction(action="select", choice=parts[1] if len(parts) > 1 else None)
-    if k == "a":
-        return ReviewAction(action="amend", feedback=input("  amendment for next round: ").strip())
-    if k == "c":
-        return ReviewAction(action="conclude")
-    return ReviewAction(action="iterate")  # default / [i]
+    ui.console.print()
+    ui.ranking_table(rec.ranked, rec.composites, titles, rec.breakdown,
+                     title=f"round {rnd} · panel recommendation")
+
+    # only offer another round while one is actually allowed (below the safety ceiling)
+    can_iterate = rnd < SAFETY_MAX_ROUNDS
+    label_to_action = {v: k for k, v in _GATE.items()}
+    options = list(_GATE.values()) if can_iterate else [_GATE["conclude"], _GATE["select"]]
+    if not can_iterate:
+        ui.console.print(f"  [dim]round {rnd}/{SAFETY_MAX_ROUNDS} — safety ceiling reached; conclude or select.[/dim]")
+    choice = await ui.ask_select_async("your call", choices=options)
+    if choice is None:
+        raise typer.Abort()
+    action = label_to_action[choice]
+    if action == "amend":
+        note = (await ui.ask_text_async("amendment for next round")) or ""
+        return ReviewAction(action="amend", feedback=note.strip())
+    if action == "select":
+        pick = await ui.ask_select_async(
+            "winner", choices=[questionary_choice(cid, titles.get(cid, "")) for cid in rec.ranked])
+        return ReviewAction(action="select", choice=pick or (rec.ranked[0] if rec.ranked else None))
+    return ReviewAction(action=action)
+
+
+def questionary_choice(cid: str, title: str):
+    import questionary
+    return questionary.Choice(title=f"{cid} — {title}", value=cid)
 
 
 @app.command()
@@ -226,12 +247,16 @@ def ideate(
     stage: str = typer.Option("ideation", help="lifecycle stage (config name)"),
     seats: str = typer.Option(None, help="vendor=model,... override"),
     tools: str = typer.Option(None, help="comma list, e.g. wiki,openalex,arxiv"),
-    rounds: int = typer.Option(None, help="max ideation rounds"),
+    auto_iterate: int = typer.Option(1, "--auto-iterate", help="non-interactive: rounds to auto-iterate before concluding (capped at 8)"),
     live: bool = typer.Option(False, help="use real providers (needs keys + SDKs)"),
     stream: bool = typer.Option(True, help="print each phase event live"),
     interactive: bool = typer.Option(True, help="intake questions + review gate (TTY only)"),
 ):
-    """v2 agentic ideation: intake → research → propose → deliberate → judge → gate."""
+    """v2 agentic ideation: intake → research → propose → deliberate → judge → gate.
+
+    Interactively, rounds are human-driven (iterate/amend until you conclude/select, capped
+    at a safety ceiling). Non-interactively, --auto-iterate sets how many rounds run unattended.
+    """
     from research_council.debate.orchestrator_v2 import CODENAMES, run_ideation
 
     cfg = load_config(stage)
@@ -239,8 +264,6 @@ def ideate(
         cfg.seats = parse_seats(seats)
     if tools:
         cfg.tools = parse_tools(tools)
-    if rounds is not None:
-        cfg.max_rounds = rounds
 
     tty = sys.stdin.isatty()
     if interactive and tty:
@@ -268,19 +291,22 @@ def ideate(
                                   price_model=cfg.facilitator_model)
     if interactive and tty and facilitator is not None:
         async def answer_fn(q):  # noqa: E306
-            return input(f"  {q.question} ").strip()
+            ui.rule("③ Intake")
+            return ((await ui.ask_text_async(q.question)) or "").strip()
 
-    reviewer = _cli_reviewer if (interactive and tty) else None
+    interactive_run = interactive and tty
+    reviewer = _cli_reviewer if interactive_run else None
+    rounds_label = "human-driven (cap 8)" if interactive_run else f"auto-iterate {auto_iterate}"
     trace = TraceWriter.new(cfg.stage)
-    typer.echo(f"council  {[(cn, p.vendor) for cn, p in peers.items()]}")
-    fac = f"   facilitator={cfg.facilitator_model}" if facilitator is not None else ""
-    typer.echo(f"tools    {cfg.tools}   live={live}   rounds={cfg.max_rounds}{fac}\n")
+    ui.banner("Research Council · ideation",
+              f"{', '.join(f'{cn}={p.vendor}' for cn, p in peers.items())}  ·  "
+              f"{'live' if live else 'offline'}  ·  rounds: {rounds_label}")
 
     # record the full setup as the first trace event (seats, tools, caps, facilitator)
     setup_ev = trace.emit("intake", "setup", {
         "seats": cfg.seats, "tools": cfg.tools, "live": live, "anonymize": cfg.anonymize,
         "facilitator_model": cfg.facilitator_model if facilitator is not None else None,
-        "max_rounds": cfg.max_rounds, "max_turns": cfg.max_turns,
+        "auto_iterate": auto_iterate, "interactive": interactive_run, "max_turns": cfg.max_turns,
         "max_iters": cfg.max_iters, "max_tool_calls": cfg.max_tool_calls,
     })
     if stream:
@@ -289,37 +315,39 @@ def ideate(
     try:
         rec, candidates = asyncio.run(run_ideation(
             topic, peers, trace, facilitator=facilitator, answer_fn=answer_fn, reviewer=reviewer,
-            weights=cfg.weights, max_rounds=cfg.max_rounds, max_turns=cfg.max_turns,
+            weights=cfg.weights, auto_rounds=auto_iterate, max_turns=cfg.max_turns,
             anonymize_on=cfg.anonymize, emit=(_stream if stream else None),
         ))
     except KeyboardInterrupt:
         raise typer.Abort()
 
     titles = {c.id: c.title for c in candidates}
-    typer.echo("\nFinal ranking (anonymized panel vote):")
-    for i, cid in enumerate(rec.ranked, 1):
-        typer.echo(f"  {i}. {rec.composites[cid]:.3f}  {cid}: {titles.get(cid, '')}")
+    ui.console.print()
+    ui.ranking_table(rec.ranked, rec.composites, titles, rec.breakdown,
+                     title="Final ranking — anonymized panel vote (self-scores excluded)")
 
     # cost / usage summary (live only; offline stubs don't spend)
     metered = [(cn, p) for cn, p in peers.items() if getattr(getattr(p, "usage", None), "requests", 0)]
     if metered:
-        typer.echo("\nUsage (approx — see PRICES in providers/sdk.py):")
-        total = 0.0
+        rows, total = [], 0.0
         for cn, p in metered:
             u = p.usage
             total += u.cost_usd
-            typer.echo(f"  {cn:8} ${u.cost_usd:7.4f}  {u.input_tokens:>7}+{u.output_tokens:<6} tok  "
-                       f"{u.requests} reqs  {u.tool_calls} tool calls")
+            rows.append((cn, u.cost_usd, u.input_tokens, u.output_tokens, u.requests, u.tool_calls))
         if facilitator is not None and getattr(facilitator.usage, "requests", 0):
             fu = facilitator.usage
             total += fu.cost_usd
-            typer.echo(f"  {'facil.':8} ${fu.cost_usd:7.4f}  {fu.input_tokens:>7}+{fu.output_tokens:<6} tok  {fu.requests} reqs")
-        hits = getattr(retrieval, "hits", 0)
-        misses = getattr(retrieval, "misses", 0)
-        if hits or misses:
-            rate = 100 * hits / (hits + misses)
-            typer.echo(f"  retrieval cache: {hits} hits / {misses} misses ({rate:.0f}% saved)")
-        typer.echo(f"  {'TOTAL':8} ${total:7.4f}")
+            rows.append(("facilitator", fu.cost_usd, fu.input_tokens, fu.output_tokens, fu.requests, None))
+        hits, misses = getattr(retrieval, "hits", 0), getattr(retrieval, "misses", 0)
+        ui.console.print()
+        ui.usage_table(rows, cache=(hits, misses) if (hits or misses) else None, total=total)
+
+    # opt-in: compound the wiki from this run (live + interactive only)
+    if live and interactive and tty:
+        try:
+            _maybe_harvest(trace, retrieval)
+        except Exception as e:  # harvest must never sink a finished run
+            typer.echo(f"  (harvest skipped: {e})")
     typer.echo(f"\ntrace: {trace.path}")
 
 
@@ -366,14 +394,192 @@ def resume(run_id: str):  # pragma: no cover
     typer.echo(f"resume {run_id}: TODO (checkpoint replay) — increment.")
 
 
-@app.command()
-def ingest(path: str):  # pragma: no cover
-    typer.echo(f"ingest {path}: TODO (wiki write side / librarian) — see plan/9.")
+def _build_librarian():
+    """The Sonnet librarian configured from wiki.yaml. Returns (librarian, model_id)."""
+    import yaml
+
+    from research_council.agents.agent_peer import agent_model_name
+    from research_council.config import CONFIG_DIR
+    from research_council.librarian.router import Librarian
+
+    wcfg = yaml.safe_load((CONFIG_DIR / "wiki.yaml").read_text()) or {}
+    m = wcfg.get("model", "claude-sonnet-4-6")
+    return Librarian(agent_model_name("anthropic", m), price_model=m), m
+
+
+def _maybe_harvest(trace, retrieval) -> None:
+    """Opt-in post-run: compound the wiki from this run (council findings + cited papers)."""
+    import json
+
+    from research_council.librarian.harvest import harvest_run, preview
+    from research_council.librarian.ingest import Ingestor
+
+    events = [json.loads(ln) for ln in trace.path.read_text(encoding="utf-8").splitlines() if ln.strip()]
+    papers = retrieval.cached_papers() if hasattr(retrieval, "cached_papers") else {}
+    n_ext, has_internal, skipped = preview(events, papers)
+    n_calls = n_ext + (1 if has_internal else 0)
+    if not n_calls:
+        return
+    note = f"{n_ext} external paper(s)" + (" + 1 internal synthesis" if has_internal else "")
+    if skipped:
+        note += f" ({skipped} cited over cap, skipped)"
+    if not typer.confirm(f"\nHarvest into the LLM-wiki? {note} — ~{n_calls} librarian call(s)", default=False):
+        return
+    librarian, _ = _build_librarian()
+
+    def on_ingest(source, r):  # librarian trace → the run's trace.jsonl
+        trace.emit("harvest", "librarian_ingest",
+                   {"citekey": source.citekey, "origin": source.origin,
+                    "written": r.written, "merged": r.merged})
+
+    with ui.progress("harvesting") as prog:
+        task = prog.add_task("harvest", total=n_calls)
+
+        def on_step(done, tot, label):
+            prog.update(task, completed=done, total=tot, description=f"harvest · {label}")
+
+        rep = asyncio.run(harvest_run(events, papers, Ingestor(librarian),
+                                      on_step=on_step, on_ingest=on_ingest))
+    ui.console.print(f"  [green]harvested[/green] {len(rep.external)} external · "
+                     f"{len(rep.internal)} internal page(s) · cost ≈ ${librarian.usage.cost_usd:.4f}")
 
 
 @app.command()
-def lint():  # pragma: no cover
-    typer.echo("lint: TODO (wiki contradiction/orphan/gap audit) — see plan/9.")
+def ingest(
+    path: str = typer.Argument(..., help="local text/markdown file to ingest into the wiki"),
+    title: str = typer.Option(None, help="page title (default: first heading or filename)"),
+):
+    """Librarian write side: route a source into the LLM-wiki (needs an Anthropic key via mise)."""
+    from research_council.librarian.ingest import Ingestor
+    from research_council.librarian.schema import Source
+
+    src_path = Path(path)
+    if not src_path.exists():
+        typer.echo(f"no such file: {path}")
+        raise typer.Exit(1)
+    text = src_path.read_text(encoding="utf-8", errors="ignore")
+    if not title:
+        heads = [ln.lstrip("# ").strip() for ln in text.splitlines() if ln.lstrip().startswith("#")]
+        title = heads[0] if heads else src_path.stem.replace("-", " ")
+
+    librarian, model_id = _build_librarian()
+    source = Source(citekey=f"manual:{src_path.stem}", title=title, text=text, origin="external")
+
+    ui.console.print(f"ingesting [bold]{title}[/bold] via [cyan]{model_id}[/cyan] …")
+    with ui.spinner(f"librarian routing '{title}'"):
+        rep = asyncio.run(Ingestor(librarian).ingest(source))
+    for rp in rep.written:
+        ui.console.print(f"  [green]+[/green] {rp}")
+    for rp in rep.merged:
+        ui.console.print(f"  [yellow]~[/yellow] {rp} [dim](merged)[/dim]")
+    if rep.raw_saved:
+        ui.console.print(f"  [dim]raw → {rep.raw_saved}[/dim]")
+    u = librarian.usage
+    ui.console.print(f"  [dim]cost ≈ ${u.cost_usd:.4f} · {u.input_tokens}+{u.output_tokens} tok · "
+                     f"audit → knowledge/wiki/log.md[/dim]")
+
+
+@app.command()
+def lint(
+    semantic: bool = typer.Option(False, help="also run an LLM contradiction/gap audit (needs key)"),
+):
+    """Audit the LLM-wiki: broken links, orphans, index drift, empty pages (+ optional LLM audit)."""
+    import datetime
+
+    from research_council.librarian.lint import append_lint_log, lint_structure
+
+    rep = lint_structure()
+    typer.echo(f"wiki: {rep.pages} pages · {len(rep.issues)} issue(s)")
+    for kind, items in sorted(rep.by_kind().items()):
+        typer.echo(f"  {kind} ({len(items)}):")
+        for i in items[:20]:
+            typer.echo(f"    {i.page}" + (f" — {i.detail}" if i.detail else ""))
+    if not rep.issues:
+        typer.echo("  clean ✓")
+
+    if semantic:
+        from research_council.librarian.lint import lint_semantic
+        librarian, model_id = _build_librarian()
+        typer.echo(f"\nsemantic audit via {model_id} …")
+        audit = asyncio.run(lint_semantic(f"anthropic:{model_id}"))
+        for label, items in (("contradictions", audit.contradictions), ("gaps", audit.gaps)):
+            typer.echo(f"  {label} ({len(items)}):")
+            for s in items:
+                typer.echo(f"    - {s}")
+
+    append_lint_log(None, rep, datetime.date.today().isoformat())
+
+
+wiki_app = typer.Typer(help="Manage the LLM-wiki library (human-triggered: archive / reset / restore).")
+app.add_typer(wiki_app, name="wiki")
+
+
+def _stamp() -> str:
+    import datetime
+    return datetime.datetime.now().strftime("%Y%m%dT%H%M%S")
+
+
+@wiki_app.command("list")
+def wiki_list():
+    """List wiki archives (newest first)."""
+    from research_council.librarian.archive import list_archives
+
+    arcs = list_archives()
+    if not arcs:
+        ui.info("no archives yet.")
+        return
+    ui.rule(f"{len(arcs)} archive(s)")
+    for a in arcs:
+        ui.console.print(f"  [cyan]{a}[/cyan]")
+
+
+@wiki_app.command("archive")
+def wiki_archive():
+    """Snapshot the current library to .archive/<timestamp>/ (keeps the working copy)."""
+    from research_council.librarian.archive import archive_library
+
+    stamp = _stamp()
+    archive_library(None, stamp)
+    ui.console.print(f"archived → [cyan].archive/{stamp}[/cyan]")
+
+
+@wiki_app.command("reset")
+def wiki_reset(hard: bool = typer.Option(False, "--hard", help="wipe WITHOUT archiving first")):
+    """Clear the wiki back to empty. Archives first unless --hard."""
+    from research_council.librarian.archive import reset_library
+
+    token = "wipe" if hard else "reset"
+    note = "[red bold]HARD wipe — no archive kept[/red bold]" if hard else "archives first, then clears"
+    ui.console.print(f"reset: {note}")
+    if (ui.ask_text(f"type '{token}' to confirm") or "").strip() != token:
+        ui.info("aborted.")
+        raise typer.Abort()
+    archived = reset_library(None, _stamp(), hard=hard)
+    ui.console.print("wiki cleared." + (f" backup → [cyan].archive/{archived}[/cyan]" if archived else ""))
+
+
+@wiki_app.command("restore")
+def wiki_restore(stamp: str = typer.Argument(None, help="archive timestamp (omit to pick interactively)")):
+    """Restore a previous archive over the current wiki (current is backed up first)."""
+    from research_council.librarian.archive import list_archives, restore_library
+
+    arcs = list_archives()
+    if not arcs:
+        ui.info("no archives to restore.")
+        raise typer.Exit(1)
+    if not stamp:
+        stamp = ui.ask_select("restore which archive?", choices=arcs)
+        if not stamp:
+            raise typer.Abort()
+    if stamp not in arcs:
+        ui.info(f"no such archive: {stamp}")
+        raise typer.Exit(1)
+    if (ui.ask_text(f"type 'restore' to overwrite the current wiki with {stamp}") or "").strip() != "restore":
+        ui.info("aborted.")
+        raise typer.Abort()
+    backup = f"pre-restore-{_stamp()}"
+    restore_library(None, stamp, backup_stamp=backup)
+    ui.console.print(f"restored [cyan]{stamp}[/cyan] · current backed up → [cyan].archive/{backup}[/cyan]")
 
 
 if __name__ == "__main__":

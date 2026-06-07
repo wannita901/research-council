@@ -12,3 +12,11 @@ mise.local.toml
 
 # Playwright MCP scratch artifacts
 .playwright-mcp/
+
+# Wiki library archives (local snapshots)
+knowledge/.archive/
+
+# LLM-wiki generated corpus (keep CLAUDE.md + scaffold; ignore generated pages/papers)
+knowledge/wiki/*/
+knowledge/raw/external/*
+!knowledge/raw/external/.gitkeep
