@@ -196,6 +196,16 @@ mise run live   -- --topic "…"                              # real providers (
       <li><strong>Stages B &amp; C are stubs</strong> (Tier 3) — they carry the handoff and report what they'd do ("run plan in Docker" / "scaffold-paper + draft"), so the lifecycle is fully walkable now.</li>
     </ul>
     <p>Next: fill in Stage B (experimentation engine + Docker-exec verifier) · Stage C (writing + scaffold-paper + venue rubric #10) · <code>/projects</code> backend endpoints · then the web UI (<a href="17_ui-design-samples.html">17</a>).</p>
+
+    <h3>Stage B · experimentation engine + Docker verifier <span class="tag">2026-06-08 · 93 tests green</span></h3>
+    <p>The deferred "run-it" verifier, v0. Turns the selected idea+plan into a runnable check:</p>
+    <ul>
+      <li><strong>Sandbox</strong> (<code>verify/sandbox.py</code>) — <code>DockerSandbox</code> (isolated: <code>--network none</code>, memory/cpu/pids caps, hard <code>timeout</code>) is the default; <code>LocalSandbox</code> (bare subprocess) is <strong>opt-in only</strong> since it runs code unsandboxed. <code>build_sandbox</code> refuses to silently fall back to local. <code>SandboxResult{ok,exit_code,stdout,stderr,timed_out,backend}</code>.</li>
+      <li><strong>Coder</strong> (<code>agents/coder.py</code> + <code>prompts/experiment/coder.md</code>) — drafts ONE stdlib-only, network-free, toy-scale script that ends with <code>METRIC name=value</code>.</li>
+      <li><strong>Loop</strong> (<code>debate/experimentation.py</code>) — draft → run → <em>feasible = ran &amp; emitted a metric</em> → on failure feed the error back and retry (bounded). Returns <code>ExperimentResult{ran,feasible,metric,attempts,code,log,backend}</code>.</li>
+      <li><strong>Wired</strong> — <code>council project approve --live</code> runs real Stage B when advancing into experimentation (Docker default; <code>--allow-local-sandbox</code> to run unsandboxed; stub fallback if no sandbox). The result flows into the handoff toward Stage C.</li>
+    </ul>
+    <p>Tested offline (LocalSandbox + a fake coder running controlled scripts): captures/timeout/failure, feasible-first-try, retry-then-succeed, ran-but-no-metric, refuse-unsafe-by-default. Next: Stage C (writing + scaffold-paper + venue rubric) · multi-agent code-review in B · <code>/projects</code> endpoints.</p>
   </main>
 </body>
 </html>

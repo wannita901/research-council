@@ -700,8 +700,53 @@ def project_list():
         ui.console.print(f"  [cyan]{pid}[/cyan] · stage {p.current} · {p.topic[:54]}")
 
 
+def _run_stage_b(handoff, allow_local: bool):
+    """Real Stage B: implement → run in a sandbox → verify. Falls back to the stub if no
+    isolated sandbox is available. Returns (summary, artifacts)."""
+    from research_council.agents.agent_peer import agent_model_name
+    from research_council.agents.coder import Coder
+    from research_council.debate.experimentation import run_experimentation
+    from research_council.lifecycle import run_stage_stub
+    from research_council.verify.sandbox import build_sandbox
+
+    sandbox, warn = build_sandbox("docker", allow_local=allow_local)
+    if sandbox is None:
+        ui.console.print(f"[yellow]{warn} — falling back to stub.[/yellow]")
+        return run_stage_stub("experimentation", handoff)
+    if warn:
+        ui.console.print(f"[yellow]{warn}[/yellow]")
+
+    cfg = load_config("ideation")
+    cv = "anthropic" if "anthropic" in cfg.seats else next(iter(cfg.seats))
+    coder = Coder(agent_model_name(cv, cfg.seats[cv]), price_model=cfg.seats[cv])
+
+    def _emit(ph, k, pl):
+        if k == "code_drafted":
+            extra = f"attempt {pl['attempt']} · {pl['chars']} chars"
+        elif k == "sandbox_run":
+            extra = f"attempt {pl['attempt']} · ran={pl['ok']} exit={pl['exit_code']} [{pl['backend']}]"
+        else:
+            extra = ""
+        ui.stream_line(0, ph, k, None, extra)
+
+    ui.console.print(f"  [dim]Stage B · experimenting in the {sandbox.name} sandbox…[/dim]")
+    res = asyncio.run(run_experimentation(handoff.idea, handoff.experiment_plan, coder, sandbox, emit=_emit))
+    verdict = "[green]✓ feasible[/green]" if res.feasible else "[yellow]✗ not verified[/yellow]"
+    ui.console.print(f"  {verdict} · metric: {res.metric or '—'} · {res.attempts} attempt(s) · "
+                     f"librarian ${coder.usage.cost_usd:.4f}")
+    summary = (f"[{res.backend}] {'feasible' if res.feasible else 'not verified'} · "
+               f"metric {res.metric or '—'} · {res.attempts} attempt(s)")
+    artifacts = {"idea": handoff.idea, "experiment_plan": handoff.experiment_plan, **res.model_dump()}
+    return summary, artifacts
+
+
 @project_app.command("approve")
-def project_approve(pid: str = typer.Argument(..., help="project id")):
+def project_approve(
+    pid: str = typer.Argument(..., help="project id"),
+    live: bool = typer.Option(False, help="run the real Stage B engine (needs keys + a sandbox)"),
+    allow_local_sandbox: bool = typer.Option(False, "--allow-local-sandbox",
+                                             help="if Docker is absent, run generated code UNISOLATED (unsafe)"),
+):
     """Approve the current stage and advance (running the next stage's engine)."""
     from research_council.lifecycle import (
         ProjectStore,
@@ -720,9 +765,12 @@ def project_approve(pid: str = typer.Argument(..., help="project id")):
         ui.info(f"stage '{cur}' is {p.stages[cur].status} — nothing to approve.")
         raise typer.Exit(1)
     p, handoff = approve_and_advance(p)
-    if handoff is not None:  # advanced to a next stage → run it (B/C are stubs for now)
+    if handoff is not None:  # advanced to a next stage → run it
         nxt = p.current
-        summary, artifacts = run_stage_stub(nxt, handoff)
+        if nxt == "experimentation" and live:
+            summary, artifacts = _run_stage_b(handoff, allow_local_sandbox)  # real Stage B
+        else:
+            summary, artifacts = run_stage_stub(nxt, handoff)               # B (offline) / C still stub
         record_result(p, nxt, summary=summary, artifacts=artifacts)
         ui.console.print(f"[green]approved {cur}[/green] → ▶ [cyan]{nxt}[/cyan]\n  {summary}")
         ui.console.print(f"  next: [cyan]council project approve {pid}[/cyan]")

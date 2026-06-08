@@ -83,7 +83,7 @@ verify_claim(claim, kind) -> { grounded: bool, confidence: 0..1, evidence: [refs
     <table>
       <thead><tr><th>#</th><th class="item">Decision</th><th>Note</th><th>Status</th></tr></thead>
       <tbody>
-        <tr><td>11</td><td class="item">Experimentation internals</td><td>collaboration model (shared-artifact+reviewers vs roles vs task-claiming) · experiment repo layout · Docker runner details · fallback handling</td><td><span class="st-defer">deferred</span></td></tr>
+        <tr><td>11</td><td class="item">Experimentation internals</td><td><strong>v0 built</strong>: Coder agent drafts a minimal script → <code>verify/sandbox.py</code> runs it (DockerSandbox, <code>--network none</code>, mem/cpu/pids caps, timeout; LocalSandbox opt-in) → feasibility = ran + printed <code>METRIC</code> → bounded fix-and-retry. Wired into <code>council project approve --live</code>. TODO: multi-agent collaboration/code-review, richer artifacts/data prep.</td><td><span class="st-now">v0 built</span></td></tr>
         <tr><td>12</td><td class="item">Writing internals</td><td>section assignment · figure pipeline (Stage-B results → plots) · citation/reference mgmt · rubric application</td><td><span class="st-defer">deferred</span></td></tr>
       </tbody>
     </table>

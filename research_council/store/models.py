@@ -215,6 +215,24 @@ class Project(BaseModel):
     log: list[str] = Field(default_factory=list)
 
 
+# --- Stage B · experimentation (#11) -----------------------------------------
+class ExperimentDraft(BaseModel):
+    """Coder agent output — a single self-contained script + notes."""
+
+    code: str = ""
+    notes: str = ""
+
+
+class ExperimentResult(BaseModel):
+    ran: bool = False        # the script executed without error (exit 0, no timeout)
+    feasible: bool = False   # ran AND emitted a METRIC line — the "run-it" verification
+    metric: str | None = None
+    attempts: int = 0
+    code: str = ""
+    log: str = ""
+    backend: str = ""        # docker | local
+
+
 # --- run config & trace envelope ------------------------------------------
 DEFAULT_WEIGHTS = {"novelty": 0.35, "soundness": 0.25, "feasibility": 0.25, "clarity": 0.15}
 
