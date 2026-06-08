@@ -581,5 +581,155 @@ def wiki_restore(stamp: str = typer.Argument(None, help="archive timestamp (omit
     ui.console.print(f"restored [cyan]{stamp}[/cyan] · current backed up → [cyan].archive/{backup}[/cyan]")
 
 
+project_app = typer.Typer(help="Macro lifecycle: ideation → experimentation → writing (human-gated).")
+app.add_typer(project_app, name="project")
+
+_STAGE_ICON = {"approved": "[green]✓ approved[/green]", "awaiting_approval": "[yellow]◐ awaiting approval[/yellow]",
+               "active": "[blue]▶ active[/blue]", "pending": "[dim]○ pending[/dim]"}
+
+
+def _proj_slug(s: str) -> str:
+    return re.sub(r"[^a-z0-9]+", "-", s.lower()).strip("-")[:28] or "project"
+
+
+@project_app.command("new")
+def project_new(
+    topic: str = typer.Option(..., "--topic", "-t", help="research question"),
+    live: bool = typer.Option(False, help="use real providers (needs keys)"),
+    interactive: bool = typer.Option(True, help="review gate during ideation (TTY only)"),
+    auto_iterate: int = typer.Option(1, "--auto-iterate", help="non-interactive ideation rounds"),
+    seats: str = typer.Option(None, help="vendor=model,... override"),
+    tools: str = typer.Option(None, help="retrieval tools override"),
+):
+    """Start a project: run Stage A (ideation), then await your approval to advance to B."""
+    import datetime
+
+    from research_council.debate.orchestrator_v2 import CODENAMES, run_ideation
+    from research_council.lifecycle import ProjectStore, new_project, record_result
+
+    cfg = load_config("ideation")
+    if seats:
+        cfg.seats = parse_seats(seats)
+    if tools:
+        cfg.tools = parse_tools(tools)
+
+    stamp = datetime.datetime.now().strftime("%Y%m%d-%H%M%S")
+    pid = f"{_proj_slug(topic)}-{stamp[-6:]}"
+    store = ProjectStore()
+    proj = new_project(topic, pid, created=stamp)
+    store.save(proj)
+    ui.banner(f"Project · {pid}", f"{topic}  ·  stage ① ideation  ·  {'live' if live else 'offline'}")
+
+    retrieval = build_retrieval(cfg.tools) if live else build_stub_retrieval(cfg.tools)
+    peers: dict = {}
+    for vendor, model in cfg.seats.items():
+        cn = CODENAMES.get(vendor, vendor)
+        if live:
+            from research_council.agents.agent_peer import AgentPeer, agent_model_name
+            peers[cn] = AgentPeer(vendor, cn, agent_model_name(vendor, model), retrieval,
+                                  max_iters=cfg.max_iters, max_tool_calls=cfg.max_tool_calls, price_model=model)
+        else:
+            from research_council.agents.stub_agent_peer import StubV2Peer
+            peers[cn] = StubV2Peer(vendor, cn, retrieval)
+
+    reviewer = _cli_reviewer if (interactive and sys.stdin.isatty()) else None
+    trace = TraceWriter.new("ideation")
+    try:
+        rec, candidates = asyncio.run(run_ideation(
+            topic, peers, trace, reviewer=reviewer, auto_rounds=auto_iterate,
+            max_turns=cfg.max_turns, anonymize_on=cfg.anonymize, emit=_stream))
+    except KeyboardInterrupt:
+        raise typer.Abort()
+
+    by = {c.id: c for c in candidates}
+    winner = by.get(rec.ranked[0]) if rec.ranked else None
+    if winner is None:
+        ui.console.print("[red]ideation produced no candidate[/red]")
+        raise typer.Exit(1)
+    record_result(proj, "ideation", run_id=trace.run_id, summary=winner.title,
+                  artifacts={"idea": winner.model_dump(), "experiment_plan": winner.experiment_plan})
+    store.save(proj)
+    ui.console.print(f"\n[green]Stage A complete[/green] · selected: [bold]{winner.title}[/bold]")
+    ui.console.print(f"  approve & advance → [cyan]council project approve {pid}[/cyan]   ·   "
+                     f"status → council project status {pid}")
+
+
+@project_app.command("status")
+def project_status(pid: str = typer.Argument(..., help="project id")):
+    """Show a project's stages and where it is."""
+    from rich import box
+    from rich.table import Table
+
+    from research_council.lifecycle import ProjectStore, is_complete
+    from research_council.store.models import STAGES
+
+    store = ProjectStore()
+    if not store.exists(pid):
+        ui.info(f"no project {pid!r}")
+        raise typer.Exit(1)
+    p = store.load(pid)
+    ui.banner(f"Project · {p.id}", p.topic)
+    t = Table(box=box.SIMPLE_HEAVY)
+    t.add_column("#", style="dim")
+    t.add_column("stage", style="cyan")
+    t.add_column("status")
+    t.add_column("outcome")
+    for i, n in enumerate(STAGES):
+        s = p.stages[n]
+        t.add_row("①②③"[i], n, _STAGE_ICON.get(s.status, s.status), s.summary[:64])
+    ui.console.print(t)
+    if is_complete(p):
+        ui.console.print("[green]✓ project complete[/green]")
+    elif p.stages[p.current].status == "awaiting_approval":
+        ui.console.print(f"next: [cyan]council project approve {pid}[/cyan]")
+
+
+@project_app.command("list")
+def project_list():
+    """List all projects."""
+    from research_council.lifecycle import ProjectStore
+
+    store = ProjectStore()
+    ids = store.list()
+    if not ids:
+        ui.info("no projects yet.")
+        return
+    ui.rule(f"{len(ids)} project(s)")
+    for pid in ids:
+        p = store.load(pid)
+        ui.console.print(f"  [cyan]{pid}[/cyan] · stage {p.current} · {p.topic[:54]}")
+
+
+@project_app.command("approve")
+def project_approve(pid: str = typer.Argument(..., help="project id")):
+    """Approve the current stage and advance (running the next stage's engine)."""
+    from research_council.lifecycle import (
+        ProjectStore,
+        approve_and_advance,
+        record_result,
+        run_stage_stub,
+    )
+
+    store = ProjectStore()
+    if not store.exists(pid):
+        ui.info(f"no project {pid!r}")
+        raise typer.Exit(1)
+    p = store.load(pid)
+    cur = p.current
+    if p.stages[cur].status != "awaiting_approval":
+        ui.info(f"stage '{cur}' is {p.stages[cur].status} — nothing to approve.")
+        raise typer.Exit(1)
+    p, handoff = approve_and_advance(p)
+    if handoff is not None:  # advanced to a next stage → run it (B/C are stubs for now)
+        nxt = p.current
+        summary, artifacts = run_stage_stub(nxt, handoff)
+        record_result(p, nxt, summary=summary, artifacts=artifacts)
+        ui.console.print(f"[green]approved {cur}[/green] → ▶ [cyan]{nxt}[/cyan]\n  {summary}")
+        ui.console.print(f"  next: [cyan]council project approve {pid}[/cyan]")
+    else:
+        ui.console.print(f"[green]approved {cur}[/green] · [bold]project complete 🎉[/bold]")
+    store.save(p)
+
+
 if __name__ == "__main__":
     app()

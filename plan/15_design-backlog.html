@@ -73,9 +73,9 @@ verify_claim(claim, kind) -> { grounded: bool, confidence: 0..1, evidence: [refs
     <table>
       <thead><tr><th>#</th><th class="item">Decision</th><th>Options / note</th><th>Status</th></tr></thead>
       <tbody>
-        <tr><td>8</td><td class="item">Stage state machine + gates</td><td>how A→B→C state + human approval gate are modeled in CLI + backend endpoints</td><td><span class="st-soon">open</span></td></tr>
-        <tr><td>9</td><td class="item">Cross-stage memory</td><td>which artifacts carry forward (full vs summary) A→B→C</td><td><span class="st-soon">open</span></td></tr>
-        <tr><td>10</td><td class="item">Venue rubric source</td><td>curated per-venue checklists vs council-derived</td><td><span class="st-soon">open</span></td></tr>
+        <tr><td>8</td><td class="item">Stage state machine + gates</td><td><code>Project{topic,current,stages,constraints}</code> · 3 stages ideation→experimentation→writing · human approval gate advances · JSON per project under <code>projects/&lt;id&gt;/</code> · CLI <code>council project new/status/list/approve</code> (backend endpoints TODO)</td><td><span class="st-done">✅ built</span></td></tr>
+        <tr><td>9</td><td class="item">Cross-stage memory</td><td><code>StageHandoff</code> carries the selected idea + experiment_plan + constraints forward (chained A→B→C); wiki <code>origin:internal</code> = shared memory</td><td><span class="st-done">✅ built</span></td></tr>
+        <tr><td>10</td><td class="item">Venue rubric source</td><td>curated <code>config/venues/*.yaml</code> checklists, council-extendable (default locked; wired when Stage C is built)</td><td><span class="st-now">locked · pending Stage C</span></td></tr>
       </tbody>
     </table>
 

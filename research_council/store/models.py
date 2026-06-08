@@ -181,6 +181,40 @@ class ReviewAction(BaseModel):
     feedback: str = ""  # injected into the next round as a human critique (amend)
 
 
+# --- macro lifecycle (plan/13; Tier 2 #8 state machine, #9 cross-stage memory) ---
+STAGES = ["ideation", "experimentation", "writing"]
+
+
+class StageState(BaseModel):
+    name: str
+    status: str = "pending"  # pending | active | awaiting_approval | approved
+    run_id: str | None = None
+    summary: str = ""                               # short human-readable outcome
+    artifacts: dict = Field(default_factory=dict)   # stage outputs (selected idea, results, …)
+
+
+class StageHandoff(BaseModel):
+    """What carries from one stage to the next (the cross-stage memory)."""
+
+    from_stage: str
+    to_stage: str
+    idea: dict = Field(default_factory=dict)         # the selected candidate
+    experiment_plan: str = ""
+    constraints: dict[str, str] = Field(default_factory=dict)
+    notes: str = ""
+    artifacts: dict = Field(default_factory=dict)    # prior stage's raw outputs
+
+
+class Project(BaseModel):
+    id: str
+    topic: str
+    created: str = ""
+    current: str = "ideation"
+    constraints: dict[str, str] = Field(default_factory=dict)
+    stages: dict[str, StageState] = Field(default_factory=dict)
+    log: list[str] = Field(default_factory=list)
+
+
 # --- run config & trace envelope ------------------------------------------
 DEFAULT_WEIGHTS = {"novelty": 0.35, "soundness": 0.25, "feasibility": 0.25, "clarity": 0.15}
 

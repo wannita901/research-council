@@ -186,7 +186,16 @@ mise run live   -- --topic "…"                              # real providers (
       <li><strong>Harvest moved to each round's end</strong> (was once, post-run). <code>run_ideation</code> gained an <code>on_round_end(rnd)</code> hook (fires after judging, before the gate); <code>council ideate --harvest</code> (live) wires a per-round harvester that ingests that round's cited papers + a synthesis of its findings into the wiki — so the <strong>next round's research can read what the council just learned</strong> (the wiki compounds within a run). Emits <code>librarian_ingest</code> trace events + a per-round wiki/cost line. Replaced the old post-run confirm prompt.</li>
       <li><strong>"Cathy always wins" — checked the data, it's legitimate.</strong> In a post-fix 2-round trace, all three judges independently rank her proposal top, and with self-scores excluded the lead comes from <em>gpt + gemini</em> (anthropic rated it modestly) — cross-vendor consensus, not self-preference. Contributing: Claude writes more complete proposals + a known LLM-judge bias toward structured/verbose text (clarity scores uniformly high). Optional future mitigations (anchored rubric · "score substance not length") noted for if/when the eval matters.</li>
     </ul>
-    <p>Next (user picked polish-first, then): Tier 2 = the macro lifecycle (stage state machine + gates → Stage B experimentation + Docker verifier → Stage C writing) · then the web UI (designs explored in <a href="17_ui-design-samples.html">17</a> + clickable prototypes).</p>
+    <h3>Tier 2 · macro lifecycle — stage state machine <span class="tag">2026-06-08 · 85 tests green</span></h3>
+    <p>The A→B→C driver (Tier 2 #8/#9, locked + built). A <strong>Project</strong> moves through three human-gated stages (ideation → experimentation → writing); each stage runs, then waits for your approval to advance.</p>
+    <ul>
+      <li><strong>State machine</strong> (<code>research_council/lifecycle.py</code>, pure + offline-tested) — <code>new_project</code> · <code>record_result</code> (stage → <em>awaiting_approval</em>) · <code>approve_and_advance</code> (human gate → next stage <em>active</em>) · <code>is_complete</code>. Contracts <code>Project</code>/<code>StageState</code>/<code>StageHandoff</code> in <code>store/models.py</code>.</li>
+      <li><strong>Cross-stage memory</strong> — a <code>StageHandoff</code> carries the selected idea + experiment_plan + constraints forward, chained A→B→C; the wiki (<code>origin:internal</code>) is shared memory.</li>
+      <li><strong>Persistence</strong> — <code>ProjectStore</code>: one JSON per project under <code>projects/&lt;id&gt;/</code> (gitignored).</li>
+      <li><strong>CLI</strong> — <code>council project new --topic …</code> runs Stage A (ideation) for real and records the winner; <code>status</code> shows the stage table; <code>approve</code> advances; <code>list</code>. Verified end-to-end offline: new → approve → approve → approve → <em>project complete</em>.</li>
+      <li><strong>Stages B &amp; C are stubs</strong> (Tier 3) — they carry the handoff and report what they'd do ("run plan in Docker" / "scaffold-paper + draft"), so the lifecycle is fully walkable now.</li>
+    </ul>
+    <p>Next: fill in Stage B (experimentation engine + Docker-exec verifier) · Stage C (writing + scaffold-paper + venue rubric #10) · <code>/projects</code> backend endpoints · then the web UI (<a href="17_ui-design-samples.html">17</a>).</p>
   </main>
 </body>
 </html>

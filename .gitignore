@@ -25,3 +25,6 @@ knowledge/raw/external/*
 .agents/
 .claude/
 skills-lock.json
+
+# Per-project lifecycle state + traces
+projects/
