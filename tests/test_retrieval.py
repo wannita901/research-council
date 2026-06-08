@@ -84,3 +84,30 @@ async def test_wiki_provider_empty_seed_is_network_free():
 
     # Point at a non-existent dir → returns [] without touching the network.
     assert await WikiProvider(root="/nonexistent").search("anything") == []
+
+
+async def test_wiki_origin_tagging_and_external_only(tmp_path):
+    from research_council.librarian.schema import WikiPage, render_page
+    from research_council.retrieval.wiki import WikiProvider
+
+    w = tmp_path / "wiki"
+    (w / "findings").mkdir(parents=True)
+    (w / "findings" / "ext.md").write_text(render_page(WikiPage(
+        type="findings", title="External finding on flaky tests", origin="external", body="flaky tests result")))
+    (w / "findings" / "int.md").write_text(render_page(WikiPage(
+        type="findings", title="Council note on flaky tests", origin="internal", body="flaky tests synthesis")))
+
+    wp = WikiProvider(root=tmp_path)
+    all_hits = await wp.search("flaky tests")
+    assert {p.origin for p in all_hits} == {"external", "internal"}  # gap-finding sees both
+    ext_hits = await wp.search("flaky tests", external_only=True)
+    assert all_hits and ext_hits and all(p.origin == "external" for p in ext_hits)  # strict prior-art view
+
+    # the search tool flags internal results so a peer won't treat them as prior art
+    from research_council.tools.search import SearchTool
+
+    class _R:
+        async def search(self, q, k=8):
+            return all_hits
+    out = await SearchTool(_R()).run("flaky tests")
+    assert "council-internal" in out.content

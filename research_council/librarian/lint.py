@@ -107,17 +107,12 @@ class AuditResult(BaseModel):
     gaps: list[str] = Field(default_factory=list)
 
 
-AUDIT_SYS = (
-    "You audit an AI4SE knowledge wiki. Given findings/gaps pages, list only REAL issues: "
-    "(a) contradictions — claims that conflict across pages (name the pages); (b) gaps — open "
-    "problems implied but not captured. Be concise; if none, return empty lists."
-)
-
-
 async def lint_semantic(model, knowledge_root: Path | str | None = None, *,
                         types=("findings", "gaps", "concepts"), max_chars: int = 12000) -> AuditResult:
     """One bounded LLM pass over the synthesis pages. `model` = a PydanticAI model/string."""
     from pydantic_ai import Agent
+
+    from research_council import prompts
 
     root = Path(knowledge_root or os.getenv("RC_KNOWLEDGE_DIR", "knowledge"))
     chunks: list[str] = []
@@ -127,5 +122,5 @@ async def lint_semantic(model, knowledge_root: Path | str | None = None, *,
     corpus = "\n\n".join(chunks)[:max_chars]
     if not corpus.strip():
         return AuditResult()
-    agent: Agent = Agent(model, output_type=AuditResult, system_prompt=AUDIT_SYS)
+    agent: Agent = Agent(model, output_type=AuditResult, system_prompt=prompts.load("librarian/audit"))
     return (await agent.run(f"Wiki pages:\n{corpus}")).output

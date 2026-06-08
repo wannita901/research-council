@@ -13,6 +13,7 @@ class Paper(BaseModel):
     year: int | None = None
     url: str | None = None
     source: str = "unknown"  # provenance: wiki | openalex | arxiv | ...
+    origin: str | None = None  # wiki only: "external" (prior art) | "internal" (council synthesis)
 
 
 # --- per-stage debate records ---------------------------------------------

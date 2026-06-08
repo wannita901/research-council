@@ -95,6 +95,18 @@ async def test_auto_iterate_drives_autonomous_rounds(tmp_path: Path):
     assert trace1.path.read_text().count('"kind":"research_brief"') == 3  # single round
 
 
+async def test_on_round_end_fires_each_round(tmp_path: Path):
+    # the per-round hook (e.g. wiki harvest) runs once per round, after judging
+    calls = []
+
+    async def hook(rnd):
+        calls.append(rnd)
+
+    trace = TraceWriter.new("ideation", runs_dir=tmp_path)
+    await run_ideation("t", _peers(), trace, auto_rounds=2, on_round_end=hook, max_turns=1)
+    assert calls == [1, 2]
+
+
 async def test_safety_ceiling_caps_runaway_iterate(tmp_path: Path):
     # a reviewer that always iterates is stopped at the hard ceiling, emitting a capped event
     async def reviewer(rec, candidates, rnd):

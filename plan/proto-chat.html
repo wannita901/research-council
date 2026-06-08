@@ -1,0 +1,163 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>research-council · chat prototype (#20)</title>
+<style>
+  :root{--bg:#313338;--bg2:#2b2d31;--bg3:#1e1f22;--ink:#dbdee1;--mut:#949ba4;--blurple:#5865f2;--gold:#f6c453}
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{height:100vh;overflow:hidden;background:var(--bg);color:var(--ink);
+    font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;font-size:13.5px}
+  .app{display:grid;grid-template-columns:178px 1fr 168px;height:100vh}
+  .rail{background:var(--bg2);padding:12px 10px;display:flex;flex-direction:column;gap:2px}
+  .rail-h{font-size:10px;text-transform:uppercase;letter-spacing:.5px;color:var(--mut);margin:10px 6px 4px}
+  .ch{padding:6px 9px;border-radius:6px;color:var(--mut);cursor:pointer}
+  .ch:hover{background:#35373c;color:var(--ink)}
+  .ch.on{background:#404249;color:#fff}
+  .ch.lock{opacity:.6;cursor:not-allowed}
+  .ch.glow{color:#86e8a0;animation:pulse 1.4s ease-in-out 3}
+  @keyframes pulse{50%{text-shadow:0 0 10px rgba(134,232,160,.8)}}
+  #replay{margin-top:auto;background:var(--blurple);color:#fff;border:0;border-radius:8px;padding:9px;font:inherit;font-size:12px;cursor:pointer}
+  .main{position:relative;display:flex;flex-direction:column;min-width:0}
+  .top{padding:12px 16px;border-bottom:1px solid #232428;font-weight:600;color:#f2f3f5}
+  .msgs{flex:1;overflow-y:auto;padding:14px 16px;display:flex;flex-direction:column;gap:13px}
+  .m{display:flex;gap:11px;animation:in .25s ease}
+  @keyframes in{from{opacity:0;transform:translateY(5px)}}
+  .av{width:32px;height:32px;border-radius:50%;flex:0 0 32px;display:flex;align-items:center;justify-content:center;color:#fff;font-weight:700;font-size:12px}
+  .a{background:#3b82f6}.c{background:#a855f7}.j{background:#22c55e}.rc{background:var(--blurple)}.y{background:#f59e0b}
+  .nm{font-weight:600}.nm.a{color:#8fb0ff}.nm.c{color:#d3a6ff}.nm.j{color:#86e8a0}
+  .ts{font-size:10px;color:var(--mut);margin-left:6px}
+  .bd{margin-top:2px}.bd b{color:#c9d1ff}
+  .m.sys{justify-content:center;color:var(--mut);font-size:11px}
+  /* embed cards */
+  .embed{background:var(--bg2);border-left:3px solid var(--blurple);border-radius:6px;padding:10px 11px;margin-top:4px;max-width:560px}
+  .eh{font-size:11px;color:var(--mut);margin-bottom:8px}
+  .ecards{display:flex;gap:8px}
+  .ecard{flex:1;background:var(--bg3);border:1px solid #3a3c42;border-radius:8px;padding:8px}
+  .ecard.win{border-color:var(--gold);box-shadow:0 0 12px rgba(246,196,83,.3)}
+  .ecard .et{display:flex;justify-content:space-between;font-size:10.5px;font-weight:700;margin-bottom:6px}
+  .ecard.a .nm{color:#8fb0ff}.ecard.c .nm{color:#d3a6ff}.ecard.j .nm{color:#86e8a0}
+  .ecard .cost{color:var(--gold)}
+  .ecard .s{display:flex;align-items:center;gap:5px;font-size:8.5px;color:#b5bac1;margin-bottom:3px}
+  .ecard .s .lab{width:22px}
+  .ecard .s .b{flex:1;height:5px;background:#111214;border-radius:3px;overflow:hidden}
+  .ecard .s .b i{display:block;height:100%;width:0;background:var(--blurple);transition:width .6s ease}
+  .ecard.win .s .b i{background:var(--gold)}
+  .compose{padding:11px 16px;border-top:1px solid #232428;display:flex;gap:7px;flex-wrap:wrap}
+  .compose button{background:#404249;border:0;color:var(--ink);border-radius:8px;padding:8px 13px;font:inherit;font-size:12px;cursor:pointer}
+  .compose button:disabled{opacity:.4;cursor:default}
+  .compose .primary{background:var(--blurple);color:#fff}
+  .mem{background:var(--bg2);padding:13px}
+  .mh{font-size:10px;text-transform:uppercase;color:var(--mut);margin:8px 0 6px}
+  .mb{display:flex;align-items:center;gap:8px;padding:4px 2px}
+  .dot{width:9px;height:9px;border-radius:50%}.dot.a{background:#3b82f6}.dot.c{background:#a855f7}.dot.j{background:#22c55e}.dot.y{background:#f59e0b}
+  .ph{position:absolute;inset:49px 0 0 0;background:var(--bg);display:none;align-items:center;justify-content:center;text-align:center;padding:30px;color:var(--mut)}
+  .ph h3{color:#f2f3f5;margin-bottom:8px}.ph p{max-width:360px}
+  .tag{position:fixed;bottom:8px;left:50%;transform:translateX(-50%);font-size:10px;color:var(--mut);background:rgba(0,0,0,.4);padding:3px 10px;border-radius:999px}
+</style>
+</head>
+<body>
+<div class="app">
+  <aside class="rail">
+    <div class="rail-h">research-council</div>
+    <div class="ch on" data-ch="ideation"># ideation</div>
+    <div class="ch lock" data-ch="experimentation"># experimentation 🔒</div>
+    <div class="ch lock" data-ch="paper"># paper 🔒</div>
+    <div class="rail-h">meta</div>
+    <div class="ch" data-ch="wiki"># wiki</div>
+    <div class="ch" data-ch="runs"># runs</div>
+    <button id="replay">▶ replay run</button>
+  </aside>
+  <main class="main">
+    <div class="top" id="top"># ideation — Can LLM agents do research better than humans?</div>
+    <div class="msgs" id="msgs"></div>
+    <div class="ph" id="ph"></div>
+    <div class="compose" id="gate">
+      <button data-act="iterate" disabled>/iterate</button>
+      <button data-act="amend" disabled>/amend</button>
+      <button data-act="conclude" disabled>/conclude</button>
+      <button data-act="select" class="primary" disabled>/select ★</button>
+    </div>
+  </main>
+  <aside class="mem">
+    <div class="mh">council — 3</div>
+    <div class="mb"><span class="dot a"></span> Aiden</div>
+    <div class="mb"><span class="dot c"></span> Cathy</div>
+    <div class="mb"><span class="dot j"></span> Julien</div>
+    <div class="mh">you</div>
+    <div class="mb"><span class="dot y"></span> Wannita</div>
+  </aside>
+</div>
+<div class="tag">static prototype · simulated run, no backend · design #20 (group chat × score cards)</div>
+<script>
+const sleep=ms=>new Promise(r=>setTimeout(r,ms));
+const msgs=document.getElementById('msgs'), ph=document.getElementById('ph');
+const gateBtns=[...document.querySelectorAll('#gate button')];
+const AV={aiden:'a',cathy:'c',julien:'j',you:'y',council:'rc'};
+const NM={aiden:'Aiden',cathy:'Cathy',julien:'Julien',you:'Wannita',council:'Council'};
+let round=0, playing=false, expUnlocked=false;
+
+function msg(who,text,app){
+  const m=document.createElement('div');m.className='m';
+  const badge=who==='council'?'RC':NM[who][0];
+  m.innerHTML=`<div class="av ${AV[who]}">${badge}</div><div class="mc"><span class="nm ${AV[who]}">${NM[who]}</span><span class="ts">${app?'APP':'now'}</span><div class="bd">${text}</div></div>`;
+  msgs.appendChild(m);msgs.scrollTop=msgs.scrollHeight;return m;
+}
+function sys(t){const d=document.createElement('div');d.className='m sys';d.textContent=t;msgs.appendChild(d);msgs.scrollTop=msgs.scrollHeight;}
+function ranking(){
+  const cards=[['c','★ Cathy','0.74',[78,73,76,75],1],['j','Julien','0.73',[75,70,72,71],0],['a','Aiden','0.65',[64,60,66,68],0]];
+  const m=document.createElement('div');m.className='m';
+  m.innerHTML=`<div class="av rc">RC</div><div class="mc" style="flex:1"><span class="nm">Council</span><span class="ts">BOT · ranked</span>
+   <div class="embed"><div class="eh">🏁 Round ${round} ranking — self-scores excluded</div><div class="ecards">${
+     cards.map(c=>`<div class="ecard ${c[0]}${c[4]?' win':''}"><div class="et"><span class="nm">${c[1]}</span><span class="cost">${c[2]}</span></div>${
+       ['NOV','SND','FEA','CLR'].map((l,i)=>`<div class="s"><span class="lab">${l}</span><span class="b"><i data-w="${c[3][i]}"></i></span></div>`).join('')}</div>`).join('')
+   }</div></div></div>`;
+  msgs.appendChild(m);msgs.scrollTop=msgs.scrollHeight;
+  requestAnimationFrame(()=>m.querySelectorAll('.b i').forEach(i=>i.style.width=i.dataset.w+'%'));
+}
+const setGate=on=>gateBtns.forEach(b=>b.disabled=!on);
+
+async function playRound(n){
+  playing=true;setGate(false);
+  sys(`Round ${n} · #ideation`);
+  await sleep(450);msg('aiden','🔍 searching… ×4',1);
+  await sleep(600);msg('aiden','gap: <b>no class-stratified evaluation</b>',1);
+  await sleep(500);msg('cathy','🔍 searching… ×6',1);
+  await sleep(600);msg('cathy','gap: <b>triage cost ignored</b>',1);
+  await sleep(650);msg('julien','proposed <b>SE-HypoEval</b> (repository-grounded)',1);
+  await sleep(750);msg('cathy','<b>@Julien</b> your eval lacks a human baseline',1);
+  await sleep(750);msg('julien','<b>@Cathy</b> agreed — adding a PhD-student cohort',1);
+  await sleep(800);ranking();
+  playing=false;setGate(true);
+}
+async function reset(){msgs.innerHTML='';round=1;showChannel('ideation');await playRound(1);}
+
+document.getElementById('replay').onclick=()=>{if(!playing)reset();};
+gateBtns.forEach(b=>b.onclick=async()=>{
+  if(playing)return;const act=b.dataset.act;
+  if(act==='iterate'){round++;msg('you','iterate ↻ — another round');await playRound(round);}
+  else if(act==='amend'){const n=prompt('amendment for next round:','focus on security-relevant CWE classes');if(n===null)return;round++;msg('you','✎ '+n);await playRound(round);}
+  else if(act==='conclude'){sys('✓ concluded — taking the panel ranking');setGate(false);}
+  else if(act==='select'){msg('you','★ selected: HypoSE-Bench (Cathy)');sys('Stage A approved → #experimentation unlocked');unlockExp();setGate(false);}
+});
+
+// ---- lifecycle = channels ----
+const chans=[...document.querySelectorAll('.ch')];
+function unlockExp(){const e=document.querySelector('[data-ch="experimentation"]');e.classList.remove('lock');e.textContent='# experimentation';e.classList.add('glow');expUnlocked=true;}
+function lock(t){return `<div><div style="font-size:32px">🔒</div><p>${t}</p></div>`;}
+function showChannel(ch){
+  if((ch==='experimentation'&&!expUnlocked)||ch==='paper'){/* still selectable to show the lock */}
+  chans.forEach(c=>c.classList.toggle('on',c.dataset.ch===ch));
+  document.getElementById('top').textContent='# '+ch+(ch==='ideation'?' — Can LLM agents do research better than humans?':'');
+  document.getElementById('gate').style.display=ch==='ideation'?'flex':'none';
+  if(ch==='ideation'){ph.style.display='none';return;}
+  ph.style.display='flex';
+  if(ch==='experimentation')ph.innerHTML=expUnlocked?'<div><h3>② Stage B · Experimentation</h3><p>The approved plan <b>HypoSE-Bench</b> moves here — the council implements it, runs it in a sandbox, and verifies the artifacts. <em>Engine coming soon.</em></p></div>':lock('approve an idea in #ideation first');
+  else if(ch==='paper')ph.innerHTML=lock('③ Paper — unlocks after experimentation');
+  else ph.innerHTML=`<div><h3># ${ch}</h3><p>(placeholder view)</p></div>`;
+}
+chans.forEach(c=>c.onclick=()=>showChannel(c.dataset.ch));
+reset();
+</script>
+</body>
+</html>

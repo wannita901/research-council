@@ -1,0 +1,153 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>research-council · flagship prototype (#22)</title>
+<style>
+  :root{--bg:#0f1115;--p:#171a21;--p2:#13161c;--ink:#e6e8ec;--mut:#a4abb8;--bd:#262b35;--cy:#6ea8fe;--gn:#4ade80;--gold:#f6c453}
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{min-height:100vh;background:var(--bg);color:var(--ink);
+    font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;font-size:13.5px;
+    display:flex;align-items:flex-start;justify-content:center;padding:18px}
+  .app{width:100%;max-width:880px;border:1px solid var(--bd);border-radius:14px;overflow:hidden;background:var(--bg)}
+  .rail{display:flex;align-items:center;gap:9px;padding:11px 16px;border-bottom:1px solid var(--bd);font-size:12px;color:var(--mut)}
+  .stg{display:flex;align-items:center;gap:6px}
+  .stg .d{width:9px;height:9px;border-radius:50%;background:#2b3340}
+  .stg.on{color:var(--ink)}.stg.on .d{background:var(--cy);box-shadow:0 0 9px var(--cy)}
+  .stg.done{color:var(--gn)}.stg.done .d{background:var(--gn)}
+  .sep{color:#3a414e}
+  .sp{margin-left:auto;color:#6b7280}
+  .cost{color:var(--gn);font-family:ui-monospace,Menlo,monospace}
+  #replay{background:#1e222b;border:1px solid #2a3b5e;color:var(--mut);border-radius:7px;padding:5px 10px;font:inherit;font-size:11px;cursor:pointer;margin-left:12px}
+  .topic{padding:13px 16px 3px;font-weight:600;font-size:15px}
+  .sub{padding:0 16px 6px;color:var(--mut);font-size:11.5px}
+  .seats{display:flex;gap:10px;padding:9px 16px}
+  .fs{flex:1;background:var(--p);border:1px solid var(--bd);border-left:3px solid #555;border-radius:10px;padding:10px 12px}
+  .fs.a{border-left-color:#3b82f6}.fs.c{border-left-color:#a855f7}.fs.j{border-left-color:#22c55e}
+  .fs .nm{font-weight:700}.fs.a .nm{color:#8fb0ff}.fs.c .nm{color:#d3a6ff}.fs.j .nm{color:#86e8a0}
+  .fs .mt{font-size:10.5px;color:var(--mut);font-family:ui-monospace,Menlo,monospace;margin:3px 0 5px}
+  .fs .gap{font-size:11.5px;color:#cdd3dd;min-height:30px}
+  .lbl{padding:12px 16px 0;font-size:10px;text-transform:uppercase;letter-spacing:.6px;color:#6b7280}
+  .delib{padding:5px 16px;display:flex;flex-direction:column;gap:6px;font-size:12.5px;min-height:20px}
+  .delib div{animation:in .25s ease}@keyframes in{from{opacity:0;transform:translateY(4px)}}
+  .delib em{font-style:normal;color:var(--cy)}
+  .rank{display:flex;gap:9px;padding:7px 16px 4px;min-height:20px}
+  .rc{flex:1;background:var(--p2);border:1px solid var(--bd);border-radius:10px;padding:9px 10px;animation:in .3s ease}
+  .rc.win{border-color:var(--cy);box-shadow:0 0 16px rgba(110,168,254,.28)}
+  .rc .rt{display:flex;justify-content:space-between;font-size:11px;font-weight:700;margin-bottom:6px}
+  .rc .rt .sc{color:var(--gn);font-family:ui-monospace,Menlo,monospace}
+  .rc .s{display:flex;align-items:center;gap:6px;font-size:8.5px;color:var(--mut);margin-bottom:3px}
+  .rc .s .lab{width:25px}
+  .rc .s .b{flex:1;height:5px;background:#0b0d11;border-radius:3px;overflow:hidden}
+  .rc .s .b i{display:block;height:100%;width:0;background:var(--cy);transition:width .6s ease}
+  .rc.win .s .b i{background:var(--cy)}
+  .gate{display:flex;gap:8px;flex-wrap:wrap;padding:13px 16px;border-top:1px solid var(--bd)}
+  .gate button{background:#1e222b;border:1px solid #2a3b5e;color:var(--mut);border-radius:8px;padding:8px 13px;font:inherit;font-size:12px;cursor:pointer}
+  .gate button:disabled{opacity:.4;cursor:default}
+  .gate .primary{background:#2a3b5e;color:var(--ink);border-color:var(--cy)}
+  .stageB{display:none;padding:40px 24px;text-align:center;color:var(--mut)}
+  .stageB h3{color:var(--ink);margin-bottom:8px}.stageB p{max-width:420px;margin:0 auto}
+  .tag{margin-top:10px;text-align:center;font-size:10.5px;color:#6b7280}
+</style>
+</head>
+<body>
+<div>
+<div class="app">
+  <div class="rail">
+    <span class="stg on" id="st1"><span class="d"></span>① Ideation</span><span class="sep">─</span>
+    <span class="stg" id="st2"><span class="d"></span>② Experiment</span><span class="sep">─</span>
+    <span class="stg" id="st3"><span class="d"></span>③ Paper</span>
+    <span class="sp">round <b id="round">1</b> · <span class="cost">$<span id="cost">0.00</span></span></span>
+    <button id="replay">▶ replay</button>
+  </div>
+  <div id="stageA">
+    <div class="topic">Can LLM agents do research better than humans?</div>
+    <div class="sub">3 cross-vendor peers · anonymized scoring · you hold the gate</div>
+    <div class="seats">
+      <div class="fs a"><div class="nm">Aiden</div><div class="mt" id="mt-a">openai · idle</div><div class="gap" id="gap-a">—</div></div>
+      <div class="fs c"><div class="nm">Cathy</div><div class="mt" id="mt-c">anthropic · idle</div><div class="gap" id="gap-c">—</div></div>
+      <div class="fs j"><div class="nm">Julien</div><div class="mt" id="mt-j">gemini · idle</div><div class="gap" id="gap-j">—</div></div>
+    </div>
+    <div class="lbl">deliberation</div>
+    <div class="delib" id="delib"></div>
+    <div class="lbl">ranking <span id="ranknote" style="text-transform:none;letter-spacing:0"></span></div>
+    <div class="rank" id="rank"></div>
+    <div class="gate" id="gate">
+      <button data-act="iterate" disabled>↻ iterate</button>
+      <button data-act="amend" disabled>✎ amend</button>
+      <button data-act="conclude" disabled>✓ conclude</button>
+      <button data-act="select" class="primary" disabled>★ select</button>
+    </div>
+  </div>
+  <div class="stageB" id="stageB">
+    <h3>② Stage B · Experimentation</h3>
+    <p>The approved idea <b>HypoSE-Bench</b> (Cathy) moves here — the council implements the plan, runs it in a sandbox, and verifies the artifacts. The lifecycle rail above tracks where you are. <em>Engine coming soon.</em></p>
+  </div>
+</div>
+<div class="tag">static prototype · simulated run, no backend · design #22 (flagship: console + lifecycle rail + persona seats + score cards)</div>
+</div>
+<script>
+const sleep=ms=>new Promise(r=>setTimeout(r,ms));
+const $=id=>document.getElementById(id);
+const gateBtns=[...document.querySelectorAll('#gate button')];
+let rnd=1, playing=false, cost=0;
+const setGate=on=>gateBtns.forEach(b=>b.disabled=!on);
+function bump(x){cost+=x;$('cost').textContent=cost.toFixed(2);}
+function seat(id,mt,gap){$('mt-'+id).textContent=mt; if(gap!=null)$('gap-'+id).textContent=gap;}
+function delib(html){const d=document.createElement('div');d.innerHTML=html;$('delib').appendChild(d);}
+
+const CARDS=[['c','★ Cathy','0.74',[78,73,76,75],1],['j','Julien','0.73',[75,70,72,71],0],['a','Aiden','0.65',[64,60,66,68],0]];
+function ranking(){
+  $('rank').innerHTML=CARDS.map(c=>`<div class="rc ${c[0]}${c[4]?' win':''}"><div class="rt"><span>${c[1]}</span><span class="sc">${c[2]}</span></div>${
+    ['NOV','SND','FEA','CLR'].map((l,i)=>`<div class="s"><span class="lab">${l}</span><span class="b"><i data-w="${c[3][i]}"></i></span></div>`).join('')}</div>`).join('');
+  requestAnimationFrame(()=>document.querySelectorAll('#rank .b i').forEach(i=>i.style.width=i.dataset.w+'%'));
+  $('ranknote').textContent='· self-scores excluded';
+}
+
+async function play(){
+  playing=true;setGate(false);$('round').textContent=rnd;$('delib').innerHTML='';$('rank').innerHTML='';$('ranknote').textContent='';
+  ['a','c','j'].forEach(x=>seat(x,({a:'openai',c:'anthropic',j:'gemini'})[x]+' · idle','—'));
+  await sleep(300);
+  // research (tool calls tick in)
+  for(let k=1;k<=6;k++){
+    if(k<=4)seat('a','openai · 🔍 researching ×'+k, 'surveying the literature');
+    seat('c','anthropic · 🔍 researching ×'+k,'surveying the literature');
+    if(k<=5)seat('j','gemini · 🔍 researching ×'+k,'surveying the literature');
+    bump(0.012);await sleep(260);
+  }
+  seat('a','openai · ✓ brief','gap: no class-stratified eval');
+  seat('c','anthropic · ✓ brief','gap: triage cost ignored');
+  seat('j','gemini · ✓ brief','gap: weak agent-vs-human baseline');
+  await sleep(500);
+  // propose
+  seat('a','openai · ✓ proposed','SE-HypoBench');seat('c','anthropic · ✓ proposed','HypoSE-Bench');seat('j','gemini · ✓ proposed','SE-HypoEval');
+  bump(0.03);await sleep(550);
+  // deliberate
+  delib('<strong>Cathy</strong> <em>→ @Julien</em> your eval lacks a human baseline');bump(0.02);await sleep(750);
+  delib('<strong>Julien</strong> <em>→ @Cathy</em> agreed — adding a PhD-student cohort');bump(0.02);await sleep(750);
+  delib('<strong>Aiden</strong> <em>→ @Cathy</em> and stratify by CWE class');bump(0.02);await sleep(750);
+  // judge
+  bump(0.05);ranking();
+  cost=0.21;$('cost').textContent='0.21';
+  playing=false;setGate(true);
+}
+async function reset(){rnd=1;cost=0;$('cost').textContent='0.00';$('st1').className='stg on';$('st2').className='stg';$('stageA').style.display='';$('stageB').style.display='none';await play();}
+
+$('replay').onclick=()=>{if(!playing)reset();};
+gateBtns.forEach(b=>b.onclick=async()=>{
+  if(playing)return;const act=b.dataset.act;
+  if(act==='iterate'){rnd++;await play();}
+  else if(act==='amend'){const n=prompt('amendment for next round:','focus on security-relevant CWE classes');if(n===null)return;rnd++;delib('<strong>You</strong> ✎ '+n);await sleep(400);await play();}
+  else if(act==='conclude'){setGate(false);$('ranknote').textContent='· ✓ concluded on panel ranking';}
+  else if(act==='select'){advance();}
+});
+function advance(){
+  setGate(false);
+  $('st1').className='stg done';$('st1').innerHTML='<span class="d"></span>① Ideation ✓';
+  $('st2').className='stg on';
+  $('stageA').style.display='none';$('stageB').style.display='block';
+}
+reset();
+</script>
+</body>
+</html>

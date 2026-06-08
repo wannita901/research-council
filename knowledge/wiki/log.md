@@ -47,3 +47,48 @@ Append-only history of ingests, queries, and lint passes. Format:
 - citekey: council:2026-06-07-ideation-774f7f
 - pages: (none)
 - new: 0 · merged: 0
+
+## [2026-06-08] ingest | Summary (external)
+- citekey: wiki:papers/can-llms-generate-novel-research-ideas-a-large-scale-human-s.md
+- pages: methods/human-study-llm-vs-human-idea-evaluation.md, findings/llm-ideas-rated-more-novel-than-human-ideas.md, gaps/llm-idea-generation-open-problems.md, papers/can-llms-generate-novel-research-ideas-a-large-scale-human-s.md, tasks/research-idea-generation.md, motivations/accelerating-scientific-discovery-with-llms.md, approaches/llm-ideation-agent.md
+- new: 3 · merged: 4
+
+## [2026-06-08] ingest | Claim (external)
+- citekey: wiki:findings/llm-ideas-judged-more-novel-less-feasible.md
+- pages: papers/w4403586302.md, findings/llm-ideas-judged-more-novel-less-feasible.md, concepts/research-ideation-as-an-llm-benchmark.md, methods/head-to-head-human-llm-idea-evaluation.md, approaches/llm-ideation-agent.md, gaps/open-problems-in-research-agent-evaluation.md
+- new: 1 · merged: 5
+
+## [2026-06-08] ingest | Study Design (external)
+- citekey: wiki:methods/head-to-head-human-llm-idea-evaluation.md
+- pages: methods/head-to-head-human-llm-idea-evaluation.md
+- new: 0 · merged: 1
+
+## [2026-06-08] ingest | Summary (external)
+- citekey: wiki:papers/ideabench-benchmarking-large-language-models-for-research-id.md
+- pages: concepts/domain-specific-research-idea-evaluation.md, papers/ideabench-benchmarking-large-language-models-for-research-id.md, tasks/research-idea-generation.md, motivations/lack-of-evaluation-framework-for-llm-idea-generation.md, benchmarks/ideabench-dataset.md
+- new: 1 · merged: 4
+
+## [2026-06-08] ingest | Key Claims (external)
+- citekey: wiki:findings/ideabench-benchmark-findings.md
+- pages: findings/ideabench-benchmark-findings.md, papers/ideabench-benchmarking-large-language-models-for-research-id.md
+- new: 0 · merged: 2
+
+## [2026-06-08] ingest | Gap Description (external)
+- citekey: wiki:gaps/open-problems-in-research-agent-evaluation.md
+- pages: gaps/open-problems-in-research-agent-evaluation.md
+- new: 0 · merged: 1
+
+## [2026-06-08] ingest | Identified Gaps (external)
+- citekey: wiki:gaps/open-problems-in-llm-research-idea-generation.md
+- pages: papers/identified-gaps.md, gaps/open-problems-in-llm-research-idea-generation.md
+- new: 1 · merged: 1
+
+## [2026-06-08] ingest | Can LLMs Generate Novel Research Ideas? A Large-Scale Human Study with 100+ NLP Researchers (external)
+- citekey: W4403586302
+- pages: concepts/llm-research-ideation-agent.md, approaches/llm-ideation-agent-for-nlp-research.md, methods/human-study-llm-vs-expert-idea-evaluation.md, findings/llm-ideas-more-novel-less-feasible-than-human-ideas.md, gaps/open-problems-in-building-and-evaluating-research-agents.md, papers/can-llms-generate-novel-research-ideas-a-large-scale-human-s.md, tasks/research-idea-generation.md, motivations/accelerating-scientific-discovery-with-llms.md
+- new: 5 · merged: 3
+
+## [2026-06-08] ingest | Council findings — Can LLM agents do research better than Human? (internal)
+- citekey: council:2026-06-08-ideation-6efecc
+- pages: findings/council-findings-can-llm-agents-do-research-better-than-huma.md
+- new: 1 · merged: 0

@@ -11,16 +11,9 @@ from typing import Awaitable, Callable
 
 from pydantic_ai import Agent
 
+from research_council import prompts
 from research_council.obs.telemetry import UsageMeter, usage_of
 from research_council.store.models import Constraints, IntakeQuestion, IntakeQuestions
-
-FACILITATOR_SYS = (
-    "You are the facilitator for an AI4SE research council. Given a stage and topic, ask a few "
-    "concise, high-value clarifying questions that set the constraints the council needs before "
-    "working. Tailor them to the stage — e.g. ideation: research area, success criteria, known "
-    "prior work, scope/compute limits; writing: target venue, page limit, deadline, authors, "
-    "emphasis. Ask only what materially changes the work."
-)
 
 
 class Facilitator:
@@ -28,7 +21,8 @@ class Facilitator:
         self.max_questions = max_questions
         self._price_model = price_model
         self.usage = UsageMeter()
-        self._agent: Agent = Agent(model, output_type=IntakeQuestions, system_prompt=FACILITATOR_SYS)
+        self._agent: Agent = Agent(model, output_type=IntakeQuestions,
+                                   system_prompt=prompts.load("facilitator/intake"))
 
     async def questions(self, stage: str, topic: str) -> list[IntakeQuestion]:
         prompt = f"Stage: {stage}\nTopic: {topic}\nAsk up to {self.max_questions} clarifying questions."

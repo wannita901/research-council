@@ -1,9 +1,9 @@
-"""FastAPI backend — the service runner over the same debate core (plan/11).
+"""FastAPI backend — the service runner over the same debate/ideation core (plan/11).
 
-POST /debates              start a debate (background task) → {run_id}
-GET  /debates/{id}/stream  live SSE Event stream (watch the debate)
-POST /debates/{id}/action  resolve the review gate (iterate|amend|conclude|select)
-GET  /debates/{id}         status + recommendation
+v1 debate:
+  POST /debates · GET /debates/{id}/stream · POST /debates/{id}/action · GET /debates/{id}
+v2 agentic ideation (same shape):
+  POST /ideations · GET /ideations/{id}/stream · POST /ideations/{id}/action · GET /ideations/{id}
 
 Per-run asyncio.Queue is the event bus (emit → queue → SSE); the reviewer awaits a
 future resolved by POST /action. In-process, no Redis/Celery (v0).
@@ -22,7 +22,13 @@ from research_council.config import load_config
 from research_council.debate.orchestrator import run_debate
 from research_council.retrieval.registry import build_retrieval, build_stub_retrieval
 from research_council.store.checkpoint import TraceWriter
-from research_council.store.models import Candidate, Event, Recommendation, ReviewAction
+from research_council.store.models import (
+    Candidate,
+    Constraints,
+    Event,
+    Recommendation,
+    ReviewAction,
+)
 from research_council.verify.mock import MockVerifier
 
 _SENTINEL = object()  # closes an SSE stream
@@ -147,15 +153,7 @@ def _get(run_id: str) -> Run:
 
 @app.get("/debates/{run_id}")
 async def get_debate(run_id: str):
-    run = _get(run_id)
-    return {
-        "run_id": run_id,
-        "status": run.status,
-        "error": run.error,
-        "awaiting_review": run.status == "awaiting_review",
-        "recommendation": run.recommendation.model_dump() if run.recommendation else None,
-        "candidates": [c.model_dump() for c in run.candidates],
-    }
+    return _status(_get(run_id), run_id)
 
 
 @app.post("/debates/{run_id}/action")
@@ -167,10 +165,7 @@ async def post_action(run_id: str, req: ActionRequest):
     return {"ok": True}
 
 
-@app.get("/debates/{run_id}/stream")
-async def stream(run_id: str):
-    run = _get(run_id)
-
+def _sse(run: Run) -> StreamingResponse:
     async def gen():
         while True:
             ev = await run.queue.get()
@@ -180,3 +175,109 @@ async def stream(run_id: str):
             yield f"data: {ev.model_dump_json()}\n\n"
 
     return StreamingResponse(gen(), media_type="text/event-stream")
+
+
+def _status(run: Run, run_id: str) -> dict:
+    return {
+        "run_id": run_id,
+        "status": run.status,
+        "error": run.error,
+        "awaiting_review": run.status == "awaiting_review",
+        "recommendation": run.recommendation.model_dump() if run.recommendation else None,
+        "candidates": [c.model_dump() for c in run.candidates],
+    }
+
+
+@app.get("/debates/{run_id}/stream")
+async def stream(run_id: str):
+    return _sse(_get(run_id))
+
+
+# ---------------------------------------------------------------- v2 ideation
+
+class IdeationRequest(BaseModel):
+    topic: str
+    stage: str = "ideation"
+    seats: dict[str, str] | None = None
+    tools: list[str] | None = None
+    auto_iterate: int = 1  # autonomous (interactive=False) rounds before concluding
+    anonymize: bool | None = None
+    live: bool = False
+    interactive: bool = True  # False → autonomous (auto-iterate, no review gate)
+    constraints: dict[str, str] | None = None  # pre-supplied intake answers {question: answer}
+
+
+def _build_v2_peers(cfg, live: bool, retrieval) -> dict:
+    from research_council.debate.orchestrator_v2 import CODENAMES
+
+    peers: dict = {}
+    for vendor, model in cfg.seats.items():
+        cn = CODENAMES.get(vendor, vendor)
+        if live:
+            from research_council.agents.agent_peer import AgentPeer, agent_model_name
+            peers[cn] = AgentPeer(vendor, cn, agent_model_name(vendor, model), retrieval,
+                                  max_iters=cfg.max_iters, max_tool_calls=cfg.max_tool_calls,
+                                  price_model=model)
+        else:
+            from research_council.agents.stub_agent_peer import StubV2Peer
+            peers[cn] = StubV2Peer(vendor, cn, retrieval)
+    return peers
+
+
+@app.post("/ideations")
+async def start_ideation(req: IdeationRequest):
+    cfg = load_config(req.stage)
+    if req.seats:
+        cfg.seats = req.seats
+    if req.tools:
+        cfg.tools = req.tools
+    if req.anonymize is not None:
+        cfg.anonymize = req.anonymize
+
+    retrieval = build_retrieval(cfg.tools) if req.live else build_stub_retrieval(cfg.tools)
+    peers = _build_v2_peers(cfg, req.live, retrieval)
+    run = Run(cfg, req.topic, TraceWriter.new(cfg.stage))
+    RUNS[run.run_id] = run
+    reviewer = run.reviewer if req.interactive else None
+    constraints = Constraints(stage=cfg.stage, answers=req.constraints) if req.constraints else None
+    run.task = asyncio.create_task(
+        _run_ideation(run, peers, reviewer, req.auto_iterate, cfg.anonymize, constraints))
+    return {"run_id": run.run_id}
+
+
+async def _run_ideation(run: Run, peers, reviewer, auto_iterate, anonymize, constraints) -> None:
+    from research_council.debate.orchestrator_v2 import run_ideation
+
+    try:
+        rec, cands = await run_ideation(
+            run.topic, peers, run.trace, reviewer=reviewer, auto_rounds=auto_iterate,
+            anonymize_on=anonymize, constraints=constraints, emit=run.emit,
+        )
+        run.recommendation, run.candidates, run.status = rec, cands, "done"
+    except Exception as e:  # surface failure to clients; never hang the run
+        run.status, run.error = "error", str(e)
+        try:
+            run.trace.emit("error", "error", {"message": str(e)})
+        except Exception:
+            pass
+    finally:
+        run.queue.put_nowait(_SENTINEL)
+
+
+@app.get("/ideations/{run_id}")
+async def get_ideation(run_id: str):
+    return _status(_get(run_id), run_id)
+
+
+@app.post("/ideations/{run_id}/action")
+async def post_ideation_action(run_id: str, req: ActionRequest):
+    run = _get(run_id)
+    ok = run.submit_action(ReviewAction(action=req.action, choice=req.choice, feedback=req.feedback))
+    if not ok:
+        raise HTTPException(409, "no pending review for this run")
+    return {"ok": True}
+
+
+@app.get("/ideations/{run_id}/stream")
+async def stream_ideation(run_id: str):
+    return _sse(_get(run_id))

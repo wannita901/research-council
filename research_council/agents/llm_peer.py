@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import json
 
+from research_council import prompts
 from research_council.providers.base import LLMProvider
 from research_council.retrieval.base import RetrievalProvider
 from research_council.store.models import (
@@ -20,27 +21,11 @@ from research_council.store.models import (
     VerifierSignal,
 )
 
-RESEARCH_SYS = (
-    "You are an AI4SE research scientist. Survey ONLY the provided papers and identify "
-    "ONE specific, underexplored gap. Ground claims in provided reference ids; never "
-    'invent citations. Return JSON {"landscape","gap","rationale","refs":[ids]}.'
-)
-PROPOSE_SYS = (
-    "Turn your gap into a concrete, testable idea AND a MINIMAL experiment plan runnable "
-    "at toy scale. Return JSON with STRING values: "
-    '{"title","hypothesis","method","experiment_plan"} where experiment_plan is a single '
-    "string naming dataset, baseline, method, metric, and the smallest runnable step."
-)
-CRITIQUE_SYS = (
-    "Review anonymized AI4SE candidates on novelty/soundness/feasibility. If a claim is "
-    "checkable set needs_verification=true. Return JSON {\"items\":[{label,axis,severity,"
-    "claim,needs_verification}]} where each item's label matches a candidate."
-)
-SCORE_SYS = (
-    "Score each anonymized candidate 0..1 on novelty/soundness/feasibility/clarity. The "
-    "feasibility score MUST match the provided verifier signal. Return JSON "
-    '{"items":[{label,novelty,soundness,feasibility,clarity}]}.'
-)
+# v1 system prompts live in research_council/prompts/v1_*.md (JSON-shaped; loaded verbatim).
+RESEARCH_SYS = prompts.load("peer_v1/research")
+PROPOSE_SYS = prompts.load("peer_v1/propose")
+CRITIQUE_SYS = prompts.load("peer_v1/critique")
+SCORE_SYS = prompts.load("peer_v1/score")
 
 
 def _json(text: str) -> dict:

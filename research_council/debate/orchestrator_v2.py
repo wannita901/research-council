@@ -92,6 +92,8 @@ async def run_ideation(
     auto_rounds: int = 1,   # no-human runs auto-iterate this many rounds, then conclude
     max_turns: int = 4,
     anonymize_on: bool = True,
+    constraints: Constraints | None = None,  # pre-supplied intake answers (skips the facilitator)
+    on_round_end: Callable[[int], Awaitable[None]] | None = None,  # e.g. per-round wiki harvest
     emit: Callable[[Event], None] | None = None,
 ) -> tuple[Recommendation, list[Candidate]]:
     weights = weights or dict(DEFAULT_WEIGHTS)
@@ -105,9 +107,10 @@ async def run_ideation(
 
     out("intake", "topic", {"topic": topic, "codenames": list(peers)})
 
-    constraints = Constraints(stage="ideation")
-    if facilitator is not None and answer_fn is not None:
-        constraints = await run_intake(facilitator, "ideation", topic, answer_fn)
+    if constraints is None:
+        constraints = Constraints(stage="ideation")
+        if facilitator is not None and answer_fn is not None:
+            constraints = await run_intake(facilitator, "ideation", topic, answer_fn)
     out("intake", "constraints", constraints.model_dump())
     constraints_text = render_constraints(constraints)
 
@@ -156,6 +159,11 @@ async def run_ideation(
             out("judge", "score", s.model_dump(), round=rnd, author_vendor=s.judge_vendor)
         rec = aggregate_v2(scores, weights, id_map)
         out("judge", "recommendation", rec.model_dump(), round=rnd)
+
+        # end-of-round hook (e.g. harvest this round into the LLM-wiki so the NEXT round's
+        # research can read it). Runs after judging, before the human gate.
+        if on_round_end is not None:
+            await on_round_end(rnd)
 
         action = await review(rec, candidates, rnd)
         out("review", "human_action", action.model_dump(), round=rnd, author_vendor="human")

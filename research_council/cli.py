@@ -249,6 +249,7 @@ def ideate(
     tools: str = typer.Option(None, help="comma list, e.g. wiki,openalex,arxiv"),
     auto_iterate: int = typer.Option(1, "--auto-iterate", help="non-interactive: rounds to auto-iterate before concluding (capped at 8)"),
     live: bool = typer.Option(False, help="use real providers (needs keys + SDKs)"),
+    harvest: bool = typer.Option(False, "--harvest", help="ingest each round into the LLM-wiki so later rounds read it (live; spends librarian tokens)"),
     stream: bool = typer.Option(True, help="print each phase event live"),
     interactive: bool = typer.Option(True, help="intake questions + review gate (TTY only)"),
 ):
@@ -312,11 +313,21 @@ def ideate(
     if stream:
         _stream(setup_ev)
 
+    # per-round wiki harvest (opt-in, live): each round's findings + cited papers are ingested
+    # so the NEXT round's research can read them.
+    on_round_end, librarian = None, None
+    if harvest and live:
+        from research_council.librarian.ingest import Ingestor
+        librarian, _ = _build_librarian()
+        on_round_end = _round_harvester(trace, retrieval, topic, librarian, Ingestor(librarian))
+    elif harvest and not live:
+        ui.console.print("[yellow]--harvest needs --live (the librarian uses real models); skipping harvest.[/yellow]")
+
     try:
         rec, candidates = asyncio.run(run_ideation(
             topic, peers, trace, facilitator=facilitator, answer_fn=answer_fn, reviewer=reviewer,
             weights=cfg.weights, auto_rounds=auto_iterate, max_turns=cfg.max_turns,
-            anonymize_on=cfg.anonymize, emit=(_stream if stream else None),
+            anonymize_on=cfg.anonymize, on_round_end=on_round_end, emit=(_stream if stream else None),
         ))
     except KeyboardInterrupt:
         raise typer.Abort()
@@ -342,12 +353,8 @@ def ideate(
         ui.console.print()
         ui.usage_table(rows, cache=(hits, misses) if (hits or misses) else None, total=total)
 
-    # opt-in: compound the wiki from this run (live + interactive only)
-    if live and interactive and tty:
-        try:
-            _maybe_harvest(trace, retrieval)
-        except Exception as e:  # harvest must never sink a finished run
-            typer.echo(f"  (harvest skipped: {e})")
+    if librarian is not None and librarian.usage.cost_usd:
+        ui.console.print(f"  [dim]wiki harvest total · librarian ${librarian.usage.cost_usd:.4f}[/dim]")
     typer.echo(f"\ntrace: {trace.path}")
 
 
@@ -407,41 +414,33 @@ def _build_librarian():
     return Librarian(agent_model_name("anthropic", m), price_model=m), m
 
 
-def _maybe_harvest(trace, retrieval) -> None:
-    """Opt-in post-run: compound the wiki from this run (council findings + cited papers)."""
+def _round_harvester(trace, retrieval, topic, librarian, ingestor):
+    """Build an async on_round_end(rnd) that ingests THIS round into the wiki, so the next
+    round's research reads it. External cited papers + the round's internal synthesis."""
     import json
 
-    from research_council.librarian.harvest import harvest_run, preview
-    from research_council.librarian.ingest import Ingestor
+    from research_council.librarian.harvest import build_internal, collect_external
 
-    events = [json.loads(ln) for ln in trace.path.read_text(encoding="utf-8").splitlines() if ln.strip()]
-    papers = retrieval.cached_papers() if hasattr(retrieval, "cached_papers") else {}
-    n_ext, has_internal, skipped = preview(events, papers)
-    n_calls = n_ext + (1 if has_internal else 0)
-    if not n_calls:
-        return
-    note = f"{n_ext} external paper(s)" + (" + 1 internal synthesis" if has_internal else "")
-    if skipped:
-        note += f" ({skipped} cited over cap, skipped)"
-    if not typer.confirm(f"\nHarvest into the LLM-wiki? {note} — ~{n_calls} librarian call(s)", default=False):
-        return
-    librarian, _ = _build_librarian()
+    async def on_round_end(rnd: int) -> None:
+        events = [json.loads(ln) for ln in trace.path.read_text(encoding="utf-8").splitlines() if ln.strip()]
+        this_round = [e for e in events if e.get("round") in (0, rnd)]  # round-0 carries the topic
+        papers = retrieval.cached_papers() if hasattr(retrieval, "cached_papers") else {}
+        sources = collect_external(this_round, papers)[0]
+        internal = build_internal(this_round, topic, f"{trace.run_id}-r{rnd}")
+        if internal is not None:
+            sources.append(internal)
+        n = 0
+        for s in sources:
+            r = await ingestor.ingest(s)
+            trace.emit("harvest", "librarian_ingest",
+                       {"round": rnd, "citekey": s.citekey, "origin": s.origin,
+                        "written": r.written, "merged": r.merged})
+            n += len(r.written) + len(r.merged)
+        if sources:
+            ui.console.print(f"  [dim]wiki ← round {rnd}: {len(sources)} source(s) → {n} page(s) · "
+                             f"librarian ${librarian.usage.cost_usd:.4f}[/dim]")
 
-    def on_ingest(source, r):  # librarian trace → the run's trace.jsonl
-        trace.emit("harvest", "librarian_ingest",
-                   {"citekey": source.citekey, "origin": source.origin,
-                    "written": r.written, "merged": r.merged})
-
-    with ui.progress("harvesting") as prog:
-        task = prog.add_task("harvest", total=n_calls)
-
-        def on_step(done, tot, label):
-            prog.update(task, completed=done, total=tot, description=f"harvest · {label}")
-
-        rep = asyncio.run(harvest_run(events, papers, Ingestor(librarian),
-                                      on_step=on_step, on_ingest=on_ingest))
-    ui.console.print(f"  [green]harvested[/green] {len(rep.external)} external · "
-                     f"{len(rep.internal)} internal page(s) · cost ≈ ${librarian.usage.cost_usd:.4f}")
+    return on_round_end
 
 
 @app.command()

@@ -14,6 +14,7 @@ from pydantic_ai.exceptions import UsageLimitExceeded
 from pydantic_ai.messages import ModelResponse, ToolCallPart
 from pydantic_ai.usage import UsageLimits
 
+from research_council import prompts
 from research_council.obs.telemetry import UsageMeter, usage_of
 from research_council.providers.sdk import _cost
 
@@ -72,36 +73,8 @@ def agent_model_name(vendor: str, model: str) -> str:
     return f"{_PREFIX.get(vendor, vendor)}:{model}"
 
 
-RESEARCH_SYS = (
-    "You are {codename}, an AI4SE research scientist on a council. Independently survey the "
-    "literature with the `search` tool and ground uncertain claims with `verify_claim`. "
-    "ALWAYS run at least two `search` calls with different queries before settling on a gap — "
-    "do not answer from memory alone — and verify any specific benchmark/paper/repo you rely on. "
-    "Identify ONE specific, underexplored research gap. Cite sources by their id in `refs`; "
-    "never invent citations. Be rigorous and concrete."
-)
-
-PROPOSE_SYS = (
-    "You are {codename}. Turn your research gap into a concrete, testable idea AND a MINIMAL "
-    "experiment plan (name dataset, baseline, method, metric, and the smallest runnable step). "
-    "Be specific."
-)
-
-JUDGE_SYS = (
-    "You are {codename}, scoring anonymized AI4SE research candidates (authorship hidden). "
-    "Score each candidate 0..1 on novelty, soundness, feasibility, clarity, by its label. "
-    "Be calibrated and fair."
-)
-
-DELIBERATE_SYS = (
-    "You are {codename} on an AI4SE research council, in a group discussion. Each candidate's id "
-    "IS its author's codename (e.g. candidate 'Aiden' is Aiden's idea). Read the candidates and "
-    "the thread, then contribute ONE message ADDRESSED to a specific peer — start your text with "
-    "their @codename (e.g. '@Aiden ...'). Then: critique a candidate (set `targets` to its "
-    "codename), ask a question (set `to` the codename), answer a question addressed to you, "
-    "defend, concede, or revise YOUR OWN candidate. Use `verify_claim` to ground disputed claims. "
-    "Be specific and brief. Set done=true only when you have nothing substantive to add."
-)
+# System prompts live in research_council/prompts/peer/*.md (loaded below): research ·
+# propose · judge · deliberate · finalize.
 
 
 @dataclass
@@ -135,29 +108,29 @@ class AgentPeer:
             model,
             output_type=BriefDraft,
             deps_type=ResearchDeps,
-            system_prompt=RESEARCH_SYS.format(codename=codename),
+            system_prompt=prompts.load("peer/research", codename=codename),
             tools=[search, verify_claim],
         )
         self._delib_agent: Agent = Agent(
             model,
             output_type=Contribution,
             deps_type=ResearchDeps,
-            system_prompt=DELIBERATE_SYS.format(codename=codename),
+            system_prompt=prompts.load("peer/deliberate", codename=codename),
             tools=[search, verify_claim],
         )
         self._propose_agent: Agent = Agent(
-            model, output_type=CandidateDraft, system_prompt=PROPOSE_SYS.format(codename=codename),
+            model, output_type=CandidateDraft, system_prompt=prompts.load("peer/propose", codename=codename),
         )
         self._judge_agent: Agent = Agent(
-            model, output_type=ScoreSheet, system_prompt=JUDGE_SYS.format(codename=codename),
+            model, output_type=ScoreSheet, system_prompt=prompts.load("peer/judge", codename=codename),
         )
         # Tool-less twins used to finalize when the tool/iteration budget is hit mid-loop:
         # they coerce a structured result out of what was already gathered, no more tool calls.
         self._research_finalize: Agent = Agent(
-            model, output_type=BriefDraft, system_prompt=RESEARCH_SYS.format(codename=codename),
+            model, output_type=BriefDraft, system_prompt=prompts.load("peer/research", codename=codename),
         )
         self._delib_finalize: Agent = Agent(
-            model, output_type=Contribution, system_prompt=DELIBERATE_SYS.format(codename=codename),
+            model, output_type=Contribution, system_prompt=prompts.load("peer/deliberate", codename=codename),
         )
 
     def _track(self, x) -> None:
@@ -195,11 +168,7 @@ class AgentPeer:
         if result is not None:
             return result.output
         kwargs = {"message_history": msgs} if msgs else {}
-        fin = await finalizer.run(
-            "You've reached your research budget. Based ONLY on what you've gathered so far, "
-            "produce the required structured output now — do NOT call any tools.",
-            **kwargs,
-        )
+        fin = await finalizer.run(prompts.load("peer/finalize"), **kwargs)
         self._track(fin)
         return fin.output
 

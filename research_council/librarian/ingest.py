@@ -103,6 +103,15 @@ class Ingestor:
             report.raw_saved = self._save_raw(source)
 
         pages = await self.librarian.route(source, updated=updated)
+        if not pages:
+            # the router produced nothing — never silently drop a source. Capture it as one page:
+            # an external source → its papers/ anchor; the council's synthesis → a findings note.
+            pages = [WikiPage(
+                type="papers" if source.origin == "external" else "findings",
+                title=source.title or source.citekey, origin=source.origin,
+                papers=[source.citekey], updated=updated,
+                body=(source.text or "").strip()[:1500] or "(no content extracted)",
+            )]
         _link_anchor(pages)
 
         for page in pages:

@@ -51,6 +51,58 @@ def test_interactive_review_gate_over_http():
     assert s["status"] == "done"
 
 
+def _poll_ideation(client, run_id, predicate, budget=5.0):
+    deadline = time.time() + budget
+    while time.time() < deadline:
+        s = client.get(f"/ideations/{run_id}").json()
+        if predicate(s):
+            return s
+        time.sleep(0.02)
+    return client.get(f"/ideations/{run_id}").json()
+
+
+def test_ideation_autonomous_streams_to_completion():
+    with TestClient(app) as client:
+        rid = client.post("/ideations", json={"topic": "t", "interactive": False}).json()["run_id"]
+        with client.stream("GET", f"/ideations/{rid}/stream") as r:
+            body = "".join(r.iter_text())
+        assert "research_brief" in body and "recommendation" in body
+        s = client.get(f"/ideations/{rid}").json()
+    assert s["status"] == "done"
+    assert len(s["recommendation"]["ranked"]) == 3
+
+
+def test_ideation_auto_iterate_over_http():
+    with TestClient(app) as client:
+        rid = client.post("/ideations",
+                          json={"topic": "t", "interactive": False, "auto_iterate": 2}).json()["run_id"]
+        with client.stream("GET", f"/ideations/{rid}/stream") as r:
+            body = "".join(r.iter_text())
+        assert body.count("research_brief") >= 6  # 2 rounds × 3 peers
+        assert client.get(f"/ideations/{rid}").json()["status"] == "done"
+
+
+def test_ideation_interactive_review_gate_over_http():
+    with TestClient(app) as client:
+        rid = client.post("/ideations", json={"topic": "t", "interactive": True}).json()["run_id"]
+        s = _poll_ideation(client, rid, lambda s: s["awaiting_review"])
+        assert s["awaiting_review"]
+        assert client.post(f"/ideations/{rid}/action", json={"action": "conclude"}).json()["ok"]
+        s = _poll_ideation(client, rid, lambda s: s["status"] == "done")
+    assert s["status"] == "done"
+
+
+def test_ideation_accepts_preset_constraints():
+    with TestClient(app) as client:
+        rid = client.post("/ideations", json={
+            "topic": "t", "interactive": False,
+            "constraints": {"What is success?": "a clear baseline win"},
+        }).json()["run_id"]
+        with client.stream("GET", f"/ideations/{rid}/stream") as r:
+            body = "".join(r.iter_text())
+        assert "a clear baseline win" in body  # constraints emitted into the trace/stream
+
+
 async def test_run_reviewer_future_resolves(tmp_path):
     import asyncio
 

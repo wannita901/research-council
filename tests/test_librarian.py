@@ -122,6 +122,29 @@ async def test_ingest_merges_and_unions_provenance(tmp_path):
     assert set(parse_page(page).papers) == {"s1", "s2"}        # provenance unioned
 
 
+class _EmptyLibrarian:
+    """Routes every source to nothing — exercises the ingest fallback."""
+
+    async def route(self, source, *, updated=None):
+        return []
+
+
+async def test_ingest_fallback_when_router_returns_nothing(tmp_path):
+    from research_council.librarian.ingest import Ingestor
+
+    # internal source (e.g. council synthesis) that routes to 0 pages → still captured as findings
+    rep = await Ingestor(_EmptyLibrarian(), knowledge_root=tmp_path).ingest(
+        Source(citekey="council:r1", title="Council findings", text="we found X", origin="internal"))
+    assert len(rep.written) == 1
+    pg = parse_page((tmp_path / "wiki" / rep.written[0]).read_text())
+    assert pg.type == "findings" and pg.origin == "internal" and "we found X" in pg.body
+
+    # external source that routes to 0 pages → captured as a papers anchor
+    rep2 = await Ingestor(_EmptyLibrarian(), knowledge_root=tmp_path).ingest(
+        Source(citekey="openalex:W9", title="Some paper", text="abstract", origin="external"))
+    assert rep2.written and rep2.written[0].startswith("papers/")
+
+
 async def test_internal_origin_skips_raw_then_escalates_on_external_merge(tmp_path):
     from research_council.librarian.ingest import Ingestor
 

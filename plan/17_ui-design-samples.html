@@ -1,0 +1,921 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Phase 7 · UI Design Samples · research-council</title>
+  <link rel="stylesheet" href="style.css">
+  <script src="nav.js"></script>
+  <style>
+    /* spectrum bar */
+    .spectrum{display:flex;align-items:center;gap:8px;margin:18px 0 28px;font-size:12px;color:var(--ink-faint)}
+    .spectrum .track{flex:1;height:8px;border-radius:999px;
+      background:linear-gradient(90deg,#7a2e2e,#4f46e5,#6ea8fe,#a855f7,#33ff77,#db2777)}
+    .smp-meta{display:flex;flex-wrap:wrap;gap:8px;margin:6px 0 10px;font-size:12px}
+    .smp-meta .pill{border:1px solid var(--border);border-radius:999px;padding:2px 9px;color:var(--ink-soft)}
+    .smp-meta .pill b{color:var(--ink)}
+
+    /* ============ scoped mockups (.smp) ============ */
+    .smp, .smp *{box-sizing:border-box;margin:0;padding:0;font-family:inherit}
+    .smp{border-radius:14px;overflow:hidden;border:1px solid var(--border);font-size:13px;line-height:1.45;margin-bottom:8px}
+    .smp .bar{display:flex;justify-content:space-between;align-items:center;gap:12px;padding:12px 16px}
+    .smp .topic{font-weight:600}
+    .smp .seats{display:flex;gap:10px;padding:14px 16px}
+    .smp .seat{flex:1;display:flex;flex-direction:column;gap:5px;padding:12px;border-radius:10px}
+    .smp .who{font-weight:700}
+    .smp .vend{font-size:11px;opacity:.65}
+    .smp .st{font-size:11px}
+    .smp .gap{font-size:12px}
+    .smp .delib{display:flex;flex-direction:column;gap:7px;padding:2px 16px 12px}
+    .smp .msg{font-size:12.5px}
+    .smp .msg em{font-style:normal}
+    .smp .rank{display:flex;gap:14px;flex-wrap:wrap;padding:10px 16px;font-size:12px}
+    .smp .gate{display:flex;gap:8px;flex-wrap:wrap;padding:12px 16px}
+    .smp .gate button{padding:7px 12px;border-radius:8px;border:1px solid transparent;font:inherit;font-size:12px;cursor:pointer}
+
+    /* 1 · ACADEMIC (formal, light, serif) */
+    .smp.academic{background:#fbfaf7;color:#1a1714;border-color:#e3ddd2;font-family:Georgia,'Times New Roman',serif}
+    .smp.academic .bar{border-bottom:1px solid #e3ddd2}
+    .smp.academic .cost{font-variant:small-caps;letter-spacing:.5px;color:#7a2e2e}
+    .smp.academic .seat{border:1px solid #e3ddd2;background:#fff}
+    .smp.academic .who{color:#7a2e2e}
+    .smp.academic .msg em{font-style:italic;color:#7a2e2e}
+    .smp.academic .rank{border-top:1px solid #e3ddd2;font-style:italic}
+    .smp.academic .gate button{background:#fff;border:1px solid #d8ccb8;color:#3a322a}
+    .smp.academic .gate .primary{background:#7a2e2e;color:#fff;border-color:#7a2e2e}
+
+    /* 2 · MINIMAL (clean, light, neutral) */
+    .smp.minimal{background:#fff;color:#111827;border-color:#e5e7eb;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif}
+    .smp.minimal .bar{border-bottom:1px solid #f0f1f3}
+    .smp.minimal .cost{color:#6b7280;font-variant-numeric:tabular-nums}
+    .smp.minimal .seat{border:1px solid #eef0f2;background:#fafbfc}
+    .smp.minimal .st{color:#6b7280}
+    .smp.minimal .msg em{color:#4f46e5;font-weight:600}
+    .smp.minimal .rank{border-top:1px solid #f0f1f3;color:#6b7280}
+    .smp.minimal .gate button{background:#fff;border:1px solid #e5e7eb;color:#374151}
+    .smp.minimal .gate .primary{background:#4f46e5;color:#fff;border-color:#4f46e5}
+
+    /* 3 · RESEARCH CONSOLE (dark, IDE, cyan) */
+    .smp.console{background:#0f1115;color:#e6e8ec;border-color:#262b35;font-family:-apple-system,'Segoe UI',Roboto,sans-serif}
+    .smp.console .bar{border-bottom:1px solid #262b35}
+    .smp.console .cost{font-family:ui-monospace,Menlo,monospace;color:#4ade80}
+    .smp.console .seat{background:#171a21;border:1px solid #262b35}
+    .smp.console .vend,.smp.console .st{color:#a4abb8}
+    .smp.console .st{font-family:ui-monospace,Menlo,monospace}
+    .smp.console .who{color:#6ea8fe}
+    .smp.console .msg em{color:#6ea8fe}
+    .smp.console .rank{border-top:1px solid #262b35;font-family:ui-monospace,Menlo,monospace;color:#a4abb8}
+    .smp.console .gate button{background:#1e222b;border:1px solid #2a3b5e;color:#a4abb8}
+    .smp.console .gate .primary{background:#2a3b5e;color:#e6e8ec;border-color:#6ea8fe}
+
+    /* 4 · PLAYFUL PERSONAS (colorful, rounded, avatars) */
+    .smp.personas{background:#f7f7fb;color:#1f2330;border-color:#e7e7f0;font-family:-apple-system,'Segoe UI',Roboto,sans-serif}
+    .smp.personas .bar{background:#fff;border-bottom:1px solid #ecebf3}
+    .smp.personas .cost{background:#eef0ff;color:#4f46e5;border-radius:999px;padding:3px 10px;font-weight:600}
+    .smp.personas .seats{padding:16px}
+    .smp.personas .seat{background:#fff;border-radius:16px;border:1px solid #efeef6;border-top:3px solid #ccc;box-shadow:0 6px 16px rgba(30,25,70,.07)}
+    .smp.personas .seat.a{border-top-color:#3b82f6}
+    .smp.personas .seat.c{border-top-color:#a855f7}
+    .smp.personas .seat.j{border-top-color:#22c55e}
+    .smp.personas .who::before{margin-right:6px}
+    .smp.personas .seat.a .who::before{content:"🔵"}
+    .smp.personas .seat.c .who::before{content:"🟣"}
+    .smp.personas .seat.j .who::before{content:"🟢"}
+    .smp.personas .st{color:#7c7a90}
+    .smp.personas .msg{background:#fff;border-radius:14px;padding:9px 13px;box-shadow:0 2px 8px rgba(0,0,0,.05)}
+    .smp.personas .msg em{font-weight:700;color:#a855f7}
+    .smp.personas .rank span{background:#fff;border-radius:999px;padding:3px 10px;box-shadow:0 2px 6px rgba(0,0,0,.05)}
+    .smp.personas .gate button{border-radius:999px;background:#fff;border:1px solid #e6e5f0;color:#555}
+    .smp.personas .gate .primary{background:linear-gradient(90deg,#6366f1,#a855f7);color:#fff;border:0}
+
+    /* 5 · TERMINAL (nerd / CRT green, scanlines, blinking cursor) */
+    .smp.terminal{background:#05080a;color:#33ff77;border-color:#0c3a1e;position:relative;
+      font-family:ui-monospace,'SF Mono',Menlo,Consolas,monospace;text-shadow:0 0 4px rgba(51,255,119,.35)}
+    .smp.terminal::after{content:"";position:absolute;inset:0;pointer-events:none;z-index:2;
+      background:repeating-linear-gradient(0deg,rgba(0,0,0,0) 0 2px,rgba(0,0,0,.16) 2px 4px)}
+    .smp.terminal>*{position:relative;z-index:1}
+    .smp.terminal .bar{border-bottom:1px dashed #0c5a2e}
+    .smp.terminal .topic::before{content:"> "}
+    .smp.terminal .topic::after{content:"_";animation:blink 1.05s steps(1) infinite}
+    @keyframes blink{50%{opacity:0}}
+    .smp.terminal .cost{color:#aaffcc}
+    .smp.terminal .seats{flex-direction:column;gap:3px;padding:10px 16px}
+    .smp.terminal .seat{flex-direction:row;flex-wrap:wrap;align-items:baseline;gap:10px;border:0;padding:1px 0}
+    .smp.terminal .who::before{content:"["} .smp.terminal .who::after{content:"]"}
+    .smp.terminal .vend{opacity:.55}
+    .smp.terminal .delib{padding-top:6px}
+    .smp.terminal .msg em{color:#aaffcc}
+    .smp.terminal .rank{border-top:1px dashed #0c5a2e}
+    .smp.terminal .gate button{background:none;border:0;color:#33ff77}
+    .smp.terminal .gate button::before{content:"[ "} .smp.terminal .gate button::after{content:" ]"}
+    .smp.terminal .gate .primary{color:#aaffcc;font-weight:700}
+
+    /* 6 · ARENA (creative / gimmick, neon, gamified) */
+    .smp.arena{background:#0a0420;color:#efe9ff;border-color:#2a1a4a;font-family:-apple-system,'Segoe UI',Roboto,sans-serif}
+    .smp.arena .bar{background:linear-gradient(90deg,#7c3aed,#db2777);color:#fff}
+    .smp.arena .topic::before{content:"⚔ "}
+    .smp.arena .cost{background:rgba(0,0,0,.28);padding:3px 9px;border-radius:999px;font-weight:700}
+    .smp.arena .seats{padding:16px;gap:12px}
+    .smp.arena .seat{background:#150a30;border:1px solid #36205e;border-radius:13px}
+    .smp.arena .seat.a{box-shadow:0 0 20px rgba(59,130,246,.28)}
+    .smp.arena .seat.c{box-shadow:0 0 20px rgba(168,85,247,.34)}
+    .smp.arena .seat.j{box-shadow:0 0 20px rgba(34,197,94,.26)}
+    .smp.arena .who{text-transform:uppercase;letter-spacing:.6px;font-size:14px}
+    .smp.arena .vend,.smp.arena .st{color:#b9a9e6}
+    .smp.arena .msg em{color:#f0abfc;font-weight:700}
+    .smp.arena .rank span{background:#150a30;border:1px solid #36205e;border-radius:999px;padding:4px 11px}
+    .smp.arena .rank span:first-child{background:linear-gradient(90deg,#f59e0b,#ef4444);color:#fff;border:0;font-weight:800}
+    .smp.arena .gate button{background:#1c0f3a;border:1px solid #36205e;color:#cbb6ff}
+    .smp.arena .gate .primary{background:linear-gradient(90deg,#f59e0b,#ef4444);color:#fff;border:0;font-weight:800}
+
+    /* ============ PART 2 · alternative structures (.demo) ============ */
+    .demo, .demo *{box-sizing:border-box;margin:0;padding:0;font-family:inherit}
+    .demo{border:1px solid var(--border);border-radius:14px;overflow:hidden;margin-bottom:8px;font-size:12.5px;line-height:1.45}
+    .demo button{font:inherit;cursor:pointer}
+
+    /* 7 · GROUP CHAT (Discord-style) */
+    .demo.gc{display:grid;grid-template-columns:128px 1fr 124px;background:#313338;color:#dbdee1;
+      font-family:-apple-system,'Segoe UI',Roboto,sans-serif;min-height:300px}
+    .demo.gc .gc-chan{background:#2b2d31;padding:10px}
+    .demo.gc .gc-h{font-size:10px;text-transform:uppercase;color:#949ba4;letter-spacing:.4px;margin:6px 4px}
+    .demo.gc .gc-ci{padding:5px 8px;border-radius:6px;color:#949ba4;margin-bottom:2px}
+    .demo.gc .gc-ci.on{background:#404249;color:#fff}
+    .demo.gc .gc-main{display:flex;flex-direction:column;min-width:0}
+    .demo.gc .gc-top{padding:10px 14px;border-bottom:1px solid #232428;font-weight:600;color:#f2f3f5}
+    .demo.gc .gc-msgs{flex:1;padding:12px 14px;display:flex;flex-direction:column;gap:12px}
+    .demo.gc .m{display:flex;gap:10px}
+    .demo.gc .av{width:30px;height:30px;border-radius:50%;flex:0 0 30px;display:flex;align-items:center;justify-content:center;color:#fff;font-weight:700;font-size:12px}
+    .demo.gc .a{background:#3b82f6}.demo.gc .c{background:#a855f7}.demo.gc .j{background:#22c55e}
+    .demo.gc .nm{font-weight:600}.demo.gc .nm.a{color:#8fb0ff}.demo.gc .nm.c{color:#d3a6ff}.demo.gc .nm.j{color:#86e8a0}
+    .demo.gc .ts{font-size:10px;color:#949ba4;margin-left:6px}
+    .demo.gc .bd{margin-top:2px}.demo.gc .bd b{color:#c9d1ff}
+    .demo.gc .rx{margin-top:4px;display:inline-block;background:#2b2d31;border:1px solid #404249;border-radius:8px;padding:1px 7px;font-size:11px}
+    .demo.gc .sys{justify-content:center;color:#949ba4;font-size:11px;text-align:center}
+    .demo.gc .gc-comp{padding:10px 14px;border-top:1px solid #232428;display:flex;gap:6px;flex-wrap:wrap}
+    .demo.gc .gc-comp button{background:#404249;border:0;color:#dbdee1;border-radius:8px;padding:6px 10px;font-size:11.5px}
+    .demo.gc .gc-comp .primary{background:#5865f2;color:#fff}
+    .demo.gc .gc-mem{background:#2b2d31;padding:12px}
+    .demo.gc .mb{display:flex;align-items:center;gap:8px;padding:4px 2px}
+    .demo.gc .dot{width:9px;height:9px;border-radius:50%}.demo.gc .dot.y{background:#f59e0b}
+
+    /* 8 · DM / MESSAGING (iMessage-style) */
+    .demo.dm{background:#e9e9eb;display:flex;justify-content:center;padding:18px;font-family:-apple-system,'Segoe UI',Roboto,sans-serif}
+    .demo.dm .phone{width:300px;background:#fff;border-radius:28px;overflow:hidden;box-shadow:0 12px 34px rgba(0,0,0,.18)}
+    .demo.dm .ph-h{background:#f6f6f6;border-bottom:1px solid #e3e3e6;padding:12px;text-align:center;font-weight:600;color:#111}
+    .demo.dm .ph-h small{display:block;font-weight:400;color:#8e8e93;font-size:10px;margin-top:1px}
+    .demo.dm .ph-b{padding:12px;display:flex;flex-direction:column;gap:7px;min-height:220px}
+    .demo.dm .b{max-width:82%;padding:8px 11px;border-radius:16px}
+    .demo.dm .in{align-self:flex-start;background:#e9e9eb;color:#111;border-bottom-left-radius:5px}
+    .demo.dm .in .who{display:block;font-size:9.5px;color:#8e8e93;margin-bottom:1px}
+    .demo.dm .out{align-self:flex-end;background:#0a84ff;color:#fff;border-bottom-right-radius:5px}
+    .demo.dm .ph-f{display:flex;gap:6px;flex-wrap:wrap;padding:10px;border-top:1px solid #eee}
+    .demo.dm .chip{border:1px solid #0a84ff;color:#0a84ff;border-radius:999px;padding:5px 11px;background:#fff;font-size:11.5px}
+    .demo.dm .chip.primary{background:#0a84ff;color:#fff}
+
+    /* 9 · PIXEL AGENTS (retro RPG) */
+    .demo.px{background:#1a1c2c;color:#f4f4f4;font-family:ui-monospace,'Courier New',monospace}
+    .demo.px .scene{background:linear-gradient(#3b3f5c,#1a1c2c);padding:20px 16px 16px;display:flex;justify-content:space-around;align-items:flex-end;gap:8px;position:relative}
+    .demo.px .ch{display:flex;flex-direction:column;align-items:center;gap:4px}
+    .demo.px .sprite{width:40px;height:40px;border-radius:3px;position:relative;box-shadow:0 0 0 3px #11131f,5px 5px 0 3px rgba(0,0,0,.35)}
+    .demo.px .sprite::before{content:"";position:absolute;top:15px;left:10px;width:5px;height:5px;background:#11131f;box-shadow:13px 0 #11131f}
+    .demo.px .sprite.a{background:#41a6f6}.demo.px .sprite.c{background:#b86bff}.demo.px .sprite.j{background:#5ad067}
+    .demo.px .nm{font-size:11px}
+    .demo.px .hp{width:48px;height:7px;background:#11131f;border:1px solid #3b3f5c;border-radius:2px;overflow:hidden}
+    .demo.px .hp i{display:block;height:100%;background:#5ad067}
+    .demo.px .bubble{position:absolute;top:6px;left:50%;transform:translateX(-50%);background:#fff;color:#1a1c2c;padding:5px 9px;border-radius:6px;font-size:10.5px;box-shadow:3px 3px 0 rgba(0,0,0,.35);white-space:nowrap}
+    .demo.px .dialog{margin:12px;border:3px solid #f4f4f4;border-radius:4px;background:#11131f;padding:12px}
+    .demo.px .dialog .spk{color:#b86bff}
+    .demo.px .cur{animation:blink 1s steps(1) infinite}
+    .demo.px .pg{display:flex;gap:8px;flex-wrap:wrap;padding:0 13px 14px}
+    .demo.px .pg button{font-size:11px;background:#11131f;color:#f4f4f4;border:2px solid #f4f4f4;border-radius:3px;padding:5px 9px}
+    .demo.px .pg .primary{background:#f6c453;color:#1a1c2c;border-color:#f6c453}
+
+    /* 10 · SAAS DASHBOARD */
+    .demo.saas{background:#f7f8fa;color:#0f172a;font-family:-apple-system,'Segoe UI',Roboto,sans-serif;padding:14px}
+    .demo.saas .kpis{display:flex;gap:10px;margin-bottom:12px}
+    .demo.saas .kpi{flex:1;background:#fff;border:1px solid #eceef1;border-radius:10px;padding:10px 12px}
+    .demo.saas .kpi .k{font-size:9.5px;text-transform:uppercase;color:#94a3b8;letter-spacing:.5px}
+    .demo.saas .kpi .v{font-size:18px;font-weight:700;margin-top:2px}
+    .demo.saas .panel{background:#fff;border:1px solid #eceef1;border-radius:10px;padding:12px;margin-bottom:10px}
+    .demo.saas .ph{font-weight:700;font-size:12px;margin-bottom:8px}
+    .demo.saas .row{display:flex;align-items:center;gap:10px;padding:7px 0;border-top:1px solid #f1f3f5}
+    .demo.saas .row .sc{margin-left:auto;color:#64748b;font-variant-numeric:tabular-nums}
+    .demo.saas .badge{font-size:10px;padding:2px 8px;border-radius:999px;font-weight:600}
+    .demo.saas .badge.run{background:#eff6ff;color:#2563eb}.demo.saas .badge.ok{background:#ecfdf5;color:#059669}
+    .demo.saas table{width:100%;border-collapse:collapse;font-size:11.5px}
+    .demo.saas td,.demo.saas th{text-align:left;padding:6px 4px;border-bottom:1px solid #f1f3f5}
+    .demo.saas th{color:#94a3b8;font-weight:600;font-size:10px;text-transform:uppercase}
+    .demo.saas .gate{display:flex;gap:8px;flex-wrap:wrap}
+    .demo.saas .gate button{background:#fff;border:1px solid #e5e7eb;border-radius:8px;padding:7px 12px;font-size:12px;color:#374151}
+    .demo.saas .gate .primary{background:#4f46e5;color:#fff;border-color:#4f46e5}
+
+    /* 11 · KANBAN (macro lifecycle board) */
+    .demo.kanban{background:#f4f5f7;color:#172b4d;font-family:-apple-system,'Segoe UI',Roboto,sans-serif;padding:14px;display:flex;gap:10px}
+    .demo.kanban .col{flex:1;background:#ebecf0;border-radius:10px;padding:8px;min-width:0}
+    .demo.kanban .ch{font-size:10.5px;text-transform:uppercase;color:#5e6c84;letter-spacing:.4px;margin:2px 4px 8px;display:flex;justify-content:space-between}
+    .demo.kanban .kc{background:#fff;border-radius:8px;padding:9px;margin-bottom:7px;box-shadow:0 1px 2px rgba(9,30,66,.18);border-top:3px solid #ccc}
+    .demo.kanban .kc.a{border-top-color:#3b82f6}.demo.kanban .kc.c{border-top-color:#a855f7}.demo.kanban .kc.j{border-top-color:#22c55e}
+    .demo.kanban .kc.win{outline:2px solid #f59e0b;outline-offset:-1px}
+    .demo.kanban .kc .t{font-weight:600;font-size:11.5px}
+    .demo.kanban .kc .s{color:#5e6c84;font-size:11px;margin-top:2px}
+    .demo.kanban .col.lock{opacity:.6}
+    .demo.kanban .lockmsg{font-size:11px;color:#5e6c84;text-align:center;padding:14px 6px;border:1.5px dashed #c1c7d0;border-radius:8px}
+    .demo.kanban .gatebtn{margin-top:6px;width:100%;background:#0052cc;color:#fff;border:0;border-radius:6px;padding:7px;font-size:11px}
+
+    /* 12 · CANVAS / MIND-MAP */
+    .demo.canvas{position:relative;height:300px;background:#fbfdff;
+      background-image:radial-gradient(#dbe4ef 1.1px,transparent 1.1px);background-size:16px 16px;
+      font-family:-apple-system,'Segoe UI',Roboto,sans-serif}
+    .demo.canvas svg{position:absolute;inset:0;width:100%;height:100%;pointer-events:none}
+    .demo.canvas .node{position:absolute;background:#fff;border:1px solid #d6e0ec;border-radius:10px;
+      padding:8px 10px;box-shadow:0 4px 12px rgba(30,50,80,.08);max-width:160px;z-index:1}
+    .demo.canvas .node .nt{font-weight:600;font-size:11.5px}
+    .demo.canvas .node .ns{font-size:10.5px;color:#64748b;margin-top:1px}
+    .demo.canvas .node.topic{top:16px;left:50%;transform:translateX(-50%);background:#0f172a;color:#fff;border:0}
+    .demo.canvas .node.topic .ns{color:#cbd5e1}
+    .demo.canvas .node.a{top:128px;left:18px;border-top:3px solid #3b82f6}
+    .demo.canvas .node.c{top:118px;left:50%;transform:translateX(-50%);border-top:3px solid #a855f7}
+    .demo.canvas .node.j{top:128px;right:18px;border-top:3px solid #22c55e}
+    .demo.canvas .node.win{bottom:20px;left:50%;transform:translateX(-50%);border:2px solid #f59e0b}
+    .demo.canvas .gate{position:absolute;bottom:14px;right:14px;display:flex;gap:6px;z-index:2}
+    .demo.canvas .gate button{background:#fff;border:1px solid #d6e0ec;border-radius:8px;padding:6px 10px;font-size:11px;color:#334155}
+    .demo.canvas .gate .primary{background:#f59e0b;color:#fff;border:0}
+
+    /* ============ PART 3 · out-there ============ */
+    /* 13 · WAR ROOM (3D table) */
+    .demo.war{position:relative;min-height:320px;overflow:hidden;color:#d6e4ff;perspective:800px;
+      background:radial-gradient(circle at 50% 22%,#1b2748,#070a14);font-family:-apple-system,'Segoe UI',Roboto,sans-serif}
+    .demo.war .screen{position:absolute;top:14px;left:50%;transform:translateX(-50%);width:80%;text-align:center;
+      background:#0c1730;border:1px solid #2c4a86;border-radius:8px;padding:8px 10px;box-shadow:0 0 24px rgba(60,110,200,.35)}
+    .demo.war .screen .t{font-size:10px;color:#7fa6e6;text-transform:uppercase;letter-spacing:1.5px}
+    .demo.war .screen .r{font-size:12.5px;margin-top:3px}
+    .demo.war .table{position:absolute;top:172px;left:50%;width:240px;height:128px;transform:translateX(-50%) rotateX(60deg);
+      background:radial-gradient(ellipse at center,#27457e,#10203f);border-radius:50%;border:2px solid #3c63a8;
+      box-shadow:0 0 50px rgba(70,120,220,.4),inset 0 0 30px rgba(0,0,0,.6)}
+    .demo.war .seat{position:absolute;background:rgba(12,23,48,.94);border:1px solid #3c63a8;border-radius:10px;
+      padding:7px 10px;text-align:center;min-width:94px;box-shadow:0 0 18px rgba(60,110,200,.3)}
+    .demo.war .seat .n{font-weight:700}.demo.war .seat .s{font-size:10.5px;color:#9bb8e8}
+    .demo.war .seat.a{top:118px;left:50%;transform:translateX(-50%);border-top:2px solid #3b82f6}
+    .demo.war .seat.c{bottom:80px;left:11%;border-top:2px solid #a855f7}
+    .demo.war .seat.j{bottom:80px;right:11%;border-top:2px solid #22c55e}
+    .demo.war .gate{position:absolute;bottom:12px;left:50%;transform:translateX(-50%);display:flex;gap:6px}
+    .demo.war .gate button{background:#13234a;border:1px solid #2c4a86;color:#cfe0ff;border-radius:8px;padding:6px 10px;font-size:11px}
+    .demo.war .gate .primary{background:linear-gradient(90deg,#f59e0b,#ef4444);color:#fff;border:0}
+
+    /* 14 · NEWSPAPER / ZINE */
+    .demo.news{background:#f4f1e8;color:#1a1a1a;font-family:Georgia,'Times New Roman',serif;padding:16px}
+    .demo.news .mast{text-align:center;border-bottom:3px double #1a1a1a;padding-bottom:8px}
+    .demo.news .mast .ttl{font-size:24px;font-weight:900;letter-spacing:1px;font-variant:small-caps}
+    .demo.news .mast .sub{font-size:9px;text-transform:uppercase;letter-spacing:2.5px;color:#555;margin-top:2px}
+    .demo.news .head{font-size:19px;font-weight:800;line-height:1.15;text-align:center;margin:10px 0 3px}
+    .demo.news .dek{text-align:center;font-style:italic;color:#444;font-size:12px;margin-bottom:10px}
+    .demo.news .cols{column-count:3;column-gap:16px;column-rule:1px solid #cfc7b3;font-size:11px;text-align:justify}
+    .demo.news .ch{font-weight:700;font-variant:small-caps;font-size:12px}
+    .demo.news .verdict{margin-top:10px;border:2px solid #1a1a1a;padding:8px 10px;font-size:12px}
+    .demo.news .verdict .ch{display:block;text-align:center;border-bottom:1px solid #1a1a1a;margin-bottom:4px}
+    .demo.news .gate{margin-top:8px;display:flex;gap:8px;flex-wrap:wrap}
+    .demo.news .gate button{background:#1a1a1a;color:#f4f1e8;border:0;padding:6px 11px;font-family:inherit;font-size:11px}
+    .demo.news .gate .ghost{background:none;color:#1a1a1a;border:1px solid #1a1a1a}
+
+    /* 15 · TERMINAL MULTIPLEXER (tmux) */
+    .demo.tmux{background:#0b0e12;color:#cdd6e0;font-family:ui-monospace,Menlo,Consolas,monospace;font-size:11px}
+    .demo.tmux .tabs{background:#11161d;display:flex;border-bottom:1px solid #1c2530}
+    .demo.tmux .tab{padding:6px 12px;color:#6b7787}.demo.tmux .tab.on{background:#0b0e12;color:#7ee0a0;border-top:2px solid #7ee0a0}
+    .demo.tmux .grid{display:grid;grid-template-columns:1fr 1fr 1fr;gap:1px;background:#1c2530}
+    .demo.tmux .pane{background:#0b0e12;padding:8px 9px;min-height:88px}
+    .demo.tmux .pane .ph{color:#7aa2f7;border-bottom:1px dashed #1c2530;padding-bottom:3px;margin-bottom:5px}
+    .demo.tmux .pane .l{color:#9aa6b2}.demo.tmux .pane .l .g{color:#7ee0a0}
+    .demo.tmux .dl{background:#0b0e12;border-top:1px solid #1c2530;padding:8px 9px}
+    .demo.tmux .dl .l b{color:#bb9af7}
+    .demo.tmux .status{background:#7ee0a0;color:#0b0e12;display:flex;justify-content:space-between;padding:3px 10px;font-weight:700}
+    .demo.tmux .gate{display:flex;border-top:1px solid #1c2530}
+    .demo.tmux .gate button{flex:1;background:#11161d;color:#cdd6e0;border:0;border-right:1px solid #1c2530;padding:7px;font-size:11px}
+    .demo.tmux .gate .primary{background:#19233a;color:#7aa2f7}
+
+    /* 16 · RADIO PANEL SHOW */
+    .demo.radio{background:#15110f;color:#f3e9df;font-family:-apple-system,'Segoe UI',Roboto,sans-serif;padding:16px}
+    .demo.radio .top{display:flex;align-items:center;gap:10px}
+    .demo.radio .onair{background:#e23b3b;color:#fff;font-weight:800;font-size:10px;letter-spacing:1px;padding:3px 8px;border-radius:4px;box-shadow:0 0 12px rgba(226,59,59,.6)}
+    .demo.radio .show{font-weight:700}.demo.radio .show small{display:block;color:#b8a999;font-weight:400;font-size:10px}
+    .demo.radio .wave{display:flex;align-items:center;gap:2px;height:32px;margin:10px 0}
+    .demo.radio .wave i{flex:1;background:linear-gradient(#f0a35e,#e2683b);border-radius:1px;min-height:3px}
+    .demo.radio .now{font-size:11px;color:#f0a35e;margin-bottom:7px}
+    .demo.radio .tx{display:flex;flex-direction:column;gap:6px;font-size:12px}
+    .demo.radio .tx .ts{color:#8a7c70;font-family:ui-monospace,Menlo,monospace;font-size:10.5px;margin-right:6px}
+    .demo.radio .tx b.a{color:#8fb0ff}.demo.radio .tx b.c{color:#c9a0ff}.demo.radio .tx b.j{color:#86e8a0}
+    .demo.radio .player{display:flex;align-items:center;gap:9px;margin-top:12px;background:#221a16;border-radius:999px;padding:7px 13px}
+    .demo.radio .player .pl{font-size:13px}
+    .demo.radio .player .bar{flex:1;height:4px;background:#3a2e27;border-radius:2px;position:relative}
+    .demo.radio .player .bar::before{content:"";position:absolute;left:0;top:0;height:100%;width:62%;background:#f0a35e;border-radius:2px}
+    .demo.radio .gate{display:flex;gap:6px;flex-wrap:wrap;margin-top:12px}
+    .demo.radio .gate button{background:#221a16;border:1px solid #3a2e27;color:#f3e9df;border-radius:8px;padding:6px 10px;font-size:11px}
+    .demo.radio .gate .primary{background:#e2683b;color:#fff;border:0}
+
+    /* 17 · CARD BATTLE (TCG) */
+    .demo.tcg{background:radial-gradient(circle at 50% 0%,#1a2138,#0b0f1a);padding:16px;font-family:-apple-system,'Segoe UI',Roboto,sans-serif}
+    .demo.tcg .cards{display:flex;gap:12px;justify-content:center}
+    .demo.tcg .card{width:150px;border-radius:12px;padding:7px;border:2px solid #44507a;background:linear-gradient(160deg,#283155,#141828);color:#e7ecff;box-shadow:0 6px 16px rgba(0,0,0,.45)}
+    .demo.tcg .card.win{border-color:#f6c453;box-shadow:0 0 22px rgba(246,196,83,.55)}
+    .demo.tcg .cn{display:flex;justify-content:space-between;align-items:center;font-weight:700;font-size:11px}
+    .demo.tcg .cost{background:#f6c453;color:#16182a;border-radius:50%;width:19px;height:19px;display:flex;align-items:center;justify-content:center;font-size:9px;font-weight:800;flex:0 0 19px}
+    .demo.tcg .art{height:44px;border-radius:6px;margin:5px 0;background:linear-gradient(135deg,#3b82f6,#60a5fa)}
+    .demo.tcg .card.c .art{background:linear-gradient(135deg,#a855f7,#ec4899)}.demo.tcg .card.j .art{background:linear-gradient(135deg,#22c55e,#10b981)}
+    .demo.tcg .type{font-size:8.5px;color:#9fb0e0;text-transform:uppercase;letter-spacing:.5px}
+    .demo.tcg .stats{margin-top:5px;display:flex;flex-direction:column;gap:3px}
+    .demo.tcg .stat{display:flex;align-items:center;gap:5px;font-size:9px;color:#c3cdf0}
+    .demo.tcg .stat .lab{width:26px}
+    .demo.tcg .stat .b{flex:1;height:5px;background:#1b2238;border-radius:3px;overflow:hidden}
+    .demo.tcg .stat .b i{display:block;height:100%;background:#7aa2f7}
+    .demo.tcg .gate{display:flex;gap:6px;justify-content:center;margin-top:13px}
+    .demo.tcg .gate button{background:#1b2238;border:1px solid #44507a;color:#cdd6f5;border-radius:8px;padding:6px 11px;font-size:11px}
+    .demo.tcg .gate .primary{background:#f6c453;color:#16182a;border:0;font-weight:700}
+
+    /* ============ PART 4 · lifecycle-framed (macro A→B→C) ============ */
+    /* 18 · METRO / JOURNEY MAP */
+    .demo.metro{background:#fbfbfd;color:#1a1a2e;font-family:-apple-system,'Segoe UI',Roboto,sans-serif;padding:22px 20px 16px}
+    .demo.metro .line{position:relative;display:flex;justify-content:space-between;margin:6px 24px 20px}
+    .demo.metro .line::before{content:"";position:absolute;top:10px;left:0;right:0;height:4px;background:#dcdeec;border-radius:2px}
+    .demo.metro .line .fill{position:absolute;top:10px;left:0;width:17%;height:4px;background:#4f46e5;border-radius:2px}
+    .demo.metro .stn{position:relative;text-align:center;z-index:1;width:33%}
+    .demo.metro .stn .dot{width:24px;height:24px;border-radius:50%;background:#fff;border:4px solid #dcdeec;margin:0 auto}
+    .demo.metro .stn.on .dot{border-color:#4f46e5;box-shadow:0 0 0 4px rgba(79,70,229,.18)}
+    .demo.metro .stn .nm{font-weight:700;font-size:12px;margin-top:7px}
+    .demo.metro .stn .sub{font-size:10px;color:#7a7a90}
+    .demo.metro .stn.lock{opacity:.5}
+    .demo.metro .stops{display:flex;justify-content:center;gap:6px;margin:8px 0 4px}
+    .demo.metro .stops span{font-size:9.5px;color:#7a7a90;border:1px solid #e2e3ee;border-radius:999px;padding:1px 7px}
+    .demo.metro .stops span.done{background:#eef0ff;color:#4f46e5;border-color:#cfd2f5}
+    .demo.metro .panel{background:#fff;border:1px solid #ecedf5;border-radius:10px;padding:10px 12px;font-size:11.5px;margin-top:8px}
+    .demo.metro .gate{display:flex;gap:8px;margin-top:8px}
+    .demo.metro .gate button{background:#fff;border:1px solid #e5e7eb;border-radius:8px;padding:6px 11px;font-size:11px;color:#374151}
+    .demo.metro .gate .primary{background:#4f46e5;color:#fff;border:0}
+
+    /* 19 · QUEST MAP (game world) */
+    .demo.quest{background:linear-gradient(#10204a,#0a1024);color:#e6eeff;font-family:ui-monospace,Menlo,Consolas,monospace;padding:18px;position:relative}
+    .demo.quest .banner{text-align:center;font-size:11px;color:#7ee0a0;letter-spacing:1px;margin-bottom:14px}
+    .demo.quest .map{display:flex;align-items:center;justify-content:space-between;gap:6px;padding:0 8px}
+    .demo.quest .lvl{text-align:center;flex:1}
+    .demo.quest .lvl .ico{width:58px;height:58px;border-radius:16px;margin:0 auto;display:flex;align-items:center;justify-content:center;font-size:24px;
+      background:#13234a;border:3px solid #2c4a86;box-shadow:0 6px 0 #0a1024}
+    .demo.quest .lvl.on .ico{border-color:#7ee0a0;box-shadow:0 0 22px rgba(126,224,160,.5),0 6px 0 #0a1024;background:#143a2e}
+    .demo.quest .lvl.lock{opacity:.6}
+    .demo.quest .lvl .nm{font-size:11px;margin-top:7px;font-weight:700}
+    .demo.quest .lvl .st{font-size:9.5px;color:#9bb8e8}
+    .demo.quest .conn{flex:0 0 30px;border-top:3px dotted #2c4a86;margin-top:-22px}
+    .demo.quest .gate{display:flex;gap:6px;justify-content:center;margin-top:16px}
+    .demo.quest .gate button{background:#13234a;border:1px solid #2c4a86;color:#cfe0ff;border-radius:8px;padding:6px 11px;font-size:11px}
+    .demo.quest .gate .primary{background:#7ee0a0;color:#0a1024;border:0;font-weight:700}
+
+    /* ============ PART 5 · blends ============ */
+    /* 20 · GROUP CHAT + score cards (reuses .gc; adds an inline embed of stat cards) */
+    .demo.gctcg .embed{background:#2b2d31;border-left:3px solid #5865f2;border-radius:6px;padding:9px 10px;margin-top:3px}
+    .demo.gctcg .embed .eh{font-size:11px;color:#949ba4;margin-bottom:8px}
+    .demo.gctcg .ecards{display:flex;gap:7px}
+    .demo.gctcg .ecard{flex:1;background:#1e1f22;border:1px solid #3a3c42;border-radius:8px;padding:8px}
+    .demo.gctcg .ecard.win{border-color:#f6c453;box-shadow:0 0 12px rgba(246,196,83,.3)}
+    .demo.gctcg .ecard .et{display:flex;justify-content:space-between;font-size:10.5px;font-weight:700;margin-bottom:6px}
+    .demo.gctcg .ecard.a .nm{color:#8fb0ff}.demo.gctcg .ecard.c .nm{color:#d3a6ff}.demo.gctcg .ecard.j .nm{color:#86e8a0}
+    .demo.gctcg .ecard .cost{color:#f6c453}
+    .demo.gctcg .ecard .s{display:flex;align-items:center;gap:5px;font-size:8.5px;color:#b5bac1;margin-bottom:2px}
+    .demo.gctcg .ecard .s .lab{width:22px}
+    .demo.gctcg .ecard .s .b{flex:1;height:4px;background:#111214;border-radius:2px;overflow:hidden}
+    .demo.gctcg .ecard .s .b i{display:block;height:100%;background:#5865f2}
+    .demo.gctcg .ecard.win .s .b i{background:#f6c453}
+
+    /* 21 · TMUX + ASCII score cards (reuses .tmux) */
+    .demo.tmuxtcg .pane.win .ph{color:#f6c453}
+    .demo.tmuxtcg .card{font-size:11px;line-height:1.5}
+    .demo.tmuxtcg .card .nmline{color:#cdd6e0}.demo.tmuxtcg .card .nmline .cost{color:#f6c453}
+    .demo.tmuxtcg .bl{color:#7ee0a0}.demo.tmuxtcg .pane.win .bl{color:#f6c453}
+    .demo.tmuxtcg .bl .dim{color:#33414f}
+    .demo.tmuxtcg .winbadge{color:#f6c453}
+
+    /* 22 · FLAGSHIP — console shell + lifecycle rail + persona seats + score cards (recommended) */
+    .demo.flagship{background:#0f1115;color:#e6e8ec;border-color:#262b35;font-family:-apple-system,'Segoe UI',Roboto,sans-serif}
+    .demo.flagship .fl-rail{display:flex;align-items:center;gap:8px;padding:9px 14px;border-bottom:1px solid #262b35;font-size:11px;color:#a4abb8}
+    .demo.flagship .stg{display:flex;align-items:center;gap:5px}
+    .demo.flagship .stg .d{width:8px;height:8px;border-radius:50%;background:#2b3340}
+    .demo.flagship .stg.on{color:#e6e8ec}.demo.flagship .stg.on .d{background:#6ea8fe;box-shadow:0 0 8px #6ea8fe}
+    .demo.flagship .sep{color:#3a414e}
+    .demo.flagship .sp{margin-left:auto;color:#6b7280}
+    .demo.flagship .cost{color:#4ade80;font-family:ui-monospace,Menlo,monospace}
+    .demo.flagship .topic{padding:11px 14px 2px;font-weight:600}
+    .demo.flagship .fl-seats{display:flex;gap:9px;padding:8px 14px}
+    .demo.flagship .fs{flex:1;background:#171a21;border:1px solid #262b35;border-left:3px solid #555;border-radius:9px;padding:9px 11px}
+    .demo.flagship .fs.a{border-left-color:#3b82f6}.demo.flagship .fs.c{border-left-color:#a855f7}.demo.flagship .fs.j{border-left-color:#22c55e}
+    .demo.flagship .fs .nm{font-weight:700;font-size:12px}
+    .demo.flagship .fs.a .nm{color:#8fb0ff}.demo.flagship .fs.c .nm{color:#d3a6ff}.demo.flagship .fs.j .nm{color:#86e8a0}
+    .demo.flagship .fs .mt{font-size:10px;color:#a4abb8;font-family:ui-monospace,Menlo,monospace;margin:2px 0 4px}
+    .demo.flagship .fs .gap{font-size:11px;color:#cdd3dd}
+    .demo.flagship .fl-delib{padding:6px 14px;display:flex;flex-direction:column;gap:5px;font-size:12px}
+    .demo.flagship .fl-delib em{font-style:normal;color:#6ea8fe}
+    .demo.flagship .fl-rank{display:flex;gap:8px;padding:8px 14px}
+    .demo.flagship .rc{flex:1;background:#13161c;border:1px solid #262b35;border-radius:9px;padding:8px 9px}
+    .demo.flagship .rc.win{border-color:#6ea8fe;box-shadow:0 0 14px rgba(110,168,254,.25)}
+    .demo.flagship .rc .rt{display:flex;justify-content:space-between;font-size:10.5px;font-weight:700;margin-bottom:5px}
+    .demo.flagship .rc .rt .sc{color:#4ade80;font-family:ui-monospace,Menlo,monospace}
+    .demo.flagship .rc .s{display:flex;align-items:center;gap:5px;font-size:8.5px;color:#a4abb8;margin-bottom:2px}
+    .demo.flagship .rc .s .lab{width:24px}
+    .demo.flagship .rc .s .b{flex:1;height:4px;background:#0b0d11;border-radius:2px;overflow:hidden}
+    .demo.flagship .rc .s .b i{display:block;height:100%;background:#6ea8fe}
+    .demo.flagship .fl-gate{display:flex;gap:7px;flex-wrap:wrap;padding:11px 14px;border-top:1px solid #262b35}
+    .demo.flagship .fl-gate button{background:#1e222b;border:1px solid #2a3b5e;color:#a4abb8;border-radius:8px;padding:7px 12px;font-size:12px}
+    .demo.flagship .fl-gate .primary{background:#2a3b5e;color:#e6e8ec;border-color:#6ea8fe}
+  </style>
+</head>
+<body>
+  <main class="content">
+    <header>
+      <div class="eyebrow">Phase 7 · Design</div>
+      <h1>UI Design Samples</h1>
+      <div class="meta">Drafted 2026-06-08 · static mockups, no backend · the same fake run rendered 22 ways across 5 parts</div>
+    </header>
+
+    <p class="lead">Pick a direction (or a mix). Every sample shows the <strong>same</strong> ideation run — three peers (Aiden/Cathy/Julien) mid-debate, a ranking, the review gate, the live cost — so the only thing changing is the design.</p>
+    <ul>
+      <li><strong>Part 1 · skins</strong> (1–6) — one "council table" web layout, <em>formal → weird</em>.</li>
+      <li><strong>Part 2 · structures</strong> (7–12) — different metaphors: chat, messaging, pixel-game, SaaS, board, canvas.</li>
+      <li><strong>Part 3 · out-there</strong> (13–17) — war room, newspaper, terminal multiplexer, radio show, card battle.</li>
+      <li><strong>Part 4 · lifecycle-framed</strong> (18–19) — the whole A→B→C journey as the frame (metro map, quest map).</li>
+      <li><strong>Part 5 · blends</strong> (20–22) — score cards inside a chat / terminal, plus the recommended flagship.</li>
+    </ul>
+
+    <div class="spectrum"><span>formal</span><div class="track"></div><span>weird</span></div>
+
+    <div class="callout"><div class="label">How to read this</div>
+      These are CSS mockups, not wired to the backend yet. Layout here is the simple "council table" (3 seats → deliberation → ranking → gate); we can apply your chosen taste to any layout from the previous step.</div>
+
+    <div class="callout good"><div class="label">▶ Clickable prototypes</div>
+      Two of these are built as <strong>interactive</strong> static prototypes (no backend — a simulated run you can replay, working gate buttons, and the macro-lifecycle navigation). Open them in a browser:
+      <ul style="margin:8px 0 0">
+        <li><a href="proto-flagship.html">proto-flagship.html</a> — #22 Flagship (console + lifecycle rail + persona seats + score cards)</li>
+        <li><a href="proto-chat.html">proto-chat.html</a> — #20 Group Chat (Discord + stat-card embed; lifecycle = channels)</li>
+        <li><a href="proto-index.html">proto-index.html</a> — chooser linking both</li>
+      </ul>
+      <div style="margin-top:6px;font-size:12.5px;color:var(--ink-faint)">Let each play, then click <code>iterate</code>/<code>amend</code>/<code>conclude</code>/<code>select</code> — <code>select</code> advances the lifecycle. (Open via a local server or directly; they're pure static.)</div>
+    </div>
+
+    <!-- 1 -->
+    <h2>1 · Academic</h2>
+    <div class="smp-meta"><span class="pill"><b>vibe:</b> formal, journal/preprint</span><span class="pill"><b>suits:</b> any stack · Stage C writing</span><span class="pill"><b>gimmick:</b> none — gravitas</span></div>
+    <div class="smp academic">
+      <div class="bar"><span class="topic">Can LLM agents do research better than humans?</span><span class="cost">cost $0.21</span></div>
+      <div class="seats">
+        <div class="seat a"><span class="who">Aiden</span><span class="vend">OpenAI · gpt-5.4</span><span class="st">researching · 4 searches</span><span class="gap">gap: no class-stratified evaluation</span></div>
+        <div class="seat c"><span class="who">Cathy</span><span class="vend">Anthropic · claude-sonnet-4-6</span><span class="st">researching · 6 searches</span><span class="gap">gap: triage cost ignored</span></div>
+        <div class="seat j"><span class="who">Julien</span><span class="vend">Google · gemini-3.5-flash</span><span class="st">proposed</span><span class="gap">SE-HypoEval benchmark</span></div>
+      </div>
+      <div class="delib">
+        <div class="msg"><strong>Cathy</strong> <em>→ @Julien</em>: your evaluation lacks a human baseline.</div>
+        <div class="msg"><strong>Julien</strong> <em>→ @Cathy</em>: agreed — adding a PhD-student cohort.</div>
+      </div>
+      <div class="rank"><span>1. Cathy — 0.74</span><span>2. Julien — 0.73</span><span>3. Aiden — 0.65</span></div>
+      <div class="gate"><button>iterate</button><button>amend</button><button>conclude</button><button class="primary">★ select</button></div>
+    </div>
+
+    <!-- 2 -->
+    <h2>2 · Minimal</h2>
+    <div class="smp-meta"><span class="pill"><b>vibe:</b> clean, neutral SaaS</span><span class="pill"><b>suits:</b> any stack</span><span class="pill"><b>gimmick:</b> restraint as the feature</span></div>
+    <div class="smp minimal">
+      <div class="bar"><span class="topic">Can LLM agents do research better than humans?</span><span class="cost">$0.21</span></div>
+      <div class="seats">
+        <div class="seat a"><span class="who">Aiden</span><span class="vend">OpenAI</span><span class="st">◐ researching · 🔍 4</span><span class="gap">gap: no class-stratified eval</span></div>
+        <div class="seat c"><span class="who">Cathy</span><span class="vend">Anthropic</span><span class="st">◐ researching · 🔍 6</span><span class="gap">gap: triage cost ignored</span></div>
+        <div class="seat j"><span class="who">Julien</span><span class="vend">Google</span><span class="st">✓ proposed</span><span class="gap">SE-HypoEval benchmark</span></div>
+      </div>
+      <div class="delib">
+        <div class="msg"><strong>Cathy</strong> <em>→ @Julien</em> your eval lacks a human baseline</div>
+        <div class="msg"><strong>Julien</strong> <em>→ @Cathy</em> agreed — adding a PhD cohort</div>
+      </div>
+      <div class="rank"><span>1 · Cathy 0.74</span><span>2 · Julien 0.73</span><span>3 · Aiden 0.65</span></div>
+      <div class="gate"><button>iterate</button><button>amend</button><button>conclude</button><button class="primary">★ select</button></div>
+    </div>
+
+    <!-- 3 -->
+    <h2>3 · Research Console</h2>
+    <div class="smp-meta"><span class="pill"><b>vibe:</b> dark, IDE/lab instrument</span><span class="pill"><b>suits:</b> single-file HTML · React</span><span class="pill"><b>gimmick:</b> mono ids, live cost ticker</span><span class="pill"><b>note:</b> matches your plan/ + CLI</span></div>
+    <div class="smp console">
+      <div class="bar"><span class="topic">Can LLM agents do research better than humans?</span><span class="cost">$0.21 ▲</span></div>
+      <div class="seats">
+        <div class="seat a"><span class="who">Aiden</span><span class="vend">openai · gpt-5.4</span><span class="st">◐ research · search ×4</span><span class="gap">gap: no class-stratified eval</span></div>
+        <div class="seat c"><span class="who">Cathy</span><span class="vend">anthropic · sonnet-4-6</span><span class="st">◐ research · search ×6</span><span class="gap">gap: triage cost ignored</span></div>
+        <div class="seat j"><span class="who">Julien</span><span class="vend">gemini · 3.5-flash</span><span class="st">✓ propose</span><span class="gap">SE-HypoEval benchmark</span></div>
+      </div>
+      <div class="delib">
+        <div class="msg"><strong>Cathy</strong> <em>→ @Julien</em> your eval lacks a human baseline</div>
+        <div class="msg"><strong>Julien</strong> <em>→ @Cathy</em> agreed — adding a PhD cohort</div>
+      </div>
+      <div class="rank"><span>1 Cathy 0.74</span><span>2 Julien 0.73</span><span>3 Aiden 0.65</span></div>
+      <div class="gate"><button>[i]terate</button><button>[a]mend</button><button>[c]onclude</button><button class="primary">★ select</button></div>
+    </div>
+
+    <!-- 4 -->
+    <h2>4 · Playful Personas</h2>
+    <div class="smp-meta"><span class="pill"><b>vibe:</b> friendly, characterful</span><span class="pill"><b>suits:</b> React (motion) · HTML</span><span class="pill"><b>gimmick:</b> per-agent color + avatar, typing dots, chat bubbles</span></div>
+    <div class="smp personas">
+      <div class="bar"><span class="topic">Can LLM agents do research better than humans?</span><span class="cost">$0.21</span></div>
+      <div class="seats">
+        <div class="seat a"><span class="who">Aiden</span><span class="vend">OpenAI</span><span class="st">researching… 🔍 4</span><span class="gap">gap: no class-stratified eval</span></div>
+        <div class="seat c"><span class="who">Cathy</span><span class="vend">Anthropic</span><span class="st">researching… 🔍 6</span><span class="gap">gap: triage cost ignored</span></div>
+        <div class="seat j"><span class="who">Julien</span><span class="vend">Google</span><span class="st">✓ proposed</span><span class="gap">SE-HypoEval benchmark</span></div>
+      </div>
+      <div class="delib">
+        <div class="msg"><strong>Cathy</strong> <em>@Julien</em> your eval lacks a human baseline 🤔</div>
+        <div class="msg"><strong>Julien</strong> <em>@Cathy</em> agreed — adding a PhD cohort ✅</div>
+      </div>
+      <div class="rank"><span>🥇 Cathy 0.74</span><span>🥈 Julien 0.73</span><span>🥉 Aiden 0.65</span></div>
+      <div class="gate"><button>↻ iterate</button><button>✎ amend</button><button>✓ conclude</button><button class="primary">★ select</button></div>
+    </div>
+
+    <!-- 5 -->
+    <h2>5 · Terminal <span class="tag">nerd</span></h2>
+    <div class="smp-meta"><span class="pill"><b>vibe:</b> CRT hacker terminal</span><span class="pill"><b>suits:</b> single-file HTML (easy)</span><span class="pill"><b>gimmick:</b> scanlines, blinking cursor, ASCII brackets</span></div>
+    <div class="smp terminal">
+      <div class="bar"><span class="topic">can_llm_agents_research()</span><span class="cost">$0.21</span></div>
+      <div class="seats">
+        <div class="seat a"><span class="who">Aiden</span><span class="vend">openai</span><span class="st">research search×4</span><span class="gap">gap=no-class-stratified-eval</span></div>
+        <div class="seat c"><span class="who">Cathy</span><span class="vend">anthropic</span><span class="st">research search×6</span><span class="gap">gap=triage-cost-ignored</span></div>
+        <div class="seat j"><span class="who">Julien</span><span class="vend">gemini</span><span class="st">propose OK</span><span class="gap">SE-HypoEval</span></div>
+      </div>
+      <div class="delib">
+        <div class="msg">Cathy <em>-&gt; @Julien</em> your eval lacks a human baseline</div>
+        <div class="msg">Julien <em>-&gt; @Cathy</em> ack; adding PhD cohort</div>
+      </div>
+      <div class="rank"><span>1 Cathy 0.74</span><span>2 Julien 0.73</span><span>3 Aiden 0.65</span></div>
+      <div class="gate"><button>iterate</button><button>amend</button><button>conclude</button><button class="primary">select</button></div>
+    </div>
+
+    <!-- 6 -->
+    <h2>6 · Arena <span class="tag">gimmick</span></h2>
+    <div class="smp-meta"><span class="pill"><b>vibe:</b> gamified neon showdown</span><span class="pill"><b>suits:</b> React (animation) best</span><span class="pill"><b>gimmick:</b> glow per contender, animated score bars, "VS" energy</span></div>
+    <div class="smp arena">
+      <div class="bar"><span class="topic">Can LLM agents do research better than humans?</span><span class="cost">$0.21</span></div>
+      <div class="seats">
+        <div class="seat a"><span class="who">Aiden</span><span class="vend">OpenAI</span><span class="st">⚡ researching ×4</span><span class="gap">gap: no class-stratified eval</span></div>
+        <div class="seat c"><span class="who">Cathy</span><span class="vend">Anthropic</span><span class="st">⚡ researching ×6</span><span class="gap">gap: triage cost ignored</span></div>
+        <div class="seat j"><span class="who">Julien</span><span class="vend">Google</span><span class="st">✓ proposed</span><span class="gap">SE-HypoEval</span></div>
+      </div>
+      <div class="delib">
+        <div class="msg"><strong>Cathy</strong> <em>→ @Julien</em> your eval lacks a human baseline</div>
+        <div class="msg"><strong>Julien</strong> <em>→ @Cathy</em> agreed — adding a PhD cohort</div>
+      </div>
+      <div class="rank"><span>🏆 Cathy 0.74</span><span>Julien 0.73</span><span>Aiden 0.65</span></div>
+      <div class="gate"><button>iterate</button><button>amend</button><button>conclude</button><button class="primary">★ SELECT</button></div>
+    </div>
+
+    <hr class="divider" />
+    <h2>Part 2 · Different structures <span class="tag">not just web layouts</span></h2>
+    <p class="lead">The six above all share one "council table" web layout — only the skin changed. These six change the <strong>structure &amp; metaphor</strong>: the run as a chat, a messaging thread, a retro game, a SaaS product, a lifecycle board, or a spatial canvas.</p>
+
+    <!-- 7 -->
+    <h2>7 · Group Chat <span class="tag">Discord-style</span></h2>
+    <div class="smp-meta"><span class="pill"><b>metaphor:</b> the council is a server; you're a member</span><span class="pill"><b>suits:</b> React · HTML</span><span class="pill"><b>gimmick:</b> presence dots, reactions, @mentions, slash-command gate</span></div>
+    <div class="demo gc">
+      <div class="gc-chan">
+        <div class="gc-h">research-council</div>
+        <div class="gc-ci on"># ideation</div>
+        <div class="gc-ci"># wiki</div>
+        <div class="gc-ci"># runs</div>
+        <div class="gc-ci"># experiments</div>
+      </div>
+      <div class="gc-main">
+        <div class="gc-top"># ideation — Can LLM agents do research better than humans?</div>
+        <div class="gc-msgs">
+          <div class="m"><div class="av a">A</div><div><span class="nm a">Aiden</span><span class="ts">APP · now</span><div class="bd">🔍 searched ×4 — gap: no class-stratified evaluation</div></div></div>
+          <div class="m"><div class="av c">C</div><div><span class="nm c">Cathy</span><span class="ts">APP · now</span><div class="bd"><b>@Julien</b> your eval lacks a human baseline</div><div class="rx">👍 2</div></div></div>
+          <div class="m"><div class="av j">J</div><div><span class="nm j">Julien</span><span class="ts">APP · now</span><div class="bd"><b>@Cathy</b> agreed — adding a PhD-student cohort</div></div></div>
+          <div class="m sys">🏁 Council ranked — Cathy 0.74 · Julien 0.73 · Aiden 0.65</div>
+        </div>
+        <div class="gc-comp"><button>/iterate</button><button>/amend</button><button>/conclude</button><button class="primary">/select ★</button></div>
+      </div>
+      <div class="gc-mem">
+        <div class="gc-h">council — 3</div>
+        <div class="mb"><span class="dot a"></span> Aiden</div>
+        <div class="mb"><span class="dot c"></span> Cathy</div>
+        <div class="mb"><span class="dot j"></span> Julien</div>
+        <div class="gc-h">you</div>
+        <div class="mb"><span class="dot y"></span> Wannita</div>
+      </div>
+    </div>
+
+    <!-- 8 -->
+    <h2>8 · Messaging <span class="tag">iMessage-style</span></h2>
+    <div class="smp-meta"><span class="pill"><b>metaphor:</b> you DM the council; they reply</span><span class="pill"><b>suits:</b> React · HTML · mobile-first</span><span class="pill"><b>gimmick:</b> bubbles, quick-reply chips for the gate</span></div>
+    <div class="demo dm">
+      <div class="phone">
+        <div class="ph-h">Research Council<small>Aiden, Cathy, Julien</small></div>
+        <div class="ph-b">
+          <div class="b out">Can LLM agents do research better than humans?</div>
+          <div class="b in"><span class="who">Aiden</span>found a gap: no class-stratified evaluation 🔍×4</div>
+          <div class="b in"><span class="who">Cathy</span>@Julien your eval lacks a human baseline</div>
+          <div class="b in"><span class="who">Julien</span>agreed — adding a PhD cohort ✅</div>
+          <div class="b out">focus on security bugs</div>
+          <div class="b in"><span class="who">Council</span>🏁 Cathy 0.74 · Julien 0.73 · Aiden 0.65</div>
+        </div>
+        <div class="ph-f"><span class="chip">iterate</span><span class="chip">amend</span><span class="chip">conclude</span><span class="chip primary">★ select</span></div>
+      </div>
+    </div>
+
+    <!-- 9 -->
+    <h2>9 · Pixel Agents <span class="tag">retro RPG</span></h2>
+    <div class="smp-meta"><span class="pill"><b>metaphor:</b> a party of characters debating (pixel-agents)</span><span class="pill"><b>suits:</b> React/canvas · HTML</span><span class="pill"><b>gimmick:</b> sprites, score-as-HP bars, RPG dialog box, speech bubbles</span></div>
+    <div class="demo px">
+      <div class="scene">
+        <div class="bubble">@Julien your eval needs a baseline!</div>
+        <div class="ch"><div class="sprite a"></div><div class="nm">Aiden</div><div class="hp"><i style="width:65%"></i></div></div>
+        <div class="ch"><div class="sprite c"></div><div class="nm">Cathy</div><div class="hp"><i style="width:74%"></i></div></div>
+        <div class="ch"><div class="sprite j"></div><div class="nm">Julien</div><div class="hp"><i style="width:73%"></i></div></div>
+      </div>
+      <div class="dialog"><span class="spk">CATHY:</span> Your eval lacks a human baseline — add a PhD-student cohort. <span class="cur">▶</span></div>
+      <div class="pg"><button>ITERATE</button><button>AMEND</button><button>CONCLUDE</button><button class="primary">★ SELECT</button></div>
+    </div>
+
+    <!-- 10 -->
+    <h2>10 · SaaS Dashboard <span class="tag">product/analytics</span></h2>
+    <div class="smp-meta"><span class="pill"><b>metaphor:</b> a research-ops product</span><span class="pill"><b>suits:</b> React (shadcn) · Streamlit</span><span class="pill"><b>gimmick:</b> KPI cards, runs table, status badges, charts</span></div>
+    <div class="demo saas">
+      <div class="kpis">
+        <div class="kpi"><div class="k">cost</div><div class="v">$0.21</div></div>
+        <div class="kpi"><div class="k">tokens</div><div class="v">196k</div></div>
+        <div class="kpi"><div class="k">round</div><div class="v">1</div></div>
+        <div class="kpi"><div class="k">cache</div><div class="v">0%</div></div>
+      </div>
+      <div class="panel">
+        <div class="ph">Active run · Can LLM agents do research better than humans?</div>
+        <div class="row"><span class="badge run">running</span> Aiden — researching · 🔍 4 <span class="sc">0.65</span></div>
+        <div class="row"><span class="badge run">running</span> Cathy — researching · 🔍 6 <span class="sc">0.74</span></div>
+        <div class="row"><span class="badge ok">proposed</span> Julien — SE-HypoEval <span class="sc">0.73</span></div>
+      </div>
+      <div class="panel">
+        <div class="ph">Recent runs</div>
+        <table>
+          <tr><th>id</th><th>topic</th><th>status</th><th>cost</th></tr>
+          <tr><td>…774f</td><td>LLM review vs SAST</td><td><span class="badge ok">done</span></td><td>$0.48</td></tr>
+          <tr><td>…3a21</td><td>flaky-test detection</td><td><span class="badge ok">done</span></td><td>$0.12</td></tr>
+        </table>
+      </div>
+      <div class="gate"><button>iterate</button><button>amend</button><button>conclude</button><button class="primary">★ select</button></div>
+    </div>
+
+    <!-- 11 -->
+    <h2>11 · Lifecycle Board <span class="tag">Kanban</span></h2>
+    <div class="smp-meta"><span class="pill"><b>metaphor:</b> the 3-stage macro lifecycle as columns + approval gates</span><span class="pill"><b>suits:</b> React · HTML</span><span class="pill"><b>gimmick:</b> cards advance Ideation→Experiment→Paper; locked stages</span></div>
+    <div class="demo kanban">
+      <div class="col">
+        <div class="ch"><span>① Ideation</span><span>active</span></div>
+        <div class="kc c win"><div class="t">Cathy · HypoSE-Bench</div><div class="s">★ 0.74 · winner</div></div>
+        <div class="kc j"><div class="t">Julien · SE-HypoEval</div><div class="s">0.73</div></div>
+        <div class="kc a"><div class="t">Aiden · SE-HypoBench</div><div class="s">0.65</div></div>
+        <button class="gatebtn">approve → Experimentation</button>
+      </div>
+      <div class="col lock">
+        <div class="ch"><span>② Experimentation</span><span>🔒</span></div>
+        <div class="lockmsg">unlocks when you approve an idea</div>
+      </div>
+      <div class="col lock">
+        <div class="ch"><span>③ Paper</span><span>🔒</span></div>
+        <div class="lockmsg">scaffold-paper → draft → reviewer</div>
+      </div>
+    </div>
+
+    <!-- 12 -->
+    <h2>12 · Canvas <span class="tag">spatial / mind-map</span></h2>
+    <div class="smp-meta"><span class="pill"><b>metaphor:</b> ideas on an infinite whiteboard</span><span class="pill"><b>suits:</b> React (canvas/flow lib)</span><span class="pill"><b>gimmick:</b> nodes + connectors, drag, zoom, sticky candidates</span></div>
+    <div class="demo canvas">
+      <svg viewBox="0 0 100 100" preserveAspectRatio="none">
+        <line x1="50" y1="12" x2="16" y2="48" stroke="#c3d2e2" stroke-width="0.5"/>
+        <line x1="50" y1="12" x2="50" y2="44" stroke="#c3d2e2" stroke-width="0.5"/>
+        <line x1="50" y1="12" x2="84" y2="48" stroke="#c3d2e2" stroke-width="0.5"/>
+        <line x1="50" y1="50" x2="50" y2="82" stroke="#f0c473" stroke-width="0.6"/>
+      </svg>
+      <div class="node topic"><div class="nt">Can LLMs do research?</div><div class="ns">topic</div></div>
+      <div class="node a"><div class="nt">Aiden</div><div class="ns">gap: class-stratified eval · 0.65</div></div>
+      <div class="node c"><div class="nt">Cathy</div><div class="ns">gap: triage cost · 0.74 ★</div></div>
+      <div class="node j"><div class="nt">Julien</div><div class="ns">SE-HypoEval · 0.73</div></div>
+      <div class="node win"><div class="nt">★ Winner — HypoSE-Bench</div><div class="ns">Cathy · 0.74</div></div>
+      <div class="gate"><button>iterate</button><button class="primary">★ select</button></div>
+    </div>
+
+    <hr class="divider" />
+    <h2>Part 3 · Out-there <span class="tag">maximal gimmick</span></h2>
+    <p class="lead">Pushing the metaphor as far as it'll go — a war-room table, a printed paper, a dev's terminal multiplexer, a live radio panel, and a card battle where each idea is a collectible.</p>
+
+    <!-- 13 -->
+    <h2>13 · War Room <span class="tag">3D table</span></h2>
+    <div class="smp-meta"><span class="pill"><b>metaphor:</b> a strategy table under a big screen</span><span class="pill"><b>suits:</b> React (3D/Three.js) · CSS</span><span class="pill"><b>gimmick:</b> perspective table, seats around it, glowing main display</span></div>
+    <div class="demo war">
+      <div class="screen"><div class="t">main display · ranking</div><div class="r">★ Cathy 0.74 · Julien 0.73 · Aiden 0.65</div></div>
+      <div class="table"></div>
+      <div class="seat a"><div class="n">Aiden</div><div class="s">🔍×4 · 0.65</div></div>
+      <div class="seat c"><div class="n">Cathy</div><div class="s">🔍×6 · 0.74</div></div>
+      <div class="seat j"><div class="n">Julien</div><div class="s">proposed · 0.73</div></div>
+      <div class="gate"><button>iterate</button><button>amend</button><button>conclude</button><button class="primary">★ select</button></div>
+    </div>
+
+    <!-- 14 -->
+    <h2>14 · Newspaper <span class="tag">zine / print</span></h2>
+    <div class="smp-meta"><span class="pill"><b>metaphor:</b> the run as a printed edition</span><span class="pill"><b>suits:</b> HTML · React · great for Stage C (paper)</span><span class="pill"><b>gimmick:</b> masthead, columns, "editor's verdict"</span></div>
+    <div class="demo news">
+      <div class="mast"><div class="ttl">The Research Council Times</div><div class="sub">Vol. I · No. 774 · est. 2026 · price: $0.21</div></div>
+      <div class="head">Council Splits on Whether LLM Agents Out-Research Humans</div>
+      <div class="dek">Three vendors convene; a class-stratified benchmark emerges as front-runner</div>
+      <div class="cols">
+        <div><span class="ch">Aiden reports.</span> A survey of four searches finds no class-stratified evaluation of agent hypotheses, calling existing benchmarks coarse. <span class="ch">Cathy responds.</span> Triage cost is ignored across the literature, she argues, pressing @Julien on the absence of a human baseline. <span class="ch">Julien concedes.</span> Agreeing, he commits to a PhD-student cohort and proposes SE-HypoEval, a repository-grounded design.</div>
+      </div>
+      <div class="verdict"><span class="ch">Editor's Verdict</span> 1. Cathy — HypoSE-Bench (0.74) · 2. Julien — SE-HypoEval (0.73) · 3. Aiden — SE-HypoBench (0.65)</div>
+      <div class="gate"><button class="ghost">iterate</button><button class="ghost">amend</button><button class="ghost">conclude</button><button>★ select</button></div>
+    </div>
+
+    <!-- 15 -->
+    <h2>15 · Terminal Multiplexer <span class="tag">tmux</span></h2>
+    <div class="smp-meta"><span class="pill"><b>metaphor:</b> a dev watching split panes</span><span class="pill"><b>suits:</b> single-file HTML (xterm.js) · TUI</span><span class="pill"><b>gimmick:</b> one pane per agent, status bar, keybind gate</span></div>
+    <div class="demo tmux">
+      <div class="tabs"><div class="tab on">ideation</div><div class="tab">wiki</div><div class="tab">runs</div></div>
+      <div class="grid">
+        <div class="pane"><div class="ph">0:aiden</div><div class="l">🔍 search ×4</div><div class="l">gap: class-strat<span class="g"> ✓</span></div></div>
+        <div class="pane"><div class="ph">1:cathy</div><div class="l">🔍 search ×6</div><div class="l">gap: triage-cost<span class="g"> ✓</span></div></div>
+        <div class="pane"><div class="ph">2:julien</div><div class="l">propose<span class="g"> ✓</span></div><div class="l">SE-HypoEval</div></div>
+      </div>
+      <div class="dl"><div class="l"><b>cathy</b> → @julien: eval lacks a human baseline</div><div class="l"><b>julien</b> → @cathy: ack; adding PhD cohort</div><div class="l">rank: cathy .74 · julien .73 · aiden .65</div></div>
+      <div class="status"><span>council:ideation* r1</span><span>$0.21 · 196k tok</span></div>
+      <div class="gate"><button>^I iterate</button><button>^A amend</button><button>^C conclude</button><button class="primary">^S select</button></div>
+    </div>
+
+    <!-- 16 -->
+    <h2>16 · Radio Panel Show <span class="tag">on air</span></h2>
+    <div class="smp-meta"><span class="pill"><b>metaphor:</b> a live broadcast panel + transcript</span><span class="pill"><b>suits:</b> React · could add real TTS audio</span><span class="pill"><b>gimmick:</b> waveform, "now speaking", scrubber, timestamps</span></div>
+    <div class="demo radio">
+      <div class="top"><span class="onair">● ON AIR</span><span class="show">The Council Hour<small>Can LLM agents do research better than humans?</small></span></div>
+      <div class="wave"><i style="height:30%"></i><i style="height:70%"></i><i style="height:45%"></i><i style="height:90%"></i><i style="height:60%"></i><i style="height:100%"></i><i style="height:40%"></i><i style="height:80%"></i><i style="height:55%"></i><i style="height:95%"></i><i style="height:35%"></i><i style="height:75%"></i><i style="height:50%"></i><i style="height:85%"></i><i style="height:30%"></i><i style="height:65%"></i><i style="height:48%"></i><i style="height:88%"></i></div>
+      <div class="now">🎙 now speaking — Cathy (Anthropic)</div>
+      <div class="tx">
+        <div><span class="ts">00:38</span><b class="a">Aiden:</b> the gap is no class-stratified evaluation.</div>
+        <div><span class="ts">00:51</span><b class="c">Cathy:</b> @Julien your eval lacks a human baseline.</div>
+        <div><span class="ts">01:07</span><b class="j">Julien:</b> agreed — adding a PhD-student cohort.</div>
+      </div>
+      <div class="player"><span class="pl">⏸</span><div class="bar"></div><span>01:07 / 01:44</span></div>
+      <div class="gate"><button>iterate</button><button>amend</button><button>conclude</button><button class="primary">★ select</button></div>
+    </div>
+
+    <!-- 17 -->
+    <h2>17 · Card Battle <span class="tag">TCG</span></h2>
+    <div class="smp-meta"><span class="pill"><b>metaphor:</b> each idea is a collectible card; stats = the score axes</span><span class="pill"><b>suits:</b> React (animation)</span><span class="pill"><b>gimmick:</b> stat bars, $ mana cost, foil winner</span></div>
+    <div class="demo tcg">
+      <div class="cards">
+        <div class="card a"><div class="cn"><span>SE-HypoBench</span><span class="cost">$.07</span></div><div class="art"></div><div class="type">Aiden · OpenAI · benchmark</div><div class="stats">
+          <div class="stat"><span class="lab">NOV</span><span class="b"><i style="width:64%"></i></span></div>
+          <div class="stat"><span class="lab">SND</span><span class="b"><i style="width:60%"></i></span></div>
+          <div class="stat"><span class="lab">FEA</span><span class="b"><i style="width:66%"></i></span></div>
+          <div class="stat"><span class="lab">CLR</span><span class="b"><i style="width:68%"></i></span></div></div></div>
+        <div class="card c win"><div class="cn"><span>HypoSE-Bench ★</span><span class="cost">$.34</span></div><div class="art"></div><div class="type">Cathy · Claude · benchmark</div><div class="stats">
+          <div class="stat"><span class="lab">NOV</span><span class="b"><i style="width:78%"></i></span></div>
+          <div class="stat"><span class="lab">SND</span><span class="b"><i style="width:73%"></i></span></div>
+          <div class="stat"><span class="lab">FEA</span><span class="b"><i style="width:76%"></i></span></div>
+          <div class="stat"><span class="lab">CLR</span><span class="b"><i style="width:75%"></i></span></div></div></div>
+        <div class="card j"><div class="cn"><span>SE-HypoEval</span><span class="cost">$.06</span></div><div class="art"></div><div class="type">Julien · Gemini · benchmark</div><div class="stats">
+          <div class="stat"><span class="lab">NOV</span><span class="b"><i style="width:75%"></i></span></div>
+          <div class="stat"><span class="lab">SND</span><span class="b"><i style="width:70%"></i></span></div>
+          <div class="stat"><span class="lab">FEA</span><span class="b"><i style="width:72%"></i></span></div>
+          <div class="stat"><span class="lab">CLR</span><span class="b"><i style="width:71%"></i></span></div></div></div>
+      </div>
+      <div class="gate"><button>iterate</button><button>amend</button><button>conclude</button><button class="primary">★ select winner</button></div>
+    </div>
+
+    <hr class="divider" />
+    <h2>Part 4 · Lifecycle-framed <span class="tag">macro A→B→C</span></h2>
+    <p class="lead">These make the whole 3-stage journey (Ideation → Experimentation → Paper) the primary frame — the live run is just what's happening at the current station. Useful once the macro lifecycle is built.</p>
+
+    <!-- 18 -->
+    <h2>18 · Journey Map <span class="tag">metro line</span></h2>
+    <div class="smp-meta"><span class="pill"><b>metaphor:</b> a subway line through the lifecycle</span><span class="pill"><b>suits:</b> HTML · React</span><span class="pill"><b>gimmick:</b> progress fill, stations, sub-stops, approval = next station</span></div>
+    <div class="demo metro">
+      <div class="line"><div class="fill"></div>
+        <div class="stn on"><div class="dot"></div><div class="nm">① Ideation</div><div class="sub">in progress · r1</div></div>
+        <div class="stn lock"><div class="dot"></div><div class="nm">② Experimentation</div><div class="sub">locked</div></div>
+        <div class="stn lock"><div class="dot"></div><div class="nm">③ Paper</div><div class="sub">locked</div></div>
+      </div>
+      <div class="stops"><span class="done">research</span><span class="done">propose</span><span class="done">deliberate</span><span class="done">judge</span><span>gate</span></div>
+      <div class="panel">Current: ranking ready — ★ Cathy 0.74 · Julien 0.73 · Aiden 0.65
+        <div class="gate"><button>iterate</button><button>amend</button><button class="primary">approve → Experimentation</button></div>
+      </div>
+    </div>
+
+    <!-- 19 -->
+    <h2>19 · Quest Map <span class="tag">game world</span></h2>
+    <div class="smp-meta"><span class="pill"><b>metaphor:</b> an RPG quest line; stages are levels</span><span class="pill"><b>suits:</b> React/canvas · pixel art</span><span class="pill"><b>gimmick:</b> locked levels, glowing current quest, trophy finish</span></div>
+    <div class="demo quest">
+      <div class="banner">⚔ CURRENT QUEST — forge a research idea the council will back</div>
+      <div class="map">
+        <div class="lvl on"><div class="ico">🧠</div><div class="nm">Ideation</div><div class="st">▶ in progress</div></div>
+        <div class="conn"></div>
+        <div class="lvl lock"><div class="ico">🔬</div><div class="nm">Experiment</div><div class="st">🔒 locked</div></div>
+        <div class="conn"></div>
+        <div class="lvl lock"><div class="ico">🏆</div><div class="nm">Paper</div><div class="st">🔒 locked</div></div>
+      </div>
+      <div class="gate"><button>iterate</button><button>amend</button><button class="primary">★ select &amp; advance</button></div>
+    </div>
+
+    <hr class="divider" />
+    <h2>Part 5 · Blends <span class="tag">requested</span></h2>
+    <p class="lead">Embedding the score-axis cards (#17) into other shells — the cards carry the most information per pixel, so they pair well with a chat or terminal frame. Plus my recommended "complete" design.</p>
+
+    <!-- 20 -->
+    <h2>20 · Group Chat + Score Cards <span class="tag">#7 × #17</span></h2>
+    <div class="smp-meta"><span class="pill"><b>idea:</b> the council chats; at judging it posts a rich embed of stat cards</span><span class="pill"><b>suits:</b> React · HTML</span><span class="pill"><b>gimmick:</b> Discord embeds whose bars are novelty/soundness/feasibility/clarity</span></div>
+    <div class="demo gc gctcg">
+      <div class="gc-chan">
+        <div class="gc-h">research-council</div>
+        <div class="gc-ci on"># ideation</div>
+        <div class="gc-ci"># wiki</div>
+        <div class="gc-ci"># runs</div>
+      </div>
+      <div class="gc-main">
+        <div class="gc-top"># ideation — Can LLM agents do research better than humans?</div>
+        <div class="gc-msgs">
+          <div class="m"><div class="av c">C</div><div><span class="nm c">Cathy</span><span class="ts">APP</span><div class="bd"><b>@Julien</b> your eval lacks a human baseline</div></div></div>
+          <div class="m"><div class="av j">J</div><div><span class="nm j">Julien</span><span class="ts">APP</span><div class="bd"><b>@Cathy</b> agreed — adding a PhD cohort</div></div></div>
+          <div class="m"><div class="av" style="background:#5865f2">RC</div><div style="flex:1"><span class="nm">Council</span><span class="ts">BOT · ranked</span>
+            <div class="embed"><div class="eh">🏁 Round 1 ranking — self-scores excluded</div>
+              <div class="ecards">
+                <div class="ecard c win"><div class="et"><span class="nm">★ Cathy</span><span class="cost">0.74</span></div>
+                  <div class="s"><span class="lab">NOV</span><span class="b"><i style="width:78%"></i></span></div><div class="s"><span class="lab">SND</span><span class="b"><i style="width:73%"></i></span></div><div class="s"><span class="lab">FEA</span><span class="b"><i style="width:76%"></i></span></div><div class="s"><span class="lab">CLR</span><span class="b"><i style="width:75%"></i></span></div></div>
+                <div class="ecard j"><div class="et"><span class="nm">Julien</span><span class="cost">0.73</span></div>
+                  <div class="s"><span class="lab">NOV</span><span class="b"><i style="width:75%"></i></span></div><div class="s"><span class="lab">SND</span><span class="b"><i style="width:70%"></i></span></div><div class="s"><span class="lab">FEA</span><span class="b"><i style="width:72%"></i></span></div><div class="s"><span class="lab">CLR</span><span class="b"><i style="width:71%"></i></span></div></div>
+                <div class="ecard a"><div class="et"><span class="nm">Aiden</span><span class="cost">0.65</span></div>
+                  <div class="s"><span class="lab">NOV</span><span class="b"><i style="width:64%"></i></span></div><div class="s"><span class="lab">SND</span><span class="b"><i style="width:60%"></i></span></div><div class="s"><span class="lab">FEA</span><span class="b"><i style="width:66%"></i></span></div><div class="s"><span class="lab">CLR</span><span class="b"><i style="width:68%"></i></span></div></div>
+              </div></div>
+          </div></div>
+        </div>
+        <div class="gc-comp"><button>/iterate</button><button>/amend</button><button>/conclude</button><button class="primary">/select ★</button></div>
+      </div>
+      <div class="gc-mem">
+        <div class="gc-h">council — 3</div>
+        <div class="mb"><span class="dot a"></span> Aiden</div><div class="mb"><span class="dot c"></span> Cathy</div><div class="mb"><span class="dot j"></span> Julien</div>
+        <div class="gc-h">you</div><div class="mb"><span class="dot y"></span> Wannita</div>
+      </div>
+    </div>
+
+    <!-- 21 -->
+    <h2>21 · Terminal Multiplexer + ASCII Cards <span class="tag">#15 × #17</span></h2>
+    <div class="smp-meta"><span class="pill"><b>idea:</b> each pane is the agent's candidate as an ASCII stat card</span><span class="pill"><b>suits:</b> single-file HTML · real TUI</span><span class="pill"><b>gimmick:</b> █░ bars, gold winner pane</span></div>
+    <div class="demo tmux tmuxtcg">
+      <div class="tabs"><div class="tab on">ideation</div><div class="tab">wiki</div><div class="tab">runs</div></div>
+      <div class="grid">
+        <div class="pane"><div class="ph">0:aiden</div>
+          <div class="card"><div class="nmline">SE-HypoBench <span class="cost">$.07</span></div>
+            <div class="bl">NOV ██████<span class="dim">░░</span> .65</div><div class="bl">SND █████<span class="dim">░░░</span> .60</div><div class="bl">FEA ██████<span class="dim">░░</span> .66</div><div class="bl">CLR ██████<span class="dim">░░</span> .68</div></div></div>
+        <div class="pane win"><div class="ph">1:cathy ★</div>
+          <div class="card"><div class="nmline">HypoSE-Bench <span class="cost">$.34</span></div>
+            <div class="bl">NOV ███████<span class="dim">░</span> .74</div><div class="bl">SND ███████<span class="dim">░</span> .73</div><div class="bl">FEA ███████<span class="dim">░</span> .76</div><div class="bl">CLR ███████<span class="dim">░</span> .75</div></div></div>
+        <div class="pane"><div class="ph">2:julien</div>
+          <div class="card"><div class="nmline">SE-HypoEval <span class="cost">$.06</span></div>
+            <div class="bl">NOV ███████<span class="dim">░</span> .75</div><div class="bl">SND ███████<span class="dim">░</span> .70</div><div class="bl">FEA ███████<span class="dim">░</span> .72</div><div class="bl">CLR ███████<span class="dim">░</span> .71</div></div></div>
+      </div>
+      <div class="dl"><div class="l"><b>cathy</b> → @julien: eval lacks a human baseline</div><div class="l"><b>julien</b> → @cathy: ack; adding PhD cohort</div></div>
+      <div class="status"><span>council:ideation* r1 · winner=cathy</span><span>$0.21</span></div>
+      <div class="gate"><button>^I iterate</button><button>^A amend</button><button>^C conclude</button><button class="primary">^S select</button></div>
+    </div>
+
+    <!-- 22 -->
+    <h2>22 · Flagship <span class="tag">★ recommended</span></h2>
+    <div class="smp-meta"><span class="pill"><b>blend:</b> Research Console shell + lifecycle rail (#18) + persona seats (#4) + score cards (#17)</span><span class="pill"><b>suits:</b> single-file HTML or React</span><span class="pill"><b>why:</b> serious, complete, information-dense, one tasteful gimmick (glow)</span></div>
+    <div class="demo flagship">
+      <div class="fl-rail">
+        <span class="stg on"><span class="d"></span>① Ideation</span><span class="sep">─</span>
+        <span class="stg"><span class="d"></span>② Experiment</span><span class="sep">─</span>
+        <span class="stg"><span class="d"></span>③ Paper</span>
+        <span class="sp">round 1 · <span class="cost">$0.21</span></span>
+      </div>
+      <div class="topic">Can LLM agents do research better than humans?</div>
+      <div class="fl-seats">
+        <div class="fs a"><div class="nm">Aiden</div><div class="mt">openai · 🔍×4</div><div class="gap">gap: no class-stratified eval</div></div>
+        <div class="fs c"><div class="nm">Cathy</div><div class="mt">anthropic · 🔍×6</div><div class="gap">gap: triage cost ignored</div></div>
+        <div class="fs j"><div class="nm">Julien</div><div class="mt">gemini · ✓ propose</div><div class="gap">SE-HypoEval benchmark</div></div>
+      </div>
+      <div class="fl-delib">
+        <div><strong>Cathy</strong> <em>→ @Julien</em> your eval lacks a human baseline</div>
+        <div><strong>Julien</strong> <em>→ @Cathy</em> agreed — adding a PhD cohort</div>
+      </div>
+      <div class="fl-rank">
+        <div class="rc win"><div class="rt"><span>★ Cathy</span><span class="sc">0.74</span></div>
+          <div class="s"><span class="lab">NOV</span><span class="b"><i style="width:78%"></i></span></div><div class="s"><span class="lab">SND</span><span class="b"><i style="width:73%"></i></span></div><div class="s"><span class="lab">FEA</span><span class="b"><i style="width:76%"></i></span></div><div class="s"><span class="lab">CLR</span><span class="b"><i style="width:75%"></i></span></div></div>
+        <div class="rc"><div class="rt"><span>Julien</span><span class="sc">0.73</span></div>
+          <div class="s"><span class="lab">NOV</span><span class="b"><i style="width:75%"></i></span></div><div class="s"><span class="lab">SND</span><span class="b"><i style="width:70%"></i></span></div><div class="s"><span class="lab">FEA</span><span class="b"><i style="width:72%"></i></span></div><div class="s"><span class="lab">CLR</span><span class="b"><i style="width:71%"></i></span></div></div>
+        <div class="rc"><div class="rt"><span>Aiden</span><span class="sc">0.65</span></div>
+          <div class="s"><span class="lab">NOV</span><span class="b"><i style="width:64%"></i></span></div><div class="s"><span class="lab">SND</span><span class="b"><i style="width:60%"></i></span></div><div class="s"><span class="lab">FEA</span><span class="b"><i style="width:66%"></i></span></div><div class="s"><span class="lab">CLR</span><span class="b"><i style="width:68%"></i></span></div></div>
+      </div>
+      <div class="fl-gate"><button>↻ iterate</button><button>✎ amend</button><button>✓ conclude</button><button class="primary">★ select</button></div>
+    </div>
+
+    <hr class="divider" />
+    <h2>Picking a direction</h2>
+    <p>You can also <strong>blend</strong>: e.g. the Research Console shell with Persona-colored seats (serious but characterful), or Academic styling reserved for the Stage-C writing view while ideation uses the Console. Tell me:</p>
+    <ul>
+      <li><strong>which sample</strong> (or blend) feels right,</li>
+      <li><strong>light or dark</strong> default (most support a toggle),</li>
+      <li><strong>how much motion</strong> (calm ↔ lively),</li>
+    </ul>
+    <p>…and I'll write the detailed UI spec + build a <em>clickable static prototype</em> (still no backend) of the full run view in that style, then wire it to the SSE.</p>
+  </main>
+</body>
+</html>

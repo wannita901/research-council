@@ -16,8 +16,9 @@ class SearchTool:
 
     async def run(self, query: str) -> ToolResult:
         papers = await self.retrieval.search(query, self.k)
-        lines = [
-            f"[{p.source}] {p.id} · {p.title} ({p.year or '----'}) :: {p.abstract[:200]}"
-            for p in papers
-        ]
+        lines = []
+        for p in papers:
+            # council-internal wiki notes are our own synthesis — flag so they're NOT prior art
+            tag = " [council-internal · not external prior art]" if p.origin == "internal" else ""
+            lines.append(f"[{p.source}]{tag} {p.id} · {p.title} ({p.year or '----'}) :: {p.abstract[:200]}")
         return ToolResult(content="\n".join(lines) or "(no results)", refs=[p.id for p in papers])

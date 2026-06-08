@@ -20,3 +20,8 @@ knowledge/.archive/
 knowledge/wiki/*/
 knowledge/raw/external/*
 !knowledge/raw/external/.gitkeep
+
+# Downloaded skills/agents — belong in the plugin/user dirs, not this repo
+.agents/
+.claude/
+skills-lock.json
