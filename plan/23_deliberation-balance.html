@@ -40,11 +40,11 @@
     <p><code>debate/deliberation.py</code> — <code>run_deliberation</code> gains the opening pass + <code>max_msgs_per_peer</code> + coerce-on-pass; <code>deliberate(..., require_critique=…)</code> on the peer protocol. <code>agents/agent_peer.py</code> — <code>_capped</code> takes a <code>finalize_prompt</code>; <code>deliberate(require_critique=True)</code> uses an opening prompt + <code>peer/finalize_critique.md</code>. <code>agents/stub_agent_peer.py</code> — honors <code>require_critique</code>; free-form keyed on a prior revise (not "spoke at all") so the opening doesn't suppress it. <code>RunConfig.max_msgs_per_peer</code> threaded through <code>run_ideation</code>.</p>
 
     <h2>3 · All caps surfaced to mise</h2>
-    <p><code>RC_PROFILE</code> is the main Stage-B/C knob; every individual cap is overridable via env and shown (commented) in <code>mise.toml</code>. Precedence: <strong>per-field env &gt; profile &gt; code default</strong>; resolved at call time so <code>RC_PROFILE</code> in mise takes effect and <code>--profile</code> still overrides.</p>
+    <p><code>RC_PROFILE</code> is the main knob and now scales <strong>all three stages</strong> (A ideation, B experimentation, C writing); every individual cap is overridable via env and shown (commented) in <code>mise.toml</code>. Precedence: <strong>per-field env &gt; profile &gt; code default</strong>; resolved at call time so <code>RC_PROFILE</code> in mise takes effect and <code>--profile</code> still overrides. Stage-A presets (iters/tool-calls/turns/rounds/msgs-per-peer/usd): conservative 3/5/2/2/2/$2 · balanced 5/8/4/4/3/$5 · thorough 8/12/6/6/4/$12.</p>
     <table>
       <thead><tr><th>Scope</th><th>Env vars</th></tr></thead>
       <tbody>
-        <tr><td>Ideation</td><td><code>RC_MAX_ITERS · RC_MAX_TOOL_CALLS · RC_MAX_TURNS · RC_MAX_ROUNDS · RC_MAX_MSGS_PER_PEER · RC_USD_MAX</code> (via <code>config.load_config</code>)</td></tr>
+        <tr><td>Ideation (Stage A)</td><td><code>RC_MAX_ITERS · RC_MAX_TOOL_CALLS · RC_MAX_TURNS · RC_MAX_ROUNDS · RC_MAX_MSGS_PER_PEER · RC_USD_MAX</code> — preset via <code>caps.stage_a_caps</code>, applied in <code>config.load_config(profile)</code></td></tr>
         <tr><td>Stage B</td><td><code>RC_STAGEB_MAX_ITERS · RC_STAGEB_K · RC_STAGEB_USD · RC_STAGEB_TIMEOUT · RC_STAGEB_PROBE_TIMEOUT</code> (via <code>caps.stage_b_caps</code>)</td></tr>
         <tr><td>Stage C</td><td><code>RC_STAGEC_MAX_REVISIONS · RC_STAGEC_ACCEPT · RC_STAGEC_USD · RC_STAGEC_LATEX_FIX_ATTEMPTS</code> (via <code>caps.stage_c_caps</code>)</td></tr>
         <tr><td>Profile</td><td><code>RC_PROFILE</code> = conservative | balanced | thorough</td></tr>

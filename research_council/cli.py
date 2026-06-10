@@ -1011,7 +1011,7 @@ def run_conductor(
 
     from research_council.debate.caps import resolve_profile
     profile = resolve_profile(profile)
-    cfg = load_config("ideation")
+    cfg = load_config("ideation", profile=profile)  # Stage-A caps scale with the profile too
     tty = sys.stdin.isatty()
     if not topic:
         topic = (ui.ask_text("What's your research question?") if tty else "").strip()

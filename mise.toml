@@ -18,19 +18,20 @@ RC_GEMINI_MODEL = "gemini-3.5-flash" # [ gemini-3.1-pro-preview | gemini-3.5-fla
 RC_FACILITATOR_MODEL = "claude-sonnet-4-6" # [ claude-opus-4-8 | claude-sonnet-4-6 | claude-haiku-4-5 ]
 
 # ───────────────────────── caps ─────────────────────────
-# Stage B/C loop preset — the main knob. conservative=cheap/fast, thorough=more iters/budget.
+# The main knob — scales ALL THREE stages (A ideation, B experimentation, C writing).
+# conservative=cheap/fast, thorough=more iters/budget.
 RC_PROFILE = "balanced"     # [ conservative | balanced | thorough ]
 #
-# Every individual cap is overridable too. The lines below show the CODE DEFAULTS — uncomment
-# any to override the profile/default (an uncommented per-field value WINS over the profile).
+# Every individual cap is overridable too. The lines below show the BALANCED-profile values —
+# uncomment any to override the profile (an uncommented per-field value WINS over the profile).
 #
-# Stage A · ideation (the agentic debate)
-# RC_MAX_ITERS = "5"          # per-peer research/deliberate loop iterations (per call)
-# RC_MAX_TOOL_CALLS = "8"     # per-peer tool calls (per call) — each peer has its OWN budget
-# RC_MAX_TURNS = "4"          # deliberation free-form sub-rounds per ideation round
-# RC_MAX_ROUNDS = "4"         # full ideation rounds (hard safety ceiling is 8)
-# RC_MAX_MSGS_PER_PEER = "3"  # deliberation messages per peer per round (1 mandatory opening + free-form)
-# RC_USD_MAX = "5.0"          # soft per-ideation-run USD budget
+# Stage A · ideation (the agentic debate)   [conservative → balanced → thorough]
+# RC_MAX_ITERS = "5"          # per-peer research/deliberate loop iterations (per call)   [3→5→8]
+# RC_MAX_TOOL_CALLS = "8"     # per-peer tool calls (per call) — each peer has its OWN budget [5→8→12]
+# RC_MAX_TURNS = "4"          # deliberation free-form sub-rounds per ideation round       [2→4→6]
+# RC_MAX_ROUNDS = "4"         # full ideation rounds (hard safety ceiling is 8)            [2→4→6]
+# RC_MAX_MSGS_PER_PEER = "3"  # deliberation msgs per peer per round (1 opening + free-form) [2→3→4]
+# RC_USD_MAX = "5.0"          # soft per-ideation-run USD budget                       [2.0→5.0→12.0]
 #
 # Stage B · experimentation (one council loop per research question) — balanced shown
 # RC_STAGEB_MAX_ITERS = "3"       # implement→run→review cycles per RQ

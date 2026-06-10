@@ -34,6 +34,21 @@ STAGE_B_PROFILES = {
     "thorough":     StageBCaps(max_iters=5, k=2, usd_budget=4.00, timeout=60),
 }
 
+# Stage A · ideation caps per profile (balanced == the historical RunConfig defaults).
+STAGE_A_PROFILES = {
+    "conservative": {"max_iters": 3, "max_tool_calls": 5, "max_turns": 2, "max_rounds": 2,
+                     "max_msgs_per_peer": 2, "usd_max": 2.0},
+    "balanced":     {"max_iters": 5, "max_tool_calls": 8, "max_turns": 4, "max_rounds": 4,
+                     "max_msgs_per_peer": 3, "usd_max": 5.0},
+    "thorough":     {"max_iters": 8, "max_tool_calls": 12, "max_turns": 6, "max_rounds": 6,
+                     "max_msgs_per_peer": 4, "usd_max": 12.0},
+}
+
+# Stage A per-field env overrides (field → env var); int unless noted.
+_STAGE_A_ENV = {"max_iters": "RC_MAX_ITERS", "max_tool_calls": "RC_MAX_TOOL_CALLS",
+                "max_turns": "RC_MAX_TURNS", "max_rounds": "RC_MAX_ROUNDS",
+                "max_msgs_per_peer": "RC_MAX_MSGS_PER_PEER"}
+
 STAGE_C_PROFILES = {
     "conservative": StageCCaps(max_revisions=2, accept=0.65, usd_budget=0.60),
     "balanced":     StageCCaps(max_revisions=3, accept=0.70, usd_budget=1.50),
@@ -63,6 +78,16 @@ def _f(name: str, cur: float) -> float:
         return float(v) if v not in (None, "") else cur
     except ValueError:
         return cur
+
+
+def stage_a_caps(profile: str | None = None) -> dict:
+    """Stage-A (ideation) caps from the profile preset, then per-field env overrides
+    (RC_MAX_*). Returned as a dict to overlay onto RunConfig. Precedence: env > profile > default."""
+    base = dict(STAGE_A_PROFILES.get(resolve_profile(profile), STAGE_A_PROFILES["balanced"]))
+    for field, env in _STAGE_A_ENV.items():
+        base[field] = _i(env, base[field])
+    base["usd_max"] = _f("RC_USD_MAX", base["usd_max"])
+    return base
 
 
 def stage_b_caps(profile: str | None = None) -> StageBCaps:

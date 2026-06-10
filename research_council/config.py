@@ -14,32 +14,8 @@ CONFIG_DIR = Path(__file__).parent / "config"
 # Per-vendor model can be set via env (mise.toml [env]); overrides the yaml default.
 ENV_MODEL = {"openai": "RC_OPENAI_MODEL", "anthropic": "RC_ANTHROPIC_MODEL", "gemini": "RC_GEMINI_MODEL"}
 
-# Stage-A (ideation) caps → env var. All surfaced in mise.toml for easy tuning.
-ENV_CAP_INT = {
-    "max_iters": "RC_MAX_ITERS", "max_tool_calls": "RC_MAX_TOOL_CALLS",
-    "max_turns": "RC_MAX_TURNS", "max_rounds": "RC_MAX_ROUNDS",
-    "max_msgs_per_peer": "RC_MAX_MSGS_PER_PEER",
-}
-ENV_CAP_FLOAT = {"usd_max": "RC_USD_MAX"}
 
-
-def _env_int(name: str) -> int | None:
-    v = os.getenv(name)
-    try:
-        return int(v) if v not in (None, "") else None
-    except ValueError:
-        return None
-
-
-def _env_float(name: str) -> float | None:
-    v = os.getenv(name)
-    try:
-        return float(v) if v not in (None, "") else None
-    except ValueError:
-        return None
-
-
-def load_config(stage: str = "ideation") -> RunConfig:
+def load_config(stage: str = "ideation", profile: str | None = None) -> RunConfig:
     path = CONFIG_DIR / f"{stage}.yaml"
     data = yaml.safe_load(path.read_text(encoding="utf-8")) if path.exists() else {}
     cfg = RunConfig(**(data or {}))
@@ -51,14 +27,10 @@ def load_config(stage: str = "ideation") -> RunConfig:
     fac = os.getenv("RC_FACILITATOR_MODEL")
     if fac:
         cfg.facilitator_model = fac
-    for field, env in ENV_CAP_INT.items():
-        v = _env_int(env)
-        if v is not None:
-            setattr(cfg, field, v)
-    for field, env in ENV_CAP_FLOAT.items():
-        v = _env_float(env)
-        if v is not None:
-            setattr(cfg, field, v)
+    # Stage-A caps now scale with RC_PROFILE (or --profile); per-field RC_MAX_* still wins.
+    from research_council.debate.caps import stage_a_caps
+    for field, value in stage_a_caps(profile).items():
+        setattr(cfg, field, value)
     return cfg
 
 
