@@ -58,7 +58,7 @@ class DockerSandbox:
 
     name = "docker"
 
-    def __init__(self, image: str = "python:3.12-slim", memory: str = "512m", network: str = "none"):
+    def __init__(self, image: str = "python:3.14-slim", memory: str = "512m", network: str = "none"):
         self.image, self.memory, self.network = image, memory, network
 
     def run(self, code: str, *, timeout: int = 30) -> SandboxResult:
@@ -90,7 +90,7 @@ def docker_available() -> bool:
 # Our experiment image (built via `mise run build-image`) preinstalls the scientific stack so
 # the council can run real-ish experiments offline; we fall back to bare python if it's absent.
 EXPERIMENT_IMAGE = "research-council-exp:latest"
-_FALLBACK_IMAGE = "python:3.12-slim"
+_FALLBACK_IMAGE = "python:3.14-slim"
 
 
 def _image_present(name: str) -> bool:

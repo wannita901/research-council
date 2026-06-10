@@ -4,7 +4,7 @@
 
 <p align="center">
   <img src="https://img.shields.io/badge/Python-3.14-3776AB?style=flat&logo=python&logoColor=white" alt="Python 3.14">
-  <img src="https://img.shields.io/badge/tests-123%20passing-3fb950?style=flat&logo=pytest&logoColor=white" alt="tests: 123 passing">
+  <a href="https://github.com/wannita901/research-council/actions/workflows/tests.yml"><img src="https://img.shields.io/github/actions/workflow/status/wannita901/research-council/tests.yml?style=flat&logo=github&label=tests" alt="tests"></a>
   <img src="https://img.shields.io/badge/agents-PydanticAI-E92063?style=flat&logo=pydantic&logoColor=white" alt="PydanticAI">
   <img src="https://img.shields.io/badge/CLI-Typer-009485?style=flat&logo=typer&logoColor=white" alt="Typer">
   <img src="https://img.shields.io/badge/sandbox-Docker-2496ED?style=flat&logo=docker&logoColor=white" alt="Docker">
@@ -135,4 +135,4 @@ The full ideation → experimentation → writing lifecycle has **real engines**
 
 Design notes live in [`plan/`](plan/1_sota-gap-analysis.html) (HTML — open in a browser): [lifecycle](plan/13_research-lifecycle.html) · [stage B/C loops](plan/18_stage-bc-loops.html) · [conductor](plan/19_conversational-conductor.html) · [proposal & evidence](plan/20_proposal-and-evidence.html) · [RQ-driven experiments](plan/21_rq-driven-experiments.html) · [deliberation balance](plan/23_deliberation-balance.html).
 
-<sub>Not yet published to PyPI; no CI. Local development via `mise`.</sub>
+<sub>GitHub Actions runs the offline test suite on every push and PR. Not yet published to PyPI. Local development via `mise`.</sub>

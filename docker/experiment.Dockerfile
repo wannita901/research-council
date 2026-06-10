@@ -1,7 +1,7 @@
 # Sandbox image for Stage B experiments (build: `mise run build-image`).
 # Preinstalls the common scientific stack so the council can run real-ish experiments OFFLINE
 # (the sandbox runs with --network none, so nothing can be pip-installed at run time).
-FROM python:3.12-slim
+FROM python:3.14-slim
 
 # Keep this lean but useful; pin major libs for reproducibility.
 RUN pip install --no-cache-dir \

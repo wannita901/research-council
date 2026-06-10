@@ -1,0 +1,25 @@
+name: tests
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # Installs the toolchain from mise.toml (Python 3.14) + creates the venv.
+      - uses: jdx/mise-action@v2
+        with:
+          cache: true
+
+      - name: Install dependencies
+        run: mise run deps
+
+      # The suite is fully offline — no API keys, no Docker, no LaTeX engine needed.
+      - name: Run tests
+        run: mise run test
