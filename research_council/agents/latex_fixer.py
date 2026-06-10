@@ -1,4 +1,4 @@
-"""LaTeX fixer agent (Stage C, plan/18 + plan/24) — repairs a .tex that failed to compile.
+"""LaTeX fixer agent (Stage C, plan/22) — repairs a .tex that failed to compile.
 
 Given the source and the compiler's error log, it returns a corrected full .tex document. This
 is the LLM half of the build-verify-fix loop: the mechanical pass (escaping, doc-class fallback)

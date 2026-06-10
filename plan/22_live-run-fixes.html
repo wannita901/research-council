@@ -1,0 +1,58 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Phase 7 · Live-Run Fixes + Incremental Iteration · research-council</title>
+  <link rel="stylesheet" href="style.css">
+  <script src="nav.js"></script>
+</head>
+<body>
+  <main class="content">
+    <header>
+      <div class="eyebrow">Phase 7 · Implementation (v2)</div>
+      <h1>Live-Run Fixes · Incremental Iteration · Build-Fix Feedback</h1>
+      <div class="meta">2026-06-10 · 122 tests green · what the first real <code>--live</code> A→B→C run surfaced, and the fixes</div>
+    </header>
+
+    <p class="lead">The first end-to-end live run exposed six issues. Three were bugs, one a misread, and two were genuine design gaps (iteration shouldn't restart from scratch; fail logs should reach the council). This page records the diagnosis + fix for each.</p>
+
+    <h2>1 · The six items</h2>
+    <table>
+      <thead><tr><th>#</th><th>Symptom</th><th>Diagnosis → fix</th></tr></thead>
+      <tbody>
+        <tr><td>Q1</td><td>No model options at setup</td><td><code>council run</code> never called the setup wizard → added <code>_interactive_setup</code> (seat models live + tools).</td></tr>
+        <tr><td>Q2</td><td>Only Cathy critiqued (Aiden 0 messages)</td><td>Deliberation imbalance — handled separately in <a href="23_deliberation-balance.html">23</a>.</td></tr>
+        <tr><td>Q3</td><td>Re-running a stage rebuilt from scratch</td><td><strong>Incremental iteration</strong> (see §2).</td></tr>
+        <tr><td>Q4</td><td>"Docker uses an opentelemetry-demo container"</td><td>Misread — our sandbox uses <code>python:3.x-slim</code>; the otel container was unrelated. We did add a dedicated experiment image (build-image) and later real dep install (<a href="24_libraries-and-figures.html">24</a>).</td></tr>
+        <tr><td>Q5</td><td>Stage B: 0/3 approved but 3/3 feasible</td><td>Two causes (see §3): truncated code shown to reviewers + a toy-vs-real expectation mismatch.</td></tr>
+        <tr><td>Q6</td><td>Stage C build failed</td><td>A <code>cwd</code>+relative-path bug in the LaTeX compile + no fail-log feedback to the council (see §4).</td></tr>
+      </tbody>
+    </table>
+
+    <h2>2 · Incremental iteration (Q3) — improve, don't rebuild</h2>
+    <p>Continuation is driven by the <strong>artifacts already on disk</strong>, so it works for both the conductor's <em>redo</em> and a plain <code>project approve</code> re-run.</p>
+    <ul>
+      <li><strong>Stage B</strong> — <code>load_prior_experiments(out_dir)</code> reads each <code>experiment/&lt;rq&gt;/</code> (prior <code>experiment.py</code> + reviews + run log) and seeds that RQ's coder on attempt 1, so it revises the existing script with the prior feedback rather than drafting fresh.</li>
+      <li><strong>Stage C</strong> — <code>load_prior_paper(out_dir)</code> reloads the prior draft and the revision loop continues from it; a redo no longer re-asks the venue (reuses the project's choice).</li>
+    </ul>
+
+    <h2>3 · Stage-B approval (Q5)</h2>
+    <ul>
+      <li><strong>Bug:</strong> the reviewer prompt truncated the code to 3000 chars, so the council (correctly) flagged "truncated / syntactically invalid" and blocked it. Now it gets the <strong>full</strong> script, told it's the complete code that already ran.</li>
+      <li><strong>Mismatch:</strong> the coder is told "toy/synthetic is fine (smallest runnable step)", but reviewers demanded the full real benchmark and blocked on "it's synthetic". Realigned the reviewer's bar: a labelled toy/proxy is <em>expected</em> at Stage B; block only on genuine correctness/soundness errors.</li>
+    </ul>
+
+    <h2>4 · Stage-C build (Q6)</h2>
+    <ul>
+      <li><strong>Path bug:</strong> <code>_compile</code> set <code>cwd</code> to the paper dir but passed the full <em>relative</em> path, so latexmk looked for <code>paper/paper/paper.tex</code>. Fixed (resolve to absolute + bare filename). Verified: relative-path builds now compile.</li>
+      <li><strong>Build-fix feedback:</strong> on a genuine compile failure the council's <code>LatexFixer</code> agent now gets the <code>.tex</code> + <code>build.log</code> and recompiles (bounded by <code>latex_fix_attempts</code>) — the fail log <em>is</em> the feedback. The mechanical pass (escaping, doc-class fallback) still runs first.</li>
+    </ul>
+
+    <h2>5 · Files</h2>
+    <p><code>cli.py</code> (setup wizard in <code>council run</code>; venue reuse on redo; <code>_run_stage_b/_run_stage_c</code> pass <code>out_dir</code>), <code>agents/code_reviewer.py</code> + <code>prompts/experiment/reviewer.md</code> (full code, realigned bar), <code>verify/latex.py</code> (path fix + <code>compile_existing</code>), <code>agents/latex_fixer.py</code> + <code>prompts/latex/fixer.md</code> (LLM fixer), <code>debate/experimentation.py</code> (<code>load_prior_experiments</code>, prior-seeded attempt), <code>debate/writing.py</code> (<code>load_prior_paper</code>, continue + fixer loop).</p>
+
+    <p><em>Numbering note: this page was backfilled — the increment originally lived only in the <a href="10_build-log.html">build-log</a>, which left a gap at 22.</em></p>
+  </main>
+</body>
+</html>
