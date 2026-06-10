@@ -1123,8 +1123,9 @@ def _facilitator_and_answer(cfg, live: bool, tty: bool):
     return facilitator, answer_fn
 
 
-def _run_ideation_stage(topic: str, cfg, *, live: bool, tty: bool):
+def _run_ideation_stage(topic: str, cfg, *, live: bool, tty: bool, prior_context: str = ""):
     """Run one Stage-A ideation (its own per-round gate handles idea refinement when TTY).
+    `prior_context` seeds a 'redo' with the previous proposal so the council IMPROVES it.
     Returns (winner_candidate | None, run_id)."""
     from research_council.debate.orchestrator_v2 import run_ideation
 
@@ -1144,6 +1145,7 @@ def _run_ideation_stage(topic: str, cfg, *, live: bool, tty: bool):
             auto_rounds=1,
             max_turns=cfg.max_turns,
             max_msgs_per_peer=cfg.max_msgs_per_peer,
+            prior_context=prior_context,
             anonymize_on=cfg.anonymize,
             emit=_stream,
         )
@@ -1151,6 +1153,26 @@ def _run_ideation_stage(topic: str, cfg, *, live: bool, tty: bool):
     by = {c.id: c for c in candidates}
     winner = by.get(rec.ranked[0]) if rec.ranked else None
     return winner, trace.run_id
+
+
+def _ideation_redo_context(proj, *, tty: bool) -> str:
+    """Build the 'improve this proposal' seed for a redo of ideation (prior proposal + a note)."""
+    from research_council.store.models import Candidate
+
+    idea = proj.stages["ideation"].artifacts.get("idea") or {}
+    try:
+        prop = Candidate.model_validate(idea).as_proposal_md()
+    except Exception:
+        prop = idea.get("title", "")
+    note = (ui.ask_text("What should this round improve? (optional)") or "").strip() if tty else ""
+    ctx = (
+        "A previous ideation round produced the proposal below. IMPROVE on it — sharpen its "
+        "novelty / soundness / feasibility, or take a stronger angle; do NOT merely restate it.\n\n"
+        f"{prop}"
+    )
+    if note:
+        ctx += f"\n\nHuman guidance for this round: {note}"
+    return ctx
 
 
 def _write_proposal(store, pid: str, winner) -> Path:
@@ -1220,6 +1242,9 @@ def run_conductor(
     venue: str = typer.Option(
         None, help="Stage C venue (else the council recommends + you confirm)"
     ),
+    resume: str = typer.Option(
+        None, "--resume", help="resume an existing project's gate loop by id (skip new ideation)"
+    ),
 ):
     """Conversational conductor: onboarding → ideation → experimentation → writing, gated by you.
 
@@ -1233,6 +1258,7 @@ def run_conductor(
         ProjectStore,
         approve_and_advance,
         build_handoff,
+        is_complete,
         new_project,
         record_result,
     )
@@ -1240,28 +1266,49 @@ def run_conductor(
     profile = resolve_profile(profile)
     cfg = load_config("ideation", profile=profile)  # Stage-A caps scale with the profile too
     tty = sys.stdin.isatty()
-    if not topic:
-        topic = (ui.ask_text("What's your research question?") if tty else "").strip()
-    if not topic:
-        ui.info("a research question is required (pass --topic on a non-TTY).")
-        raise typer.Exit(1)
-    if tty:
-        _interactive_setup(cfg, live)  # seat models (live) + retrieval tools, then confirm
-
-    stamp = datetime.datetime.now().strftime("%Y%m%d-%H%M%S")
-    pid = f"{_proj_slug(topic)}-{stamp[-6:]}"
     store = ProjectStore()
-    proj = new_project(topic, pid, created=stamp)
-    store.save(proj)
-    ui.banner(
-        f"Council · {pid}", f"{topic}  ·  {'live' if live else 'offline'}  ·  profile {profile}"
-    )
 
-    winner, run_id = _run_ideation_stage(topic, cfg, live=live, tty=tty)
-    if winner is None:
-        ui.console.print("[red]ideation produced no candidate[/red]")
-        raise typer.Exit(1)
-    _record_ideation(proj, store, pid, winner, run_id)
+    if resume:
+        # re-enter the gate loop on an existing project — no new ideation
+        if not store.exists(resume):
+            ui.info(f"no project {resume!r} to resume.")
+            raise typer.Exit(1)
+        proj, pid = store.load(resume), resume
+        ui.banner(
+            f"Council · {pid} (resume)",
+            f"{proj.topic}  ·  {'live' if live else 'offline'}  ·  profile {profile}",
+        )
+        if is_complete(proj):
+            ui.console.print("[bold green]project already complete 🎉[/bold green]")
+            return
+        if proj.stages[proj.current].status != "awaiting_approval":
+            ui.info(
+                f"project is at {proj.current}/{proj.stages[proj.current].status} — "
+                f"resume continues from a gate. Try `council project approve {pid}`."
+            )
+            raise typer.Exit(1)
+    else:
+        if not topic:
+            topic = (ui.ask_text("What's your research question?") if tty else "").strip()
+        if not topic:
+            ui.info("a research question is required (pass --topic on a non-TTY).")
+            raise typer.Exit(1)
+        if tty:
+            _interactive_setup(cfg, live)  # seat models (live) + retrieval tools, then confirm
+
+        stamp = datetime.datetime.now().strftime("%Y%m%d-%H%M%S")
+        pid = f"{_proj_slug(topic)}-{stamp[-6:]}"
+        proj = new_project(topic, pid, created=stamp)
+        store.save(proj)
+        ui.banner(
+            f"Council · {pid}", f"{topic}  ·  {'live' if live else 'offline'}  ·  profile {profile}"
+        )
+
+        winner, run_id = _run_ideation_stage(topic, cfg, live=live, tty=tty)
+        if winner is None:
+            ui.console.print("[red]ideation produced no candidate[/red]")
+            raise typer.Exit(1)
+        _record_ideation(proj, store, pid, winner, run_id)
 
     _PROMPTS = {
         "ideation": ("Run experiments on this idea?", "▶ run experiments", "↻ redo ideation"),
@@ -1281,13 +1328,16 @@ def run_conductor(
             if action == "stop":
                 ui.console.print(
                     f"[yellow]paused at {cur}[/yellow] · resume → "
-                    f"[cyan]council project approve {pid}[/cyan]"
+                    f"[cyan]council run --resume {pid}[/cyan]"
                 )
                 break
 
             if action == "redo":
                 if cur == "ideation":
-                    w, rid = _run_ideation_stage(proj.topic, cfg, live=live, tty=tty)
+                    prior_ctx = _ideation_redo_context(proj, tty=tty)
+                    w, rid = _run_ideation_stage(
+                        proj.topic, cfg, live=live, tty=tty, prior_context=prior_ctx
+                    )
                     if w is not None:
                         _record_ideation(proj, store, pid, w, rid)
                 else:
@@ -1315,7 +1365,7 @@ def run_conductor(
             record_result(proj, nxt, summary=summary, artifacts=artifacts)
             store.save(proj)
     except KeyboardInterrupt:
-        ui.console.print(f"\n[yellow]paused[/yellow] · resume → council project approve {pid}")
+        ui.console.print(f"\n[yellow]paused[/yellow] · resume → council run --resume {pid}")
         raise typer.Abort() from None
 
 

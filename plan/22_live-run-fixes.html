@@ -35,7 +35,9 @@
     <ul>
       <li><strong>Stage B</strong> — <code>load_prior_experiments(out_dir)</code> reads each <code>experiment/&lt;rq&gt;/</code> (prior <code>experiment.py</code> + reviews + run log) and seeds that RQ's coder on attempt 1, so it revises the existing script with the prior feedback rather than drafting fresh.</li>
       <li><strong>Stage C</strong> — <code>load_prior_paper(out_dir)</code> reloads the prior draft and the revision loop continues from it; a redo no longer re-asks the venue (reuses the project's choice).</li>
+      <li><strong>Stage A</strong> <span class="tag">added 2026-06-10</span> — a <em>redo ideation</em> now seeds the new debate with the previous proposal (+ an optional human note) via <code>run_ideation(prior_context=…)</code>, so the council <strong>improves</strong> that proposal rather than starting from a blank slate.</li>
     </ul>
+    <p><strong><code>council run --resume &lt;id&gt;</code></strong> re-enters the conversational gate loop on an existing project (skips new ideation) — for picking up after a <code>stop</code> / Ctrl-C without dropping to the per-stage <code>project approve</code>. It continues from the project's current gate (must be <em>awaiting_approval</em>).</p>
 
     <h2>3 · Stage-B approval (Q5)</h2>
     <ul>

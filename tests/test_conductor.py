@@ -39,3 +39,52 @@ def test_run_conductor_completes_offline(tmp_path, monkeypatch):
     ):
         assert f"## {head}" in proposal
     assert proj.stages["ideation"].artifacts.get("proposal_path", "").endswith("proposal.md")
+
+
+def test_run_resume_continues_existing_project(tmp_path, monkeypatch):
+    monkeypatch.setenv("RC_PROJECTS_DIR", str(tmp_path))
+    monkeypatch.chdir(tmp_path)
+    from research_council.lifecycle import new_project, record_result
+
+    store = ProjectStore()
+    p = new_project("toy topic", "proj-x", created="t")
+    record_result(
+        p, "ideation", summary="idea", artifacts={"idea": {"title": "X"}, "experiment_plan": "plan"}
+    )
+    store.save(p)  # stopped at ideation/awaiting_approval
+
+    result = CliRunner().invoke(app, ["run", "--resume", "proj-x"])
+    assert result.exit_code == 0, result.output
+    assert "project complete" in result.output and is_complete(store.load("proj-x"))
+
+
+def test_run_resume_unknown_id_errors(tmp_path, monkeypatch):
+    monkeypatch.setenv("RC_PROJECTS_DIR", str(tmp_path))
+    result = CliRunner().invoke(app, ["run", "--resume", "does-not-exist-zzz"])
+    assert result.exit_code != 0 and "no project" in result.output
+
+
+def test_ideation_redo_context_seeds_prior_proposal(tmp_path, monkeypatch):
+    monkeypatch.setenv("RC_PROJECTS_DIR", str(tmp_path))
+    from research_council.cli import _ideation_redo_context
+    from research_council.lifecycle import new_project, record_result
+
+    p = new_project("t", "proj-y", created="t")
+    record_result(
+        p,
+        "ideation",
+        summary="x",
+        artifacts={
+            "idea": {
+                "id": "Aiden",
+                "vendor": "openai",
+                "title": "Prior Idea",
+                "gap": "g",
+                "hypothesis": "h",
+                "method": "m",
+                "experiment_plan": "e",
+            }
+        },
+    )
+    ctx = _ideation_redo_context(p, tty=False)  # tty=False → no prompt
+    assert "IMPROVE on it" in ctx and "Prior Idea" in ctx

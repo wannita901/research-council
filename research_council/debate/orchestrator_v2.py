@@ -101,6 +101,7 @@ async def run_ideation(
     auto_rounds: int = 1,  # no-human runs auto-iterate this many rounds, then conclude
     max_turns: int = 4,
     max_msgs_per_peer: int = 3,
+    prior_context: str = "",  # a prior proposal to IMPROVE on (conductor "redo ideation")
     anonymize_on: bool = True,
     constraints: Constraints
     | None = None,  # pre-supplied onboarding answers (skips the facilitator)
@@ -133,7 +134,7 @@ async def run_ideation(
     rnd = 0
     while True:
         rnd += 1
-        ctx = "\n\n".join(x for x in [constraints_text, digest_text] if x)
+        ctx = "\n\n".join(x for x in [constraints_text, prior_context, digest_text] if x)
 
         def emit_tools(phase: str, cn: str, tcs: list[dict], rnd: int = rnd) -> None:
             for tc in tcs:
