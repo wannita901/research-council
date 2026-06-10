@@ -41,6 +41,7 @@ const PAGES = [
   { file: "19_conversational-conductor.html", n: 19, phase: 7, title: "Conversational Conductor" },
   { file: "20_proposal-and-evidence.html",  n: 20, phase: 7, title: "Proposal Artifact + Evidence Rule" },
   { file: "21_rq-driven-experiments.html",  n: 21, phase: 7, title: "RQ-driven Stage B + CSV" },
+  { file: "23_deliberation-balance.html",   n: 23, phase: 7, title: "Deliberation Balance + Caps in mise" },
 ];
 
 const STATUS_ICON = { done: "✓", wip: "◐", next: "▸", todo: "○" };

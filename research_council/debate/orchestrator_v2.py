@@ -91,6 +91,7 @@ async def run_ideation(
     weights: dict[str, float] | None = None,
     auto_rounds: int = 1,   # no-human runs auto-iterate this many rounds, then conclude
     max_turns: int = 4,
+    max_msgs_per_peer: int = 3,
     anonymize_on: bool = True,
     constraints: Constraints | None = None,  # pre-supplied onboarding answers (skips the facilitator)
     on_round_end: Callable[[int], Awaitable[None]] | None = None,  # e.g. per-round wiki harvest
@@ -141,7 +142,7 @@ async def run_ideation(
                 round=rnd, author_vendor=c.vendor)
 
         thread = await run_deliberation(
-            peers, candidates, round_no=rnd, max_turns=max_turns,
+            peers, candidates, round_no=rnd, max_turns=max_turns, max_msgs_per_peer=max_msgs_per_peer,
             emit=lambda m: out("deliberate", "discussion_message", m.model_dump(), round=rnd),
             emit_tool=lambda cn, tcs: emit_tools("deliberate", cn, tcs),
         )

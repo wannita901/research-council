@@ -13,9 +13,37 @@ RC_OPENAI_MODEL = "gpt-5.4" # [ gpt-5.5 | gpt-5.4 | gpt-5.4-mini ]
 RC_ANTHROPIC_MODEL = "claude-sonnet-4-6" # [ claude-opus-4-8 | claude-sonnet-4-6 | claude-haiku-4-5 ]
 RC_GEMINI_MODEL = "gemini-3.5-flash" # [ gemini-3.1-pro-preview | gemini-3.5-flash | gemini-3.1-flash-lite ]
 
-# Intake facilitator (writes the clarifying questions) — a Claude model; vendor fixed to anthropic.
+# Onboarding facilitator (writes the clarifying questions) — a Claude model; vendor fixed to anthropic.
 # claude-haiku-4-5 is cheaper if your account has it enabled.
 RC_FACILITATOR_MODEL = "claude-sonnet-4-6" # [ claude-opus-4-8 | claude-sonnet-4-6 | claude-haiku-4-5 ]
+
+# ───────────────────────── caps ─────────────────────────
+# Stage B/C loop preset — the main knob. conservative=cheap/fast, thorough=more iters/budget.
+RC_PROFILE = "balanced"     # [ conservative | balanced | thorough ]
+#
+# Every individual cap is overridable too. The lines below show the CODE DEFAULTS — uncomment
+# any to override the profile/default (an uncommented per-field value WINS over the profile).
+#
+# Stage A · ideation (the agentic debate)
+# RC_MAX_ITERS = "5"          # per-peer research/deliberate loop iterations (per call)
+# RC_MAX_TOOL_CALLS = "8"     # per-peer tool calls (per call) — each peer has its OWN budget
+# RC_MAX_TURNS = "4"          # deliberation free-form sub-rounds per ideation round
+# RC_MAX_ROUNDS = "4"         # full ideation rounds (hard safety ceiling is 8)
+# RC_MAX_MSGS_PER_PEER = "3"  # deliberation messages per peer per round (1 mandatory opening + free-form)
+# RC_USD_MAX = "5.0"          # soft per-ideation-run USD budget
+#
+# Stage B · experimentation (one council loop per research question) — balanced shown
+# RC_STAGEB_MAX_ITERS = "3"       # implement→run→review cycles per RQ
+# RC_STAGEB_K = "2"               # reviewer approvals required (of 2) to pass an RQ
+# RC_STAGEB_USD = "1.50"          # USD budget per RQ
+# RC_STAGEB_TIMEOUT = "30"        # sandbox seconds per run
+# RC_STAGEB_PROBE_TIMEOUT = "15"  # sandbox seconds for a reviewer verification probe
+#
+# Stage C · writing (draft → PC review → revise → LaTeX build-fix) — balanced shown
+# RC_STAGEC_MAX_REVISIONS = "3"      # revision rounds
+# RC_STAGEC_ACCEPT = "0.70"          # mean rubric score to accept
+# RC_STAGEC_USD = "1.50"             # USD budget for the writing loop
+# RC_STAGEC_LATEX_FIX_ATTEMPTS = "3" # LaTeX build-verify-fix attempts
 
 [tasks.deps]
 description = "Install the package + dev, provider & service deps into the venv"

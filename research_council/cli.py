@@ -327,6 +327,7 @@ def ideate(
         rec, candidates = asyncio.run(run_ideation(
             topic, peers, trace, facilitator=facilitator, answer_fn=answer_fn, reviewer=reviewer,
             weights=cfg.weights, auto_rounds=auto_iterate, max_turns=cfg.max_turns,
+            max_msgs_per_peer=cfg.max_msgs_per_peer,
             anonymize_on=cfg.anonymize, on_round_end=on_round_end, emit=(_stream if stream else None),
         ))
     except KeyboardInterrupt:
@@ -637,7 +638,8 @@ def project_new(
     try:
         rec, candidates = asyncio.run(run_ideation(
             topic, peers, trace, reviewer=reviewer, auto_rounds=auto_iterate,
-            max_turns=cfg.max_turns, anonymize_on=cfg.anonymize, emit=_stream))
+            max_turns=cfg.max_turns, max_msgs_per_peer=cfg.max_msgs_per_peer,
+            anonymize_on=cfg.anonymize, emit=_stream))
     except KeyboardInterrupt:
         raise typer.Abort()
 
@@ -934,6 +936,7 @@ def _run_ideation_stage(topic: str, cfg, *, live: bool, tty: bool):
     rec, candidates = asyncio.run(run_ideation(
         topic, peers, trace, facilitator=facilitator, answer_fn=answer_fn, reviewer=reviewer,
         weights=cfg.weights, auto_rounds=1, max_turns=cfg.max_turns,
+        max_msgs_per_peer=cfg.max_msgs_per_peer,
         anonymize_on=cfg.anonymize, emit=_stream))
     by = {c.id: c for c in candidates}
     winner = by.get(rec.ranked[0]) if rec.ranked else None
@@ -988,7 +991,7 @@ def _advance_into(proj, nxt, handoff, store, *, live: bool, profile: str, venue)
 def run_conductor(
     topic: str = typer.Option(None, "--topic", "-t", help="research question (asked if omitted on a TTY)"),
     live: bool = typer.Option(False, help="run the real engines (needs keys; Stage B needs Docker)"),
-    profile: str = typer.Option("balanced", help="cap profile for B/C loops: conservative | balanced | thorough"),
+    profile: str = typer.Option(None, help="cap profile for B/C loops (default RC_PROFILE or balanced): conservative | balanced | thorough"),
     venue: str = typer.Option(None, help="Stage C venue (else the council recommends + you confirm)"),
 ):
     """Conversational conductor: onboarding → ideation → experimentation → writing, gated by you.
@@ -1006,6 +1009,8 @@ def run_conductor(
         record_result,
     )
 
+    from research_council.debate.caps import resolve_profile
+    profile = resolve_profile(profile)
     cfg = load_config("ideation")
     tty = sys.stdin.isatty()
     if not topic:
@@ -1088,9 +1093,10 @@ def project_approve(
     allow_local_sandbox: bool = typer.Option(False, "--allow-local-sandbox",
                                              help="if Docker is absent, run generated code UNISOLATED (unsafe)"),
     venue: str = typer.Option(None, help="Stage C target venue (icse/fse/ase/neurips/emnlp/iclr/generic)"),
-    profile: str = typer.Option("balanced", help="cap profile for B/C loops: conservative | balanced | thorough"),
+    profile: str = typer.Option(None, help="cap profile for B/C loops (default RC_PROFILE or balanced): conservative | balanced | thorough"),
 ):
     """Approve the current stage and advance (running the next stage's engine)."""
+    from research_council.debate.caps import resolve_profile
     from research_council.lifecycle import (
         ProjectStore,
         approve_and_advance,
@@ -1098,6 +1104,7 @@ def project_approve(
         run_stage_stub,
     )
 
+    profile = resolve_profile(profile)
     store = ProjectStore()
     if not store.exists(pid):
         ui.info(f"no project {pid!r}")

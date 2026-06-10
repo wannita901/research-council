@@ -34,9 +34,15 @@ class DeliberativePeer(Protocol):
 
     async def deliberate(
         self, thread: list[DiscussionMessage], candidates: list[Candidate],
-        my_open_questions: list[str],
+        my_open_questions: list[str], *, require_critique: bool = False,
     ) -> Contribution:
         ...
+
+
+def _other(me: str, codenames: list[str]) -> str:
+    """The next peer in the ring (a non-self target for a coerced opening critique)."""
+    i = codenames.index(me)
+    return codenames[(i + 1) % len(codenames)] if len(codenames) > 1 else me
 
 
 def render_view(thread: list[DiscussionMessage], candidates: list[Candidate],
@@ -56,42 +62,62 @@ async def run_deliberation(
     *,
     round_no: int = 1,
     max_turns: int = 4,
+    max_msgs_per_peer: int = 3,
     emit: Callable[[DiscussionMessage], None] | None = None,
     emit_tool: Callable[[str, list[dict]], None] | None = None,
 ) -> list[DiscussionMessage]:
+    """Every peer is guaranteed a voice: each round OPENS with one mandatory critique per peer
+    (of a peer's proposal, not its own), then FREE-FORM turns follow. A per-peer message cap
+    (`max_msgs_per_peer`, incl. the opening) stops any one peer from dominating (plan/23)."""
     thread: list[DiscussionMessage] = []
     open_qs: dict[str, list[str]] = defaultdict(list, {c: [] for c in peers})
     codenames = list(peers)
     by_id = {c.id: c for c in candidates}
+    sent: dict[str, int] = {c: 0 for c in codenames}
 
+    def _post(c: str, contrib: Contribution, turn: int) -> bool:
+        msg = DiscussionMessage(round=round_no, turn=turn, from_codename=c, kind=contrib.kind,
+                                to=contrib.to, content=contrib.content, refs=contrib.refs,
+                                targets=contrib.targets)
+        thread.append(msg)
+        sent[c] += 1
+        if emit:
+            emit(msg)
+        if contrib.kind == "question" and contrib.to in open_qs:
+            open_qs[contrib.to].append(contrib.content)
+        if contrib.kind == "answer":
+            open_qs[c] = []
+        if contrib.kind == "revise" and contrib.revision is not None:
+            tid = contrib.targets or c
+            if tid == c and tid in by_id:
+                _apply_revision(by_id[tid], contrib.revision)
+        return contrib.kind in _SUBSTANTIVE
+
+    # --- OPENING: each peer MUST critique a peer's proposal (≠ its own); no silent pass ---
+    for c in codenames:
+        contrib = await peers[c].deliberate(thread, candidates, [], require_critique=True)
+        if emit_tool:
+            emit_tool(c, getattr(peers[c], "last_tool_calls", []) or [])
+        if contrib.kind not in _SUBSTANTIVE or not (contrib.content or "").strip():
+            tgt = contrib.targets or _other(c, codenames)  # coerce a pass into a real critique
+            contrib = Contribution(kind="critique", targets=tgt, to=contrib.to,
+                                   content=(contrib.content or "").strip()
+                                   or f"@{tgt} I have concerns about your proposal's soundness and novelty.")
+        _post(c, contrib, turn=0)
+
+    # --- FREE-FORM: organic back-and-forth, bounded by max_turns + the per-peer cap ---
     for turn in range(1, max_turns + 1):
         substantive = False
-        # peers with open questions answer first, then the rest (round-robin)
         order = [c for c in codenames if open_qs[c]] + [c for c in codenames if not open_qs[c]]
         for c in order:
+            if sent[c] >= max_msgs_per_peer:  # this peer has used its turns this round
+                continue
             contrib = await peers[c].deliberate(thread, candidates, list(open_qs[c]))
             if emit_tool:
                 emit_tool(c, getattr(peers[c], "last_tool_calls", []) or [])
             if contrib.kind == "pass" or (contrib.done and not open_qs[c]):
                 continue
-            msg = DiscussionMessage(round=round_no, turn=turn, from_codename=c, kind=contrib.kind,
-                                    to=contrib.to, content=contrib.content, refs=contrib.refs,
-                                    targets=contrib.targets)
-            thread.append(msg)
-            if emit:
-                emit(msg)
-            if contrib.kind == "question" and contrib.to in open_qs:
-                open_qs[contrib.to].append(contrib.content)
-            if contrib.kind == "answer":
-                open_qs[c] = []  # treated as answering the questions addressed to me
-            # a peer may revise only its OWN candidate (v2: candidate id == codename);
-            # patch it in place so the revised text is what gets judged this round.
-            if contrib.kind == "revise" and contrib.revision is not None:
-                tid = contrib.targets or c
-                if tid == c and tid in by_id:
-                    _apply_revision(by_id[tid], contrib.revision)
-            if contrib.kind in _SUBSTANTIVE:
-                substantive = True
+            substantive = _post(c, contrib, turn) or substantive
         if not substantive and not any(open_qs.values()):
             break  # converged
     return thread

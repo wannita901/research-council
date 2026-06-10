@@ -147,7 +147,8 @@ class AgentPeer:
             cost_usd=_cost(self._price_model, it, ot) if self._price_model else 0.0,
         )
 
-    async def _capped(self, agent: Agent, finalizer: Agent, prompt: str):
+    async def _capped(self, agent: Agent, finalizer: Agent, prompt: str,
+                      finalize_prompt: str = "peer/finalize"):
         """Run an agentic (tool-using) agent under its caps. If a cap is hit before a final
         result, don't crash — finalize tool-lessly from the gathered context. The caps thus
         BOUND the loop instead of aborting the whole debate."""
@@ -168,7 +169,7 @@ class AgentPeer:
         if result is not None:
             return result.output
         kwargs = {"message_history": msgs} if msgs else {}
-        fin = await finalizer.run(prompts.load("peer/finalize"), **kwargs)
+        fin = await finalizer.run(prompts.load(finalize_prompt), **kwargs)
         self._track(fin)
         return fin.output
 
@@ -179,8 +180,14 @@ class AgentPeer:
                              rationale=d.rationale, refs=d.refs)
 
     async def deliberate(self, thread: list[DiscussionMessage], candidates: list[Candidate],
-                         my_open_questions: list[str]) -> Contribution:
+                         my_open_questions: list[str], *, require_critique: bool = False) -> Contribution:
         prompt = render_view(thread, candidates, my_open_questions, self.codename)
+        if require_critique:
+            prompt += ("\n\nOPENING TURN: you MUST contribute a `critique` (or a `question`) "
+                       "addressed to a peer whose candidate is NOT your own. Do NOT pass, concede, "
+                       "or set done — name the peer's codename in `targets` and give a concrete concern.")
+            return await self._capped(self._delib_agent, self._delib_finalize, prompt,
+                                      finalize_prompt="peer/finalize_critique")
         return await self._capped(self._delib_agent, self._delib_finalize, prompt)
 
     async def propose(self, brief: ResearchBrief, constraints_text: str = "") -> Candidate:

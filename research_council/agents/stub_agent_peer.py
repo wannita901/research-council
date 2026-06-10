@@ -53,20 +53,25 @@ class StubV2Peer:
                          fallback_plan="simplify to a smaller toy run", refs=brief.refs)
 
     async def deliberate(self, thread: list[DiscussionMessage], candidates: list[Candidate],
-                         my_open_questions: list[str]) -> Contribution:
-        # `thread` is fresh each round, so "have I already spoken?" resets per round.
-        if any(m.from_codename == self.codename for m in thread) or not candidates:
+                         my_open_questions: list[str], *, require_critique: bool = False) -> Contribution:
+        # the opening turn demands a critique of a peer's (non-self) candidate
+        if require_critique:
+            target = next((c.id for c in candidates if c.id != self.codename),
+                          candidates[0].id if candidates else self.codename)
+            return Contribution(kind="critique", targets=target,
+                                content=f"@{target} [{self.codename}] concern about {target}'s soundness")
+        # free-form (after the opening): the first candidate's author revises ONCE; others pass.
+        # (keyed on a prior REVISE from me, not "spoke at all", since the opening already spoke.)
+        if not candidates:
             return Contribution(kind="pass", done=True)
-        first = candidates[0]
-        if first.id == self.codename:
-            # author of the first candidate revises its own plan during the discussion
+        already_revised = any(m.from_codename == self.codename and m.kind == "revise" for m in thread)
+        if candidates[0].id == self.codename and not already_revised:
             return Contribution(
                 kind="revise", targets=self.codename,
                 content=f"[{self.codename}] tightened the experiment plan",
                 revision=CandidateDraft(experiment_plan="revised toy experiment plan (v2)"),
             )
-        return Contribution(kind="critique", targets=first.id,
-                            content=f"[{self.codename}] concern about {first.id}")
+        return Contribution(kind="pass", done=True)
 
     async def score(self, anon_candidates: list[dict], context: str = "") -> list[Score]:
         out: list[Score] = []

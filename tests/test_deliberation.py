@@ -23,7 +23,11 @@ class ScriptedPeer:
         self.codename = codename
         self._script = iter(script)
 
-    async def deliberate(self, thread, candidates, my_open_questions) -> Contribution:
+    async def deliberate(self, thread, candidates, my_open_questions, *, require_critique=False) -> Contribution:
+        if require_critique:  # mandatory opening critique (not drawn from the free-form script)
+            tgt = next((c.id for c in candidates if c.id != self.codename),
+                       candidates[0].id if candidates else self.codename)
+            return Contribution(kind="critique", targets=tgt, content=f"@{tgt} opening concern")
         try:
             return next(self._script)
         except StopIteration:
@@ -46,10 +50,25 @@ async def test_question_routing_and_convergence():
     assert max((m.turn for m in thread), default=0) <= 4  # respected the cap
 
 
-async def test_all_pass_converges_immediately():
+async def test_opening_guarantees_every_peer_speaks():
+    # even if everyone would pass in free-form, the mandatory opening gives each peer one voice
     peers = {c: ScriptedPeer(c, []) for c in ("Aiden", "Cathy", "Julien")}
     thread = await run_deliberation(peers, CANDS, max_turns=4)
-    assert thread == []  # everyone passes → no messages, converges
+    openers = {m.from_codename for m in thread if m.turn == 0}
+    assert openers == {"Aiden", "Cathy", "Julien"}  # all three heard
+    assert all(m.kind == "critique" for m in thread if m.turn == 0)
+    assert len(thread) == 3  # then free-form converges (all pass)
+
+
+async def test_per_peer_cap_limits_one_loud_peer():
+    # a peer that always wants to critique is capped per round (no domination)
+    loud = [Contribution(kind="critique", targets="C1", content="again") for _ in range(10)]
+    peers: dict[str, DeliberativePeer] = {
+        "Aiden": ScriptedPeer("Aiden", loud), "Cathy": ScriptedPeer("Cathy", []),
+        "Julien": ScriptedPeer("Julien", []),
+    }
+    thread = await run_deliberation(peers, CANDS, max_turns=8, max_msgs_per_peer=3)
+    assert sum(1 for m in thread if m.from_codename == "Aiden") == 3  # opening + 2 free-form, then muted
 
 
 async def test_revise_patches_own_candidate_in_place():

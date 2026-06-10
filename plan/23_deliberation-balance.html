@@ -1,0 +1,58 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Phase 7 · Deliberation Balance + Caps to mise · research-council</title>
+  <link rel="stylesheet" href="style.css">
+  <script src="nav.js"></script>
+</head>
+<body>
+  <main class="content">
+    <header>
+      <div class="eyebrow">Phase 7 · Implementation (v2)</div>
+      <h1>Deliberation Balance (Q2) + All Caps in mise</h1>
+      <div class="meta">Built 2026-06-10 · 123 tests green · grilled</div>
+    </header>
+
+    <p class="lead">In the first live run one peer (Aiden/openai) sent <strong>0</strong> deliberation messages while Cathy sent 8 — even though Aiden proposed, scored, and made 37 tool calls. Root cause: a peer that returns <code>kind="pass"</code> (or burns its tool budget on <code>search</code> then finalizes tool-lessly to a weak pass) is <em>silently skipped</em>, and round-robin lets a verbose peer fill the space. Fix: guarantee every peer a voice, cap any one peer, and surface all the knobs.</p>
+
+    <h2>1 · Mandatory opening + capped free-form</h2>
+    <pre><code>each ideation round:
+  OPENING (turn 0): every peer MUST post one critique of a peer's proposal (≠ its own)
+    - agentic (tools on, per-agent budget); a 'pass' is coerced into a real critique
+    - enforced via a must-critique finalizer (peer/finalize_critique.md) + coerce fallback
+  FREE-FORM (turns 1..max_turns): organic answer / defend / revise / critique
+    - per-peer message cap (incl. the opening); a peer muted once it hits the cap
+    - converges when a turn adds nothing and no open questions remain
+</code></pre>
+    <table>
+      <thead><tr><th>Decision</th><th>Locked value</th></tr></thead>
+      <tbody>
+        <tr><td>Participation</td><td>mandatory opening critique per peer (free target ≠ self) + free-form after</td></tr>
+        <tr><td>Per-peer cap</td><td><strong>3 / peer / round</strong> (1 opening + ≤2 free-form) → ≤9 msgs/round, evenly split</td></tr>
+        <tr><td>Opening mechanism</td><td>agentic (tools allowed, per-agent cap) + must-critique finalizer; coerce pass→critique so no peer is ever silent</td></tr>
+        <tr><td>Tool budget</td><td>already per-agent / per-call (no sharing, no starvation) — confirmed, unchanged</td></tr>
+      </tbody>
+    </table>
+
+    <h2>2 · Code</h2>
+    <p><code>debate/deliberation.py</code> — <code>run_deliberation</code> gains the opening pass + <code>max_msgs_per_peer</code> + coerce-on-pass; <code>deliberate(..., require_critique=…)</code> on the peer protocol. <code>agents/agent_peer.py</code> — <code>_capped</code> takes a <code>finalize_prompt</code>; <code>deliberate(require_critique=True)</code> uses an opening prompt + <code>peer/finalize_critique.md</code>. <code>agents/stub_agent_peer.py</code> — honors <code>require_critique</code>; free-form keyed on a prior revise (not "spoke at all") so the opening doesn't suppress it. <code>RunConfig.max_msgs_per_peer</code> threaded through <code>run_ideation</code>.</p>
+
+    <h2>3 · All caps surfaced to mise</h2>
+    <p><code>RC_PROFILE</code> is the main Stage-B/C knob; every individual cap is overridable via env and shown (commented) in <code>mise.toml</code>. Precedence: <strong>per-field env &gt; profile &gt; code default</strong>; resolved at call time so <code>RC_PROFILE</code> in mise takes effect and <code>--profile</code> still overrides.</p>
+    <table>
+      <thead><tr><th>Scope</th><th>Env vars</th></tr></thead>
+      <tbody>
+        <tr><td>Ideation</td><td><code>RC_MAX_ITERS · RC_MAX_TOOL_CALLS · RC_MAX_TURNS · RC_MAX_ROUNDS · RC_MAX_MSGS_PER_PEER · RC_USD_MAX</code> (via <code>config.load_config</code>)</td></tr>
+        <tr><td>Stage B</td><td><code>RC_STAGEB_MAX_ITERS · RC_STAGEB_K · RC_STAGEB_USD · RC_STAGEB_TIMEOUT · RC_STAGEB_PROBE_TIMEOUT</code> (via <code>caps.stage_b_caps</code>)</td></tr>
+        <tr><td>Stage C</td><td><code>RC_STAGEC_MAX_REVISIONS · RC_STAGEC_ACCEPT · RC_STAGEC_USD · RC_STAGEC_LATEX_FIX_ATTEMPTS</code> (via <code>caps.stage_c_caps</code>)</td></tr>
+        <tr><td>Profile</td><td><code>RC_PROFILE</code> = conservative | balanced | thorough</td></tr>
+      </tbody>
+    </table>
+
+    <h2>4 · Tests</h2>
+    <p><code>test_deliberation.py</code> — opening guarantees all three peers speak; per-peer cap mutes a loud peer at 3. Existing stub/orchestrator tests updated for the opening round.</p>
+  </main>
+</body>
+</html>

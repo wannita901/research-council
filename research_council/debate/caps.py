@@ -6,7 +6,8 @@ stops the loop and returns best-so-far. All values are overridable per-run from 
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+import os
+from dataclasses import dataclass, replace
 
 
 @dataclass(frozen=True)
@@ -43,12 +44,42 @@ STAGE_C_PROFILES = {
 DEFAULT_PROFILE = "balanced"
 
 
-def stage_b_caps(profile: str = DEFAULT_PROFILE) -> StageBCaps:
-    return STAGE_B_PROFILES.get(profile, STAGE_B_PROFILES[DEFAULT_PROFILE])
+def resolve_profile(profile: str | None = None) -> str:
+    """CLI flag > RC_PROFILE env (mise) > balanced — resolved at call time."""
+    return profile or os.getenv("RC_PROFILE") or DEFAULT_PROFILE
 
 
-def stage_c_caps(profile: str = DEFAULT_PROFILE) -> StageCCaps:
-    return STAGE_C_PROFILES.get(profile, STAGE_C_PROFILES[DEFAULT_PROFILE])
+def _i(name: str, cur: int) -> int:
+    v = os.getenv(name)
+    try:
+        return int(v) if v not in (None, "") else cur
+    except ValueError:
+        return cur
+
+
+def _f(name: str, cur: float) -> float:
+    v = os.getenv(name)
+    try:
+        return float(v) if v not in (None, "") else cur
+    except ValueError:
+        return cur
+
+
+def stage_b_caps(profile: str | None = None) -> StageBCaps:
+    """Profile preset, then per-field env overrides (RC_STAGEB_*) so any cap is tunable in mise."""
+    c = STAGE_B_PROFILES.get(resolve_profile(profile), STAGE_B_PROFILES["balanced"])
+    return replace(c, max_iters=_i("RC_STAGEB_MAX_ITERS", c.max_iters),
+                   k=_i("RC_STAGEB_K", c.k), usd_budget=_f("RC_STAGEB_USD", c.usd_budget),
+                   timeout=_i("RC_STAGEB_TIMEOUT", c.timeout),
+                   probe_timeout=_i("RC_STAGEB_PROBE_TIMEOUT", c.probe_timeout))
+
+
+def stage_c_caps(profile: str | None = None) -> StageCCaps:
+    """Profile preset, then per-field env overrides (RC_STAGEC_*) so any cap is tunable in mise."""
+    c = STAGE_C_PROFILES.get(resolve_profile(profile), STAGE_C_PROFILES["balanced"])
+    return replace(c, max_revisions=_i("RC_STAGEC_MAX_REVISIONS", c.max_revisions),
+                   accept=_f("RC_STAGEC_ACCEPT", c.accept), usd_budget=_f("RC_STAGEC_USD", c.usd_budget),
+                   latex_fix_attempts=_i("RC_STAGEC_LATEX_FIX_ATTEMPTS", c.latex_fix_attempts))
 
 
 def total_spend(*agents) -> float:

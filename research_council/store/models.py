@@ -438,11 +438,12 @@ class RunConfig(BaseModel):
     usd_max: float = 5.0
     anonymize: bool = True
     verifier_mode: str = "mock"  # mock (incr 1) | sandbox (incr 2)
-    # v2 agentic caps (plan/15 #1)
-    max_iters: int = 5         # per-peer research loop iterations
-    max_tool_calls: int = 8    # per-peer tool calls
-    max_turns: int = 4         # deliberation sub-rounds
+    # v2 agentic caps (plan/15 #1; all overridable via mise env — see config.load_config)
+    max_iters: int = 5         # per-peer research/deliberate loop iterations (per call)
+    max_tool_calls: int = 8    # per-peer tool calls (per call)
+    max_turns: int = 4         # deliberation free-form sub-rounds
     max_rounds: int = 4        # full ideation rounds
+    max_msgs_per_peer: int = 3  # deliberation messages per peer per round (incl. opening; plan/23)
 
 
 class Event(BaseModel):
