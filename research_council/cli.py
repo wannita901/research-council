@@ -713,7 +713,11 @@ def _run_stage_b(handoff, allow_local: bool, profile: str = "balanced", out_dir=
     from research_council.agents.code_reviewer import CodeReviewer
     from research_council.agents.coder import Coder
     from research_council.debate.caps import stage_b_caps, total_spend
-    from research_council.debate.experimentation import run_experiments, write_experiments
+    from research_council.debate.experimentation import (
+        load_prior_experiments,
+        run_experiments,
+        write_experiments,
+    )
     from research_council.lifecycle import run_stage_stub
     from research_council.store.models import Candidate, ResearchQuestion
     from research_council.verify.sandbox import build_sandbox
@@ -753,10 +757,13 @@ def _run_stage_b(handoff, allow_local: bool, profile: str = "balanced", out_dir=
             extra = ""
         ui.stream_line(0, ph, k, None, extra)
 
+    prior = load_prior_experiments(out_dir) if out_dir is not None else {}
+    if prior:
+        ui.console.print(f"  [dim]continuing from {len(prior)} prior experiment(s) — improving, not rebuilding[/dim]")
     ui.console.print(f"  [dim]Stage B · council running {len(rqs)} experiment(s) in the {sandbox.name} "
                      f"sandbox ({profile}: ≤{caps.max_iters} iters/RQ, K={caps.k}, ${caps.usd_budget}/RQ)…[/dim]")
     rq_results = asyncio.run(run_experiments(handoff.idea, rqs, coder, reviewers, sandbox,
-                                             caps=caps, emit=_emit))
+                                             caps=caps, prior=prior, emit=_emit))
     cost = total_spend(coder, *reviewers)
     feasible = sum(1 for rr in rq_results if rr.result.feasible)
     approved = sum(1 for rr in rq_results if rr.result.approved)
@@ -816,9 +823,15 @@ def _run_stage_c(handoff, out_dir, onboarding, profile: str = "balanced"):
     rubric + file change-requests → lead revises targeted sections → re-review, until accept
     or the cap; then a coherence pass + a LaTeX build. Returns (summary, artifacts)."""
     from research_council.agents.agent_peer import agent_model_name
+    from research_council.agents.latex_fixer import LatexFixer
     from research_council.agents.writer import PaperReviewer, Writer
     from research_council.debate.caps import stage_c_caps, total_spend
-    from research_council.debate.writing import grounded_citations, load_venue, run_writing
+    from research_council.debate.writing import (
+        grounded_citations,
+        load_prior_paper,
+        load_venue,
+        run_writing,
+    )
 
     cfg = load_config("ideation")
     v = onboarding.venue
@@ -827,7 +840,13 @@ def _run_stage_c(handoff, out_dir, onboarding, profile: str = "balanced"):
     writer = Writer(agent_model_name(lead, cfg.seats[lead]), venue=vname, price_model=cfg.seats[lead])
     reviewers = [PaperReviewer(agent_model_name(rv, m), venue=vname, vendor=rv, price_model=m)
                  for rv, m in _reviewer_seats(cfg, lead)]
+    latex_fixer = LatexFixer(agent_model_name(lead, cfg.seats[lead]), price_model=cfg.seats[lead])
     caps = stage_c_caps(profile)
+    # if this project already has a paper, continue improving it (don't redraft from scratch)
+    prior_draft, build_error = load_prior_paper(out_dir)
+    if prior_draft is not None:
+        ui.console.print("  [dim]continuing from the existing paper — improving, not rewriting"
+                         + (" · feeding the prior build error to the council" if build_error else "") + "[/dim]")
 
     # carry the onboarding into the writing constraints the writer/reviewers see
     if onboarding.emphasis:
@@ -854,7 +873,8 @@ def _run_stage_c(handoff, out_dir, onboarding, profile: str = "balanced"):
     async def _go():
         cites = await grounded_citations(handoff.idea)
         return await run_writing(handoff, writer, reviewers, venue=v, out_dir=out_dir,
-                                 caps=caps, allowed_citations=cites, emit=_emit)
+                                 caps=caps, allowed_citations=cites, prior_draft=prior_draft,
+                                 build_error=build_error, latex_fixer=latex_fixer, emit=_emit)
 
     res = asyncio.run(_go())
     cost = total_spend(writer, *reviewers)

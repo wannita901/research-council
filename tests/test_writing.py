@@ -123,6 +123,34 @@ async def test_budget_exhausted_stops_writing(tmp_path):
     assert res.stopped_reason == "budget_exhausted"
 
 
+async def test_continues_from_prior_draft_without_redrafting(tmp_path):
+    from research_council.store.models import PaperDraft
+
+    class _NoDraftWriter(_FakeWriter):
+        async def draft(self, *a, **k):
+            raise AssertionError("must not redraft when a prior paper exists")
+
+    prior = PaperDraft(title="Prior Paper", abstract="prior abstract",
+                       sections={"Introduction": "i", "Method": "m", "Results": "r"})
+    reviewers = [_Reviewer([0.85], vendor="a"), _Reviewer([0.85], vendor="b")]
+    res = await run_writing(_handoff(), _NoDraftWriter(), reviewers, venue="generic",
+                            out_dir=tmp_path, caps=_C2, latex=False, prior_draft=prior)
+    assert res.title == "Prior Paper" and res.accepted  # improved the existing paper
+
+
+def test_load_prior_paper_round_trips(tmp_path):
+    from research_council.debate.writing import load_prior_paper
+
+    paper = tmp_path / "paper"
+    (paper / "sections").mkdir(parents=True)
+    (paper / "paper.md").write_text("# My Title\n*meta*\n\n## Abstract\nthe abstract\n\n## Method\nx\n")
+    (paper / "sections" / "method.md").write_text("# Method\n\nthe method body\n")
+    draft, build_error = load_prior_paper(tmp_path)
+    assert draft.title == "My Title" and draft.abstract == "the abstract"
+    assert draft.sections.get("Method") == "the method body" and build_error == ""
+    assert load_prior_paper(tmp_path / "nope") == (None, "")
+
+
 async def test_grounding_filters_unknown_citations_via_testmodel():
     import pytest
 

@@ -150,11 +150,51 @@ def _write_paper(out_dir: Path, draft: PaperDraft, review: ReviewNotes, venue_na
     return paper / "paper.md"
 
 
+def load_prior_paper(out_dir: Path | str):
+    """Reload a previous Stage-C draft so a re-run IMPROVES it instead of redrafting.
+    Returns (PaperDraft | None, build_error). Reads paper/sections/*.md + paper.md; the
+    build_error is the saved build.log when the last compile produced no PDF."""
+    paper = Path(out_dir) / "paper"
+    pmd = paper / "paper.md"
+    if not pmd.exists():
+        return None, ""
+    text = pmd.read_text(encoding="utf-8")
+    title = next((ln[2:].strip() for ln in text.splitlines() if ln.startswith("# ")), "")
+
+    def _section(body: str, name: str) -> str:
+        out, grabbing = [], False
+        for ln in body.splitlines():
+            if ln.startswith("## "):
+                grabbing = ln[3:].strip() == name
+                continue
+            if grabbing:
+                out.append(ln)
+        return "\n".join(out).strip()
+
+    abstract = _section(text, "Abstract")
+    sections: dict[str, str] = {}
+    sd = paper / "sections"
+    if sd.is_dir():
+        for f in sorted(sd.glob("*.md")):
+            t = f.read_text(encoding="utf-8")
+            lines = t.splitlines()
+            name = lines[0][1:].strip() if lines and lines[0].startswith("#") else f.stem
+            sections[name] = "\n".join(lines[1:]).strip()
+    draft = PaperDraft(title=title, abstract=abstract, sections=sections)
+
+    build_error = ""
+    log = paper / "build.log"
+    if log.exists() and not (paper / "paper.pdf").exists():
+        build_error = log.read_text(encoding="utf-8")[-1500:]
+    return draft, build_error
+
+
 # --- the loop -----------------------------------------------------------------
 async def run_writing(handoff, writer, reviewers, *, venue: str, out_dir: Path | str,
                       caps: StageCCaps | None = None, profile: str = "balanced",
                       allowed_citations: list[Citation] | None = None,
-                      latex: bool = True, emit: Emit = None) -> WritingResult:
+                      prior_draft: "PaperDraft | None" = None, build_error: str = "",
+                      latex_fixer=None, latex: bool = True, emit: Emit = None) -> WritingResult:
     caps = caps or stage_c_caps(profile)
     venue_cfg = load_venue(venue)
     venue_name = venue_cfg.get("name", venue)
@@ -171,11 +211,20 @@ async def run_writing(handoff, writer, reviewers, *, venue: str, out_dir: Path |
             figure = str(Path(figure).relative_to(out_dir / "paper")) if str(figure).startswith(
                 str(out_dir / "paper")) else figure
 
-    draft = await writer.draft(handoff.idea, experiment, handoff.constraints,
-                               allowed_citations=allowed_citations, figure=figure)
-    if emit:
-        emit("writing", "draft", {"title": draft.title, "sections": list(draft.sections),
-                                  "citations": len(draft.citations)})
+    if prior_draft is not None:
+        # continue improving the existing paper instead of redrafting from scratch
+        draft = prior_draft
+        if figure and not draft.figure:
+            draft.figure = figure
+        if emit:
+            emit("writing", "continue", {"sections": list(draft.sections),
+                                         "build_error": bool(build_error)})
+    else:
+        draft = await writer.draft(handoff.idea, experiment, handoff.constraints,
+                                   allowed_citations=allowed_citations, figure=figure)
+        if emit:
+            emit("writing", "draft", {"title": draft.title, "sections": list(draft.sections),
+                                      "citations": len(draft.citations)})
 
     score_history: list[float] = []
     best = None  # (mean, draft, merged_review)
@@ -232,9 +281,21 @@ async def run_writing(handoff, writer, reviewers, *, venue: str, out_dir: Path |
     result.paper_path = str(paper_md)
 
     if latex:
-        from research_council.verify.latex import build_paper_latex
-        lx = build_paper_latex(draft, out_dir / "paper", venue_cfg, attempts=caps.latex_fix_attempts,
-                               emit=emit)
+        from research_council.verify.latex import build_paper_latex, compile_existing
+        paper_dir = out_dir / "paper"
+        lx = build_paper_latex(draft, paper_dir, venue_cfg, attempts=caps.latex_fix_attempts, emit=emit)
+        # build-verify-FIX: if the mechanical pass can't compile it, hand the .tex + error log to
+        # the council's LaTeX fixer and recompile (bounded) — the fail log IS the feedback.
+        if lx.get("status") == "build_failed" and latex_fixer is not None:
+            for i in range(1, caps.latex_fix_attempts + 1):
+                tex = (paper_dir / "paper.tex").read_text(encoding="utf-8")
+                fixed = await latex_fixer.fix(tex, lx.get("log", ""))
+                (paper_dir / "paper.tex").write_text(fixed, encoding="utf-8")
+                lx = compile_existing(paper_dir)
+                if emit:
+                    emit("writing", "latex_fix", {"attempt": i, "status": lx.get("status")})
+                if lx.get("status") == "built":
+                    break
         result.latex = lx.get("status", "skipped")
         result.pdf_path = lx.get("pdf", "")
         if emit:

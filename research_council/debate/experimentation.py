@@ -88,12 +88,17 @@ def _feedback(stderr: str, reviews: list[CodeReview]) -> tuple[str, str]:
 
 async def run_experimentation(idea: dict, plan: str, coder, reviewers, sandbox, *,
                               caps: StageBCaps | None = None, profile: str = "balanced",
-                              budget_base: float = 0.0, emit: Emit = None) -> ExperimentResult:
+                              budget_base: float = 0.0, prior_code: str = "",
+                              prior_feedback: str = "", emit: Emit = None) -> ExperimentResult:
     """`budget_base` is the spend already incurred before this experiment — the per-experiment
     budget is enforced against the marginal spend (spent − budget_base), so each RQ gets its own
-    allowance even when the same agents accumulate usage across RQs."""
+    allowance even when the same agents accumulate usage across RQs.
+
+    `prior_code`/`prior_feedback` seed the FIRST attempt when re-running a stage that already has
+    artifacts — the coder improves the prior script (and sees the prior reviews/fail log) instead
+    of drafting from scratch."""
     caps = caps or stage_b_caps(profile)
-    code, err, notes, last_ran = "", "", "", False
+    code, err, notes, last_ran = prior_code, "", prior_feedback, False
     best: ExperimentResult | None = None
 
     for attempt in range(1, caps.max_iters + 1):
@@ -155,18 +160,25 @@ async def run_experimentation(idea: dict, plan: str, coder, reviewers, sandbox, 
 
 async def run_experiments(idea: dict, rqs, coder, reviewers, sandbox, *,
                           caps: StageBCaps | None = None, profile: str = "balanced",
-                          emit: Emit = None) -> list[RQResult]:
+                          prior: dict | None = None, emit: Emit = None) -> list[RQResult]:
     """Run one council loop per research question (RQ-driven Stage B, plan/21). The same agents
-    are reused across RQs but each RQ gets its own per-experiment budget allowance."""
+    are reused across RQs but each RQ gets its own per-experiment budget allowance.
+
+    `prior` (rq_id → {code, feedback}) seeds each RQ from a previous run so the council improves
+    the existing experiment instead of rebuilding it."""
     caps = caps or stage_b_caps(profile)
+    prior = prior or {}
     out: list[RQResult] = []
     for rq in rqs:
         base = total_spend(coder, *reviewers)  # spend before this RQ → per-RQ budget
+        seed = prior.get(rq.id, {})
         if emit:
-            emit("experiment", "rq_start", {"rq_id": rq.id, "question": rq.question})
+            emit("experiment", "rq_start", {"rq_id": rq.id, "question": rq.question,
+                                            "continuing": bool(seed.get("code"))})
         res = await run_experimentation(idea, rq.plan or idea.get("experiment_plan", ""),
                                         coder, reviewers, sandbox, caps=caps, budget_base=base,
-                                        emit=emit)
+                                        prior_code=seed.get("code", ""),
+                                        prior_feedback=seed.get("feedback", ""), emit=emit)
         out.append(RQResult(rq_id=rq.id, question=rq.question, result=res))
         if emit:
             emit("experiment", "rq_done",
@@ -210,6 +222,27 @@ def write_experiments(rq_results: list[RQResult], out_dir: Path | str) -> Path:
         w.writeheader()
         w.writerows(rows)
     return exp
+
+
+def load_prior_experiments(out_dir: Path | str) -> dict:
+    """Read a previous Stage-B run's per-RQ artifacts so a re-run can IMPROVE them.
+    Returns {rq_id: {"code", "feedback"}} from <out_dir>/experiment/<rq>/."""
+    exp = Path(out_dir) / "experiment"
+    prior: dict = {}
+    if not exp.is_dir():
+        return prior
+    for sub in sorted(exp.iterdir()):
+        if not sub.is_dir():
+            continue
+        code = (sub / "experiment.py").read_text(encoding="utf-8") if (sub / "experiment.py").exists() else ""
+        reviews = (sub / "reviews.md").read_text(encoding="utf-8") if (sub / "reviews.md").exists() else ""
+        log = (sub / "log.txt").read_text(encoding="utf-8") if (sub / "log.txt").exists() else ""
+        fb = ("Prior reviewer findings to address:\n" + reviews if reviews else "")
+        if log.strip():
+            fb += f"\n\nPrior run log (for debugging):\n{log[-800:]}"
+        if code.strip():
+            prior[sub.name] = {"code": code, "feedback": fb.strip()}
+    return prior
 
 
 def _reviews_md(result: ExperimentResult) -> str:

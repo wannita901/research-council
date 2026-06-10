@@ -152,3 +152,18 @@ def build_paper_latex(draft: PaperDraft, paper_dir: Path, venue_cfg: dict, *,
 
     (paper_dir / "build.log").write_text(last_log, encoding="utf-8")
     return {"status": "build_failed", "pdf": "", "log": last_log, "tex": str(tex_path)}
+
+
+def compile_existing(paper_dir: Path, *, timeout: int = 180) -> dict:
+    """Compile the paper.tex already on disk (used after an LLM latex-fix edits it)."""
+    paper_dir = Path(paper_dir)
+    tex_path = paper_dir / "paper.tex"
+    engine, kind = latex_engine()
+    if engine is None or not tex_path.exists():
+        status = "fallback_no_tex" if engine is None else "build_failed"
+        return {"status": status, "pdf": "", "log": "", "tex": str(tex_path)}
+    ok, log = _compile(engine, kind, tex_path, timeout)
+    (paper_dir / "build.log").write_text(log, encoding="utf-8")
+    if ok:
+        return {"status": "built", "pdf": str(tex_path.with_suffix(".pdf")), "log": log, "tex": str(tex_path)}
+    return {"status": "build_failed", "pdf": "", "log": log, "tex": str(tex_path)}

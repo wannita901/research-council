@@ -145,6 +145,41 @@ async def test_run_experiments_one_loop_per_rq_with_csv(tmp_path):
     assert "rq1" in csv_text and "rq2" in csv_text and "acc" in csv_text and "0.8" in csv_text
 
 
+def test_load_prior_experiments_reads_code_and_feedback(tmp_path):
+    from research_council.debate.experimentation import load_prior_experiments
+
+    d = tmp_path / "experiment" / "rq1"
+    d.mkdir(parents=True)
+    (d / "experiment.py").write_text("print('METRIC acc=0.7')")
+    (d / "reviews.md").write_text("# Code reviews\n- [high soundness] uses train acc")
+    (d / "log.txt").write_text("Traceback: boom")
+    prior = load_prior_experiments(tmp_path)
+    assert "rq1" in prior and "METRIC acc=0.7" in prior["rq1"]["code"]
+    assert "train acc" in prior["rq1"]["feedback"] and "boom" in prior["rq1"]["feedback"]
+    assert load_prior_experiments(tmp_path / "nope") == {}  # no dir → empty
+
+
+async def test_run_experiments_continues_from_prior(tmp_path):
+    from research_council.debate.experimentation import run_experiments
+    from research_council.store.models import ResearchQuestion
+
+    seen = {}
+
+    class _RecordingCoder:
+        def __init__(self):
+            self.usage = UsageMeter()
+
+        async def draft(self, idea, plan, *, error="", prior_code="", feedback=""):
+            seen.setdefault("prior_code", prior_code)  # capture the FIRST draft's seed
+            return ExperimentDraft(code="print('METRIC acc=0.9')")
+
+    rqs = [ResearchQuestion(id="rq1", question="q", plan="p", metrics="acc")]
+    prior = {"rq1": {"code": "print('OLD CODE')", "feedback": "fix the metric"}}
+    await run_experiments({"title": "X"}, rqs, _RecordingCoder(), _approvers(2), LocalSandbox(),
+                          caps=_BALANCED, prior=prior)
+    assert seen["prior_code"] == "print('OLD CODE')"  # improved the prior, not from scratch
+
+
 def test_write_experiment_materializes_artifacts(tmp_path):
     from research_council.debate.experimentation import write_experiment
     from research_council.store.models import CodeReview, ExperimentResult, ReviewFinding
