@@ -22,8 +22,7 @@ class Response(BaseModel):
 class LLMProvider(Protocol):
     """Uniform chat interface. Real adapters add retries/caching/cost here."""
 
-    name: str   # vendor: "openai" | "anthropic" | "gemini"
+    name: str  # vendor: "openai" | "anthropic" | "gemini"
     model: str
 
-    async def complete(self, system: str, user: str, *, kind: str = "") -> Response:
-        ...
+    async def complete(self, system: str, user: str, *, kind: str = "") -> Response: ...

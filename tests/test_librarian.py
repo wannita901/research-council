@@ -21,9 +21,15 @@ def test_slugify():
 
 
 def test_page_roundtrips_through_frontmatter():
-    p = WikiPage(type="approaches", title="Agentic Repair w/ Execution Feedback",
-                 origin="external", papers=["openalex:W1"], related=["[[concepts:tests-as-oracle]]"],
-                 updated="2026-06-07", body="The technique builds X.\n\n## Detail\n- a")
+    p = WikiPage(
+        type="approaches",
+        title="Agentic Repair w/ Execution Feedback",
+        origin="external",
+        papers=["openalex:W1"],
+        related=["[[concepts:tests-as-oracle]]"],
+        updated="2026-06-07",
+        body="The technique builds X.\n\n## Detail\n- a",
+    )
     again = parse_page(render_page(p))
     assert again.type == "approaches" and again.origin == "external"
     assert again.slug == "agentic-repair-w-execution-feedback"  # derived from title
@@ -42,7 +48,11 @@ def test_origin_guard_and_type_validation():
 
 def test_wiki_path():
     p = WikiPage(type="benchmarks", title="Juliet Test Suite")
-    assert wiki_path("knowledge", p).as_posix().endswith("knowledge/wiki/benchmarks/juliet-test-suite.md")
+    assert (
+        wiki_path("knowledge", p)
+        .as_posix()
+        .endswith("knowledge/wiki/benchmarks/juliet-test-suite.md")
+    )
 
 
 async def test_router_routes_source_into_typed_pages():
@@ -51,13 +61,19 @@ async def test_router_routes_source_into_typed_pages():
 
     from research_council.librarian.router import Librarian
 
-    args = {"pages": [
-        {"type": "papers", "title": "Doe 2025: Agentic Repair", "body": "anchor",
-         "related": ["[[approaches:agentic-repair]]"]},
-        {"type": "approaches", "title": "Agentic Repair", "body": "the technique"},
-        {"type": "bogus-folder", "title": "dropped", "body": "x"},   # invalid type → dropped
-        {"type": "gaps", "title": "  ", "body": "y"},                # blank title → dropped
-    ]}
+    args = {
+        "pages": [
+            {
+                "type": "papers",
+                "title": "Doe 2025: Agentic Repair",
+                "body": "anchor",
+                "related": ["[[approaches:agentic-repair]]"],
+            },
+            {"type": "approaches", "title": "Agentic Repair", "body": "the technique"},
+            {"type": "bogus-folder", "title": "dropped", "body": "x"},  # invalid type → dropped
+            {"type": "gaps", "title": "  ", "body": "y"},  # blank title → dropped
+        ]
+    }
     lib = Librarian(TestModel(custom_output_args=args), price_model="claude-sonnet-4-6")
     src = Source(citekey="openalex:W1", title="Agentic repair", text="abstract", origin="external")
     pages = await lib.route(src, updated="2026-06-07")
@@ -75,21 +91,37 @@ class _FakeLibrarian:
         self.spec = spec  # (type, title, body)
 
     async def route(self, source, *, updated=None):
-        return [WikiPage(type=t, title=ti, origin=source.origin, papers=[source.citekey],
-                         updated=updated, body=b) for t, ti, b in self.spec]
+        return [
+            WikiPage(
+                type=t,
+                title=ti,
+                origin=source.origin,
+                papers=[source.citekey],
+                updated=updated,
+                body=b,
+            )
+            for t, ti, b in self.spec
+        ]
 
 
 async def test_ingest_writes_pages_index_log_and_raw(tmp_path):
     from research_council.librarian.ingest import Ingestor
 
-    fake = _FakeLibrarian([
-        ("papers", "Doe 2025 Repair", "anchor note"),
-        ("approaches", "Agentic Repair", "the technique"),
-        ("gaps", "No class-stratified eval", "open problem"),
-    ])
+    fake = _FakeLibrarian(
+        [
+            ("papers", "Doe 2025 Repair", "anchor note"),
+            ("approaches", "Agentic Repair", "the technique"),
+            ("gaps", "No class-stratified eval", "open problem"),
+        ]
+    )
     ing = Ingestor(fake, knowledge_root=tmp_path)
-    src = Source(citekey="openalex:W1", title="Agentic repair", text="abstract text",
-                 origin="external", url="http://x")
+    src = Source(
+        citekey="openalex:W1",
+        title="Agentic repair",
+        text="abstract text",
+        origin="external",
+        url="http://x",
+    )
     rep = await ing.ingest(src, updated="2026-06-07")
 
     assert len(rep.written) == 3 and not rep.merged
@@ -103,23 +135,25 @@ async def test_ingest_writes_pages_index_log_and_raw(tmp_path):
     assert "ingest | Agentic repair (external)" in (tmp_path / "wiki/log.md").read_text()
     # the papers anchor cross-links to its fan-out
     anchor = (tmp_path / "wiki/papers/doe-2025-repair.md").read_text()
-    assert "[[approaches:agentic-repair]]" in anchor and "[[gaps:no-class-stratified-eval]]" in anchor
+    assert (
+        "[[approaches:agentic-repair]]" in anchor and "[[gaps:no-class-stratified-eval]]" in anchor
+    )
 
 
 async def test_ingest_merges_and_unions_provenance(tmp_path):
     from research_council.librarian.ingest import Ingestor
 
-    await Ingestor(_FakeLibrarian([("concepts", "Tests as Oracle", "idea from p1")]),
-                   knowledge_root=tmp_path).ingest(
-        Source(citekey="s1", title="P1", text="a", origin="external"), updated="2026-06-07")
-    rep = await Ingestor(_FakeLibrarian([("concepts", "Tests as Oracle", "idea from p2")]),
-                         knowledge_root=tmp_path).ingest(
-        Source(citekey="s2", title="P2", text="b", origin="external"), updated="2026-06-08")
+    await Ingestor(
+        _FakeLibrarian([("concepts", "Tests as Oracle", "idea from p1")]), knowledge_root=tmp_path
+    ).ingest(Source(citekey="s1", title="P1", text="a", origin="external"), updated="2026-06-07")
+    rep = await Ingestor(
+        _FakeLibrarian([("concepts", "Tests as Oracle", "idea from p2")]), knowledge_root=tmp_path
+    ).ingest(Source(citekey="s2", title="P2", text="b", origin="external"), updated="2026-06-08")
 
     assert rep.merged == ["concepts/tests-as-oracle.md"] and not rep.written
     page = (tmp_path / "wiki/concepts/tests-as-oracle.md").read_text()
     assert "idea from p1" in page and "idea from p2" in page  # compounded, not overwritten
-    assert set(parse_page(page).papers) == {"s1", "s2"}        # provenance unioned
+    assert set(parse_page(page).papers) == {"s1", "s2"}  # provenance unioned
 
 
 class _EmptyLibrarian:
@@ -134,31 +168,38 @@ async def test_ingest_fallback_when_router_returns_nothing(tmp_path):
 
     # internal source (e.g. council synthesis) that routes to 0 pages → still captured as findings
     rep = await Ingestor(_EmptyLibrarian(), knowledge_root=tmp_path).ingest(
-        Source(citekey="council:r1", title="Council findings", text="we found X", origin="internal"))
+        Source(citekey="council:r1", title="Council findings", text="we found X", origin="internal")
+    )
     assert len(rep.written) == 1
     pg = parse_page((tmp_path / "wiki" / rep.written[0]).read_text())
     assert pg.type == "findings" and pg.origin == "internal" and "we found X" in pg.body
 
     # external source that routes to 0 pages → captured as a papers anchor
     rep2 = await Ingestor(_EmptyLibrarian(), knowledge_root=tmp_path).ingest(
-        Source(citekey="openalex:W9", title="Some paper", text="abstract", origin="external"))
+        Source(citekey="openalex:W9", title="Some paper", text="abstract", origin="external")
+    )
     assert rep2.written and rep2.written[0].startswith("papers/")
 
 
 async def test_internal_origin_skips_raw_then_escalates_on_external_merge(tmp_path):
     from research_council.librarian.ingest import Ingestor
 
-    rep = await Ingestor(_FakeLibrarian([("findings", "Result X", "council synthesis")]),
-                         knowledge_root=tmp_path).ingest(
+    rep = await Ingestor(
+        _FakeLibrarian([("findings", "Result X", "council synthesis")]), knowledge_root=tmp_path
+    ).ingest(
         Source(citekey="council:r1", title="deliberation", text="...", origin="internal"),
-        updated="2026-06-07")
+        updated="2026-06-07",
+    )
     assert rep.raw_saved is None and not (tmp_path / "raw/external").exists()
     assert parse_page((tmp_path / "wiki/findings/result-x.md").read_text()).origin == "internal"
 
     # an external source later touching the same page escalates it to prior art (external)
-    await Ingestor(_FakeLibrarian([("findings", "Result X", "from a real paper")]),
-                   knowledge_root=tmp_path).ingest(
-        Source(citekey="openalex:W9", title="real", text="x", origin="external"), updated="2026-06-08")
+    await Ingestor(
+        _FakeLibrarian([("findings", "Result X", "from a real paper")]), knowledge_root=tmp_path
+    ).ingest(
+        Source(citekey="openalex:W9", title="real", text="x", origin="external"),
+        updated="2026-06-08",
+    )
     assert parse_page((tmp_path / "wiki/findings/result-x.md").read_text()).origin == "external"
 
 

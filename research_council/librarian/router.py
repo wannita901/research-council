@@ -34,7 +34,9 @@ class Librarian:
     def __init__(self, model, *, price_model: str | None = None):
         self._price_model = price_model
         self.usage = UsageMeter()
-        self._agent: Agent = Agent(model, output_type=RoutingResult, system_prompt=prompts.load("librarian/router"))
+        self._agent: Agent = Agent(
+            model, output_type=RoutingResult, system_prompt=prompts.load("librarian/router")
+        )
 
     async def route(self, source: Source, *, updated: str | None = None) -> list[WikiPage]:
         """Route one source into typed wiki pages (in memory)."""
@@ -50,11 +52,17 @@ class Librarian:
         for d in result.output.pages:
             if d.type not in TAXONOMY or not d.title.strip():
                 continue  # drop a malformed route rather than fail the whole ingest
-            pages.append(WikiPage(
-                type=d.type, title=d.title.strip(), origin=source.origin,
-                papers=[source.citekey], related=list(d.related), updated=updated,
-                body=d.body.strip(),
-            ))
+            pages.append(
+                WikiPage(
+                    type=d.type,
+                    title=d.title.strip(),
+                    origin=source.origin,
+                    papers=[source.citekey],
+                    related=list(d.related),
+                    updated=updated,
+                    body=d.body.strip(),
+                )
+            )
         return pages
 
     def _track(self, r) -> None:
@@ -62,6 +70,11 @@ class Librarian:
         if u is None:
             return
         from research_council.providers.sdk import _cost
+
         it, ot = u.input_tokens or 0, u.output_tokens or 0
-        self.usage.add(requests=u.requests or 0, input_tokens=it, output_tokens=ot,
-                       cost_usd=_cost(self._price_model, it, ot) if self._price_model else 0.0)
+        self.usage.add(
+            requests=u.requests or 0,
+            input_tokens=it,
+            output_tokens=ot,
+            cost_usd=_cost(self._price_model, it, ot) if self._price_model else 0.0,
+        )

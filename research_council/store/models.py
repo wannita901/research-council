@@ -38,10 +38,10 @@ class ResearchQuestion(BaseModel):
     """One research question in the proposal — its own focused experiment + metric(s).
     Stage B runs one council loop per RQ (id assigned by the orchestrator if blank)."""
 
-    id: str = ""                       # rq1, rq2, … (assigned downstream)
+    id: str = ""  # rq1, rq2, … (assigned downstream)
     question: str = ""
-    plan: str = ""                     # step-by-step plan to answer THIS question
-    metrics: str = ""                  # metric(s) that answer THIS question
+    plan: str = ""  # step-by-step plan to answer THIS question
+    metrics: str = ""  # metric(s) that answer THIS question
 
 
 class CandidateDraft(BaseModel):
@@ -49,14 +49,14 @@ class CandidateDraft(BaseModel):
     (id/vendor/gap set by the orchestrator). Empty fields in a `revise` draft mean 'unchanged'."""
 
     title: str = ""
-    problem_statement: str = ""        # the concrete problem being addressed
-    motivation: str = ""               # why it matters now (impact)
+    problem_statement: str = ""  # the concrete problem being addressed
+    motivation: str = ""  # why it matters now (impact)
     hypothesis: str = ""
-    method: str = ""                   # the proposed method / approach
-    experiment_plan: str = ""          # overall step-by-step plan
+    method: str = ""  # the proposed method / approach
+    experiment_plan: str = ""  # overall step-by-step plan
     research_questions: list[ResearchQuestion] = Field(default_factory=list)  # per-RQ experiments
-    dataset_metrics: str = ""          # datasets + evaluation metrics
-    fallback_plan: str = ""            # what to do if the main plan fails
+    dataset_metrics: str = ""  # datasets + evaluation metrics
+    fallback_plan: str = ""  # what to do if the main plan fails
 
 
 class ScoreItem(BaseModel):
@@ -80,7 +80,7 @@ class Candidate(BaseModel):
     id: str  # unique per debate; v2 uses the authoring codename
     vendor: str
     title: str
-    gap: str                           # the research gap (from the author's brief)
+    gap: str  # the research gap (from the author's brief)
     hypothesis: str
     method: str
     experiment_plan: str
@@ -96,25 +96,42 @@ class Candidate(BaseModel):
         """Research questions with ids assigned (rq1, rq2, …). Falls back to a single RQ built
         from the overall experiment_plan when none were proposed (preserves single-experiment)."""
         if self.research_questions:
-            return [rq.model_copy(update={"id": rq.id or f"rq{i}"})
-                    for i, rq in enumerate(self.research_questions, 1)]
-        return [ResearchQuestion(id="rq1", question=self.hypothesis or self.title,
-                                 plan=self.experiment_plan, metrics=self.dataset_metrics)]
+            return [
+                rq.model_copy(update={"id": rq.id or f"rq{i}"})
+                for i, rq in enumerate(self.research_questions, 1)
+            ]
+        return [
+            ResearchQuestion(
+                id="rq1",
+                question=self.hypothesis or self.title,
+                plan=self.experiment_plan,
+                metrics=self.dataset_metrics,
+            )
+        ]
 
     def as_proposal_md(self) -> str:
         """Render the proposal as a markdown document (the Stage-A artifact)."""
-        rows = [("Problem Statement", self.problem_statement), ("Motivation", self.motivation),
-                ("Hypothesis", self.hypothesis), ("Proposed Method", self.method),
-                ("Step-by-step Experiment Plan", self.experiment_plan),
-                ("Dataset / Metrics", self.dataset_metrics), ("Fallback Plan", self.fallback_plan)]
+        rows = [
+            ("Problem Statement", self.problem_statement),
+            ("Motivation", self.motivation),
+            ("Hypothesis", self.hypothesis),
+            ("Proposed Method", self.method),
+            ("Step-by-step Experiment Plan", self.experiment_plan),
+            ("Dataset / Metrics", self.dataset_metrics),
+            ("Fallback Plan", self.fallback_plan),
+        ]
         body = [f"# {self.title}", "", f"*Research gap:* {self.gap}", ""]
         for head, text in rows:
             body += [f"## {head}", (text or "_(not specified)_"), ""]
         if self.research_questions:
             body += ["## Research Questions"]
             for rq in self.numbered_rqs():
-                body += [f"### {rq.id.upper()}: {rq.question}",
-                         f"- *Plan:* {rq.plan or '—'}", f"- *Metrics:* {rq.metrics or '—'}", ""]
+                body += [
+                    f"### {rq.id.upper()}: {rq.question}",
+                    f"- *Plan:* {rq.plan or '—'}",
+                    f"- *Metrics:* {rq.metrics or '—'}",
+                    "",
+                ]
         if self.refs:
             body += ["## References", *[f"- {r}" for r in self.refs]]
         return "\n".join(body).strip() + "\n"
@@ -128,7 +145,9 @@ class Contribution(BaseModel):
     content: str = ""
     refs: list[str] = Field(default_factory=list)
     targets: str | None = None  # candidate id this is about
-    revision: CandidateDraft | None = None  # for kind="revise": updated fields of one's OWN candidate
+    revision: CandidateDraft | None = (
+        None  # for kind="revise": updated fields of one's OWN candidate
+    )
     done: bool = False  # nothing substantive left to add
 
 
@@ -149,10 +168,10 @@ class RoundDigest(BaseModel):
     """Structured memory carried into the next round's research (plan/15 #3)."""
 
     round: int = 0
-    gaps: list[str] = Field(default_factory=list)         # "Codename: gap"
-    candidates: list[str] = Field(default_factory=list)   # "id: title"
+    gaps: list[str] = Field(default_factory=list)  # "Codename: gap"
+    candidates: list[str] = Field(default_factory=list)  # "id: title"
     top_critiques: list[str] = Field(default_factory=list)  # "from → target: claim"
-    verifier: list[str] = Field(default_factory=list)     # grounding signals
+    verifier: list[str] = Field(default_factory=list)  # grounding signals
     human_comment: str = ""
 
 
@@ -240,8 +259,8 @@ class StageState(BaseModel):
     name: str
     status: str = "pending"  # pending | active | awaiting_approval | approved
     run_id: str | None = None
-    summary: str = ""                               # short human-readable outcome
-    artifacts: dict = Field(default_factory=dict)   # stage outputs (selected idea, results, …)
+    summary: str = ""  # short human-readable outcome
+    artifacts: dict = Field(default_factory=dict)  # stage outputs (selected idea, results, …)
 
 
 class StageHandoff(BaseModel):
@@ -249,11 +268,11 @@ class StageHandoff(BaseModel):
 
     from_stage: str
     to_stage: str
-    idea: dict = Field(default_factory=dict)         # the selected candidate
+    idea: dict = Field(default_factory=dict)  # the selected candidate
     experiment_plan: str = ""
     constraints: dict[str, str] = Field(default_factory=dict)
     notes: str = ""
-    artifacts: dict = Field(default_factory=dict)    # prior stage's raw outputs
+    artifacts: dict = Field(default_factory=dict)  # prior stage's raw outputs
 
 
 class Project(BaseModel):
@@ -284,15 +303,15 @@ class VerificationProbe(BaseModel):
 
     code: str = ""
     ran: bool = False
-    output: str = ""        # trimmed stdout/stderr
+    output: str = ""  # trimmed stdout/stderr
     supports: bool = False  # did the probe confirm the finding?
 
 
 class ReviewFinding(BaseModel):
-    kind: str = "style"                 # one of FINDING_KINDS
-    severity: str = "low"               # one of SEVERITIES
+    kind: str = "style"  # one of FINDING_KINDS
+    severity: str = "low"  # one of SEVERITIES
     msg: str = ""
-    fix: str = ""                       # concrete suggested fix
+    fix: str = ""  # concrete suggested fix
     probe: VerificationProbe | None = None
 
     @property
@@ -314,20 +333,20 @@ class CodeReview(BaseModel):
 
 
 class ExperimentResult(BaseModel):
-    ran: bool = False        # the script executed without error (exit 0, no timeout)
-    feasible: bool = False   # ran AND emitted a METRIC line — the "run-it" verification
+    ran: bool = False  # the script executed without error (exit 0, no timeout)
+    feasible: bool = False  # ran AND emitted a METRIC line — the "run-it" verification
     metric: str | None = None
     attempts: int = 0
     code: str = ""
     log: str = ""
-    backend: str = ""        # docker | local
+    backend: str = ""  # docker | local
     # council-loop additions (plan/18)
-    approved: bool = False                                  # feasible AND K-of-N reviewers approved
-    approvals: int = 0                                      # reviewers who approved on the final iteration
-    iterations: int = 0                                     # implement→run→review cycles spent
+    approved: bool = False  # feasible AND K-of-N reviewers approved
+    approvals: int = 0  # reviewers who approved on the final iteration
+    iterations: int = 0  # implement→run→review cycles spent
     reviews: list[CodeReview] = Field(default_factory=list)  # final-iteration reviews
-    usd: float = 0.0                                        # spend on this stage
-    stopped_reason: str = ""                                # approved | iters_exhausted | budget_exhausted
+    usd: float = 0.0  # spend on this stage
+    stopped_reason: str = ""  # approved | iters_exhausted | budget_exhausted
 
 
 class RQResult(BaseModel):
@@ -343,10 +362,10 @@ class Citation(BaseModel):
     """A reference. `grounded` = drawn from an LLM-wiki origin:external page (trusted);
     otherwise it was search-augmented and is tagged needs-verification."""
 
-    key: str = ""                  # bibtex-style key
-    text: str = ""                 # human-readable reference
-    source_id: str = ""            # wiki page id / url
-    grounded: bool = True          # True → from the wiki prior-art corpus
+    key: str = ""  # bibtex-style key
+    text: str = ""  # human-readable reference
+    source_id: str = ""  # wiki page id / url
+    grounded: bool = True  # True → from the wiki prior-art corpus
     needs_verification: bool = False
 
 
@@ -357,14 +376,14 @@ class PaperDraft(BaseModel):
     abstract: str = ""
     sections: dict[str, str] = Field(default_factory=dict)  # name -> markdown body
     citations: list[Citation] = Field(default_factory=list)
-    figure: str = ""               # relative path to a generated results figure, if any
+    figure: str = ""  # relative path to a generated results figure, if any
 
 
 class ChangeRequest(BaseModel):
     """A reviewer's revision request, tagged by the section it touches (plan/18)."""
 
-    section: str = ""              # which section to revise ("" = whole-paper / abstract)
-    severity: str = "low"          # high | medium | low
+    section: str = ""  # which section to revise ("" = whole-paper / abstract)
+    severity: str = "low"  # high | medium | low
     msg: str = ""
 
     @property
@@ -394,26 +413,26 @@ class VenueChoice(BaseModel):
     """Stage-C writing constraints — supplied by --venue or gathered at onboarding (plan/18)."""
 
     venue: str = "generic"
-    emphasis: str = ""             # what to foreground (e.g. "the automation angle")
+    emphasis: str = ""  # what to foreground (e.g. "the automation angle")
     double_blind: bool = False
     page_limit: int | None = None  # override the venue default
-    rationale: str = ""            # if council-recommended, why this venue
+    rationale: str = ""  # if council-recommended, why this venue
 
 
 class WritingResult(BaseModel):
     venue: str = ""
     title: str = ""
     paper_path: str = ""
-    pdf_path: str = ""             # set if the LaTeX build succeeded
+    pdf_path: str = ""  # set if the LaTeX build succeeded
     sections: list[str] = Field(default_factory=list)
     review: ReviewNotes = Field(default_factory=ReviewNotes)
     score_history: list[float] = Field(default_factory=list)  # mean rubric score per round
     revisions: int = 0
-    accepted: bool = False         # met the accept bar (vs best-so-far on exhaust)
+    accepted: bool = False  # met the accept bar (vs best-so-far on exhaust)
     citations: list[Citation] = Field(default_factory=list)
     usd: float = 0.0
-    stopped_reason: str = ""       # accepted | revisions_exhausted | budget_exhausted
-    latex: str = ""                # built | fallback_no_tex | build_failed | skipped
+    stopped_reason: str = ""  # accepted | revisions_exhausted | budget_exhausted
+    latex: str = ""  # built | fallback_no_tex | build_failed | skipped
 
 
 # --- run config & trace envelope ------------------------------------------
@@ -439,10 +458,10 @@ class RunConfig(BaseModel):
     anonymize: bool = True
     verifier_mode: str = "mock"  # mock (incr 1) | sandbox (incr 2)
     # v2 agentic caps (plan/15 #1; all overridable via mise env — see config.load_config)
-    max_iters: int = 5         # per-peer research/deliberate loop iterations (per call)
-    max_tool_calls: int = 8    # per-peer tool calls (per call)
-    max_turns: int = 4         # deliberation free-form sub-rounds
-    max_rounds: int = 4        # full ideation rounds
+    max_iters: int = 5  # per-peer research/deliberate loop iterations (per call)
+    max_tool_calls: int = 8  # per-peer tool calls (per call)
+    max_turns: int = 4  # deliberation free-form sub-rounds
+    max_rounds: int = 4  # full ideation rounds
     max_msgs_per_peer: int = 3  # deliberation messages per peer per round (incl. opening; plan/23)
 
 

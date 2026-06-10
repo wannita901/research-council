@@ -36,12 +36,14 @@ class GitHubProvider:
         out: list[Paper] = []
         for it in (data.get("items") or [])[:k]:
             pushed = (it.get("pushed_at") or "")[:4]
-            out.append(Paper(
-                id=it.get("full_name") or "(github)",
-                title=it.get("full_name") or "(repo)",
-                abstract=it.get("description") or "",
-                year=int(pushed) if pushed.isdigit() else None,
-                url=it.get("html_url"),
-                source="github",
-            ))
+            out.append(
+                Paper(
+                    id=it.get("full_name") or "(github)",
+                    title=it.get("full_name") or "(repo)",
+                    abstract=it.get("description") or "",
+                    year=int(pushed) if pushed.isdigit() else None,
+                    url=it.get("html_url"),
+                    source="github",
+                )
+            )
         return out

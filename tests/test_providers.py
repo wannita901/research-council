@@ -21,8 +21,11 @@ def _keys(monkeypatch):
 def test_build_each_provider_and_client():
     from research_council.providers.sdk import build_provider
 
-    for vendor, model in [("openai", "gpt-5"), ("anthropic", "claude-opus-4-8"),
-                          ("gemini", "gemini-2.5-pro")]:
+    for vendor, model in [
+        ("openai", "gpt-5"),
+        ("anthropic", "claude-opus-4-8"),
+        ("gemini", "gemini-2.5-pro"),
+    ]:
         p = build_provider(vendor, model)
         assert isinstance(p, LLMProvider)
         assert p.name == vendor and p.model == model

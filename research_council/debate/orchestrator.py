@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import asyncio
 from collections import defaultdict
-from typing import Awaitable, Callable
+from collections.abc import Awaitable, Callable
 
 from research_council.agents.base import Peer
 from research_council.debate.anonymize import anonymize
@@ -38,8 +38,12 @@ async def _auto_review(rec: Recommendation, candidates: list[Candidate], rnd: in
     return ReviewAction(action="auto")
 
 
-def _aggregate(scores: list[Score], signal_by_label: dict[str, VerifierSignal],
-               weights: dict[str, float], id_map: dict[str, Candidate]) -> Recommendation:
+def _aggregate(
+    scores: list[Score],
+    signal_by_label: dict[str, VerifierSignal],
+    weights: dict[str, float],
+    id_map: dict[str, Candidate],
+) -> Recommendation:
     by_label: dict[str, list[Score]] = defaultdict(list)
     for s in scores:
         by_label[s.candidate_id].append(s)
@@ -51,12 +55,19 @@ def _aggregate(scores: list[Score], signal_by_label: dict[str, VerifierSignal],
         cla = sum(s.clarity for s in slist) / n
         sig = signal_by_label.get(label)
         feas = sig.feasibility if sig else sum(s.feasibility for s in slist) / n
-        comp = (weights["novelty"] * nov + weights["soundness"] * snd
-                + weights["feasibility"] * feas + weights["clarity"] * cla)
+        comp = (
+            weights["novelty"] * nov
+            + weights["soundness"] * snd
+            + weights["feasibility"] * feas
+            + weights["clarity"] * cla
+        )
         composites[id_map[label].id] = round(comp, 4)
     ranked = sorted(composites, key=composites.get, reverse=True)
-    return Recommendation(ranked=ranked, composites=composites,
-                          rationale="anonymized panel vote; feasibility from verifier")
+    return Recommendation(
+        ranked=ranked,
+        composites=composites,
+        rationale="anonymized panel vote; feasibility from verifier",
+    )
 
 
 async def run_debate(
@@ -86,7 +97,7 @@ async def run_debate(
 
     # Phase 2 — propose.
     candidates: list[Candidate] = list(
-        await asyncio.gather(*(p.propose(b) for p, b in zip(peers, briefs)))
+        await asyncio.gather(*(p.propose(b) for p, b in zip(peers, briefs, strict=False)))
     )
     for c in candidates:
         out("propose", "candidate", c.model_dump(), author_vendor=c.vendor)
@@ -109,12 +120,25 @@ async def run_debate(
             text, target = pending_feedback
             targets = [target] if target else [c.id for c in candidates]
             for cid in targets:
-                critiques.append(Critique(critic_vendor="human", target_id=label_of[cid],
-                                          axis="feasibility", severity=4, claim=text))
+                critiques.append(
+                    Critique(
+                        critic_vendor="human",
+                        target_id=label_of[cid],
+                        axis="feasibility",
+                        severity=4,
+                        claim=text,
+                    )
+                )
             pending_feedback = None
 
         for c in critiques:
-            out("cross_critique", "critique", c.model_dump(), round=rnd, author_vendor=c.critic_vendor)
+            out(
+                "cross_critique",
+                "critique",
+                c.model_dump(),
+                round=rnd,
+                author_vendor=c.critic_vendor,
+            )
 
         # Phase 4 — rebut / revise.
         for c in candidates:
@@ -158,7 +182,13 @@ async def run_debate(
             break
 
     if final_choice:
-        out("judge", "final_choice", {"candidate_id": final_choice}, round=rnd, author_vendor="human")
+        out(
+            "judge",
+            "final_choice",
+            {"candidate_id": final_choice},
+            round=rnd,
+            author_vendor="human",
+        )
 
     assert rec is not None
     return rec, candidates

@@ -10,8 +10,8 @@ paper is exported to LaTeX (build-verify-fix) if a TeX engine is available.
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from pathlib import Path
-from typing import Callable
 
 import yaml
 
@@ -68,6 +68,7 @@ async def grounded_citations(idea: dict, *, k: int = 8) -> list[Citation]:
 
 def _slug(s: str) -> str:
     import re
+
     return re.sub(r"[^a-z0-9]+", "-", s.lower()).strip("-")[:40] or "section"
 
 
@@ -87,8 +88,12 @@ def _merge_reviews(reviews: list[ReviewNotes], block_severities: tuple[str, ...]
         comments += [f"[{rv.reviewer_vendor}] {c}" for c in rv.comments]
         changes += rv.change_requests
     scores = {k: round(sum(v) / len(v), 4) for k, v in crits.items()}
-    merged = ReviewNotes(scores=scores, comments=comments, change_requests=changes,
-                         verdict=reviews[0].verdict if reviews else "")
+    merged = ReviewNotes(
+        scores=scores,
+        comments=comments,
+        change_requests=changes,
+        verdict=reviews[0].verdict if reviews else "",
+    )
     blocking = any(c.severity in block_severities for c in changes)
     return merged, merged.mean, blocking
 
@@ -102,7 +107,9 @@ def _sections_to_revise(changes) -> list[str]:
     return out
 
 
-def _merge_revision(base: PaperDraft, revised: PaperDraft, sections: list[str], changes) -> PaperDraft:
+def _merge_revision(
+    base: PaperDraft, revised: PaperDraft, sections: list[str], changes
+) -> PaperDraft:
     """Keep `base`, overwriting only the targeted sections (+ abstract/title if requested)."""
     merged = base.model_copy(deep=True)
     for name in sections:
@@ -117,15 +124,24 @@ def _merge_revision(base: PaperDraft, revised: PaperDraft, sections: list[str], 
 
 
 # --- paper files --------------------------------------------------------------
-def _write_paper(out_dir: Path, draft: PaperDraft, review: ReviewNotes, venue_name: str,
-                 result: WritingResult) -> Path:
+def _write_paper(
+    out_dir: Path, draft: PaperDraft, review: ReviewNotes, venue_name: str, result: WritingResult
+) -> Path:
     paper = out_dir / "paper"
     (paper / "sections").mkdir(parents=True, exist_ok=True)
-    body = [f"# {draft.title}", f"*Target venue: {venue_name} · draft by research-council*",
-            "", "## Abstract", draft.abstract, ""]
+    body = [
+        f"# {draft.title}",
+        f"*Target venue: {venue_name} · draft by research-council*",
+        "",
+        "## Abstract",
+        draft.abstract,
+        "",
+    ]
     for name, text in _ordered(draft.sections):
         body += [f"## {name}", text, ""]
-        (paper / "sections" / f"{_slug(name)}.md").write_text(f"# {name}\n\n{text}\n", encoding="utf-8")
+        (paper / "sections" / f"{_slug(name)}.md").write_text(
+            f"# {name}\n\n{text}\n", encoding="utf-8"
+        )
     if draft.figure:
         body += ["## Figure", f"![results]({draft.figure})", ""]
     if draft.citations:
@@ -136,16 +152,24 @@ def _write_paper(out_dir: Path, draft: PaperDraft, review: ReviewNotes, venue_na
         body.append("")
     (paper / "paper.md").write_text("\n".join(body).strip() + "\n", encoding="utf-8")
 
-    rv = [f"# Review — {venue_name}", "",
-          f"**Status:** {'accepted' if result.accepted else 'best-so-far (' + result.stopped_reason + ')'}",
-          f"**Mean rubric score:** {review.mean:.2f}", "", "## Scores"]
+    rv = [
+        f"# Review — {venue_name}",
+        "",
+        f"**Status:** {'accepted' if result.accepted else 'best-so-far (' + result.stopped_reason + ')'}",
+        f"**Mean rubric score:** {review.mean:.2f}",
+        "",
+        "## Scores",
+    ]
     rv += [f"- **{k}**: {v:.2f}" for k, v in review.scores.items()]
     rv += ["", "## Comments", *[f"- {c}" for c in review.comments]]
     if review.change_requests:
         rv += ["", "## Outstanding change-requests"]
         rv += [f"- [{c.severity}] ({c.section or 'whole'}) {c.msg}" for c in review.change_requests]
-    rv += ["", f"**Score history:** {', '.join(f'{s:.2f}' for s in result.score_history)}",
-           f"**Verdict:** {review.verdict}"]
+    rv += [
+        "",
+        f"**Score history:** {', '.join(f'{s:.2f}' for s in result.score_history)}",
+        f"**Verdict:** {review.verdict}",
+    ]
     (paper / "review.md").write_text("\n".join(rv) + "\n", encoding="utf-8")
     return paper / "paper.md"
 
@@ -190,11 +214,22 @@ def load_prior_paper(out_dir: Path | str):
 
 
 # --- the loop -----------------------------------------------------------------
-async def run_writing(handoff, writer, reviewers, *, venue: str, out_dir: Path | str,
-                      caps: StageCCaps | None = None, profile: str = "balanced",
-                      allowed_citations: list[Citation] | None = None,
-                      prior_draft: "PaperDraft | None" = None, build_error: str = "",
-                      latex_fixer=None, latex: bool = True, emit: Emit = None) -> WritingResult:
+async def run_writing(
+    handoff,
+    writer,
+    reviewers,
+    *,
+    venue: str,
+    out_dir: Path | str,
+    caps: StageCCaps | None = None,
+    profile: str = "balanced",
+    allowed_citations: list[Citation] | None = None,
+    prior_draft: PaperDraft | None = None,
+    build_error: str = "",
+    latex_fixer=None,
+    latex: bool = True,
+    emit: Emit = None,
+) -> WritingResult:
     caps = caps or stage_c_caps(profile)
     venue_cfg = load_venue(venue)
     venue_name = venue_cfg.get("name", venue)
@@ -206,10 +241,14 @@ async def run_writing(handoff, writer, reviewers, *, venue: str, out_dir: Path |
     figure = ""
     if experiment.get("metric") or experiment.get("rqs"):
         from research_council.verify.figure import render_result_figure
+
         figure = render_result_figure(experiment, out_dir / "paper" / "assets") or ""
         if figure:
-            figure = str(Path(figure).relative_to(out_dir / "paper")) if str(figure).startswith(
-                str(out_dir / "paper")) else figure
+            figure = (
+                str(Path(figure).relative_to(out_dir / "paper"))
+                if str(figure).startswith(str(out_dir / "paper"))
+                else figure
+            )
 
     if prior_draft is not None:
         # continue improving the existing paper instead of redrafting from scratch
@@ -217,14 +256,29 @@ async def run_writing(handoff, writer, reviewers, *, venue: str, out_dir: Path |
         if figure and not draft.figure:
             draft.figure = figure
         if emit:
-            emit("writing", "continue", {"sections": list(draft.sections),
-                                         "build_error": bool(build_error)})
+            emit(
+                "writing",
+                "continue",
+                {"sections": list(draft.sections), "build_error": bool(build_error)},
+            )
     else:
-        draft = await writer.draft(handoff.idea, experiment, handoff.constraints,
-                                   allowed_citations=allowed_citations, figure=figure)
+        draft = await writer.draft(
+            handoff.idea,
+            experiment,
+            handoff.constraints,
+            allowed_citations=allowed_citations,
+            figure=figure,
+        )
         if emit:
-            emit("writing", "draft", {"title": draft.title, "sections": list(draft.sections),
-                                      "citations": len(draft.citations)})
+            emit(
+                "writing",
+                "draft",
+                {
+                    "title": draft.title,
+                    "sections": list(draft.sections),
+                    "citations": len(draft.citations),
+                },
+            )
 
     score_history: list[float] = []
     best = None  # (mean, draft, merged_review)
@@ -237,9 +291,17 @@ async def run_writing(handoff, writer, reviewers, *, venue: str, out_dir: Path |
         merged, mean, blocking = _merge_reviews(reviews, caps.block_severities)
         score_history.append(mean)
         if emit:
-            emit("writing", "review", {"round": rnd, "mean": mean, "blocking": blocking,
-                                       "verdict": merged.verdict,
-                                       "change_requests": len(merged.change_requests)})
+            emit(
+                "writing",
+                "review",
+                {
+                    "round": rnd,
+                    "mean": mean,
+                    "blocking": blocking,
+                    "verdict": merged.verdict,
+                    "change_requests": len(merged.change_requests),
+                },
+            )
         if best is None or mean > best[0]:
             best = (mean, draft.model_copy(deep=True), merged)
 
@@ -255,7 +317,9 @@ async def run_writing(handoff, writer, reviewers, *, venue: str, out_dir: Path |
             break  # don't revise after the last review
 
         sections = _sections_to_revise(merged.change_requests)
-        if not sections and not any(c.section in ("Abstract", "Title") for c in merged.change_requests):
+        if not sections and not any(
+            c.section in ("Abstract", "Title") for c in merged.change_requests
+        ):
             sections = ["Results", "Method"]  # nothing tagged → revise the empirical core
         revised = await writer.revise(draft, merged.change_requests, sections)
         draft = _merge_revision(draft, revised, sections, merged.change_requests)
@@ -274,16 +338,27 @@ async def run_writing(handoff, writer, reviewers, *, venue: str, out_dir: Path |
         emit("writing", "coherence_pass", {"sections": list(draft.sections)})
 
     result = WritingResult(
-        venue=venue, title=draft.title, sections=list(draft.sections), review=merged,
-        score_history=score_history, revisions=len(score_history), accepted=accepted,
-        citations=draft.citations, usd=total_spend(writer, *reviewers), stopped_reason=reason)
+        venue=venue,
+        title=draft.title,
+        sections=list(draft.sections),
+        review=merged,
+        score_history=score_history,
+        revisions=len(score_history),
+        accepted=accepted,
+        citations=draft.citations,
+        usd=total_spend(writer, *reviewers),
+        stopped_reason=reason,
+    )
     paper_md = _write_paper(out_dir, draft, merged, venue_name, result)
     result.paper_path = str(paper_md)
 
     if latex:
         from research_council.verify.latex import build_paper_latex, compile_existing
+
         paper_dir = out_dir / "paper"
-        lx = build_paper_latex(draft, paper_dir, venue_cfg, attempts=caps.latex_fix_attempts, emit=emit)
+        lx = build_paper_latex(
+            draft, paper_dir, venue_cfg, attempts=caps.latex_fix_attempts, emit=emit
+        )
         # build-verify-FIX: if the mechanical pass can't compile it, hand the .tex + error log to
         # the council's LaTeX fixer and recompile (bounded) — the fail log IS the feedback.
         if lx.get("status") == "build_failed" and latex_fixer is not None:

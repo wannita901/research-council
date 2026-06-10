@@ -18,7 +18,7 @@ dependencies = [
 providers = ["openai>=1.40", "anthropic>=0.34", "google-genai>=0.3"]
 # FastAPI backend (the service runner).
 service = ["fastapi>=0.110", "uvicorn>=0.29"]
-dev = ["pytest>=8", "pytest-asyncio>=0.23"]
+dev = ["pytest>=8", "pytest-asyncio>=0.23", "ruff>=0.6"]
 
 [project.scripts]
 council = "research_council.cli:app"
@@ -32,3 +32,12 @@ packages = ["research_council"]
 
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"   # the package floor (requires-python >=3.12); UP rules target this
+
+[tool.ruff.lint]
+# Pragmatic set: pycodestyle errors, pyflakes, import sorting, pyupgrade, bugbear.
+select = ["E", "F", "I", "UP", "B"]
+ignore = ["E501"]          # the formatter handles code width; don't fail on long comments/strings

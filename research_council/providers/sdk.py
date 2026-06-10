@@ -157,7 +157,9 @@ class GeminiProvider(_BaseSDKProvider):
         pout = getattr(um, "candidates_token_count", 0) or 0
         return Response(
             text=r.text or "",
-            usage=Usage(prompt_tokens=pin, completion_tokens=pout, cost_usd=_cost(self.model, pin, pout)),
+            usage=Usage(
+                prompt_tokens=pin, completion_tokens=pout, cost_usd=_cost(self.model, pin, pout)
+            ),
         )
 
 

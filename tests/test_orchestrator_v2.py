@@ -20,7 +20,13 @@ async def test_ideation_autonomous_end_to_end(tmp_path: Path):
     assert len(candidates) == 3
     assert len(rec.ranked) == 3 and set(rec.ranked) == {c.id for c in candidates}
     text = trace.path.read_text()
-    for kind in ("research_brief", "candidate", "discussion_message", "candidate_revised", "recommendation"):
+    for kind in (
+        "research_brief",
+        "candidate",
+        "discussion_message",
+        "candidate_revised",
+        "recommendation",
+    ):
         assert f'"kind":"{kind}"' in text
     # one candidate revised its own plan during deliberation → version bumped + text changed
     revised = [c for c in candidates if c.version > 1]
@@ -54,14 +60,16 @@ async def test_usage_summary_emitted_for_metered_peers(tmp_path: Path):
     from research_council.retrieval.registry import build_stub_retrieval
 
     r = build_stub_retrieval(["wiki"])
-    peers = {cn: AgentPeer(v, cn, TestModel(), r, price_model="gpt-5.4")
-             for v, cn in CODENAMES.items()}
+    peers = {
+        cn: AgentPeer(v, cn, TestModel(), r, price_model="gpt-5.4") for v, cn in CODENAMES.items()
+    }
     trace = TraceWriter.new("ideation", runs_dir=tmp_path)
     await run_ideation("t", peers, trace, max_turns=1)
     text = trace.path.read_text()
     assert '"kind":"usage_summary"' in text
     import json
-    ev = [json.loads(l) for l in text.splitlines()]
+
+    ev = [json.loads(line) for line in text.splitlines()]
     summ = next(e for e in ev if e["kind"] == "usage_summary")
     assert set(summ["payload"]["by"]) >= set(CODENAMES.values())  # one row per peer
     assert summ["payload"]["totals"]["requests"] > 0
@@ -88,7 +96,9 @@ async def test_auto_iterate_drives_autonomous_rounds(tmp_path: Path):
     # no reviewer → the auto-policy runs `auto_rounds` rounds, then concludes
     trace = TraceWriter.new("ideation", runs_dir=tmp_path)
     await run_ideation("t", _peers(), trace, auto_rounds=3, max_turns=1)
-    assert trace.path.read_text().count('"kind":"research_brief"') == 9  # exactly 3 rounds × 3 peers
+    assert (
+        trace.path.read_text().count('"kind":"research_brief"') == 9
+    )  # exactly 3 rounds × 3 peers
 
     trace1 = TraceWriter.new("ideation", runs_dir=tmp_path)
     await run_ideation("t", _peers(), trace1, max_turns=1)  # default auto_rounds=1
@@ -119,28 +129,54 @@ async def test_safety_ceiling_caps_runaway_iterate(tmp_path: Path):
 
 def test_aggregate_excludes_self_scores():
     cands = [
-        Candidate(id="Aiden", vendor="openai", title="A", gap="", hypothesis="", method="", experiment_plan=""),
-        Candidate(id="Cathy", vendor="anthropic", title="B", gap="", hypothesis="", method="", experiment_plan=""),
+        Candidate(
+            id="Aiden",
+            vendor="openai",
+            title="A",
+            gap="",
+            hypothesis="",
+            method="",
+            experiment_plan="",
+        ),
+        Candidate(
+            id="Cathy",
+            vendor="anthropic",
+            title="B",
+            gap="",
+            hypothesis="",
+            method="",
+            experiment_plan="",
+        ),
     ]
     id_map = {"C1": cands[0], "C2": cands[1]}  # C1=Aiden(openai), C2=Cathy(anthropic)
 
     def sc(judge, label, v):
-        return Score(judge_vendor=judge, candidate_id=label, novelty=v, soundness=v, feasibility=v, clarity=v)
+        return Score(
+            judge_vendor=judge, candidate_id=label, novelty=v, soundness=v, feasibility=v, clarity=v
+        )
 
     # each judge inflates its OWN candidate (1.0) and tanks the rival (0.0)
-    scores = [sc("openai", "C1", 1.0), sc("openai", "C2", 0.0),
-              sc("anthropic", "C2", 1.0), sc("anthropic", "C1", 0.0)]
+    scores = [
+        sc("openai", "C1", 1.0),
+        sc("openai", "C2", 0.0),
+        sc("anthropic", "C2", 1.0),
+        sc("anthropic", "C1", 0.0),
+    ]
 
-    rec = aggregate_v2(scores, dict(DEFAULT_WEIGHTS), id_map)            # drop_self (default)
-    assert rec.composites["Aiden"] == 0.0 and rec.composites["Cathy"] == 0.0  # only rival's 0.0 counts
+    rec = aggregate_v2(scores, dict(DEFAULT_WEIGHTS), id_map)  # drop_self (default)
+    assert (
+        rec.composites["Aiden"] == 0.0 and rec.composites["Cathy"] == 0.0
+    )  # only rival's 0.0 counts
     assert "Aiden" in rec.breakdown and set(rec.breakdown["Aiden"]) == set(DEFAULT_WEIGHTS)
 
     keep = aggregate_v2(scores, dict(DEFAULT_WEIGHTS), id_map, drop_self=False)
-    assert keep.composites["Aiden"] == 0.5 and keep.composites["Cathy"] == 0.5  # self+rival averaged
+    assert (
+        keep.composites["Aiden"] == 0.5 and keep.composites["Cathy"] == 0.5
+    )  # self+rival averaged
 
 
 async def test_onboarding_runs_when_facilitator_present(tmp_path: Path):
-    from research_council.store.models import Constraints, OnboardingQuestion
+    from research_council.store.models import OnboardingQuestion
 
     class _Fac:
         async def questions(self, stage, topic):
@@ -150,7 +186,8 @@ async def test_onboarding_runs_when_facilitator_present(tmp_path: Path):
         return "a clear baseline win"
 
     trace = TraceWriter.new("ideation", runs_dir=tmp_path)
-    rec, _ = await run_ideation("t", _peers(), trace, facilitator=_Fac(), answer_fn=answer_fn,
-                                max_turns=2)
+    rec, _ = await run_ideation(
+        "t", _peers(), trace, facilitator=_Fac(), answer_fn=answer_fn, max_turns=2
+    )
     text = trace.path.read_text()
     assert '"kind":"constraints"' in text and "a clear baseline win" in text

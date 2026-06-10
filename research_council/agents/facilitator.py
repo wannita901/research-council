@@ -7,7 +7,7 @@ endpoint / auto-skip), so it's testable offline and reusable across runners.
 
 from __future__ import annotations
 
-from typing import Awaitable, Callable
+from collections.abc import Awaitable, Callable
 
 from pydantic_ai import Agent
 
@@ -21,18 +21,28 @@ class Facilitator:
         self.max_questions = max_questions
         self._price_model = price_model
         self.usage = UsageMeter()
-        self._agent: Agent = Agent(model, output_type=OnboardingQuestions,
-                                   system_prompt=prompts.load("facilitator/onboarding"))
+        self._agent: Agent = Agent(
+            model,
+            output_type=OnboardingQuestions,
+            system_prompt=prompts.load("facilitator/onboarding"),
+        )
 
     async def questions(self, stage: str, topic: str) -> list[OnboardingQuestion]:
-        prompt = f"Stage: {stage}\nTopic: {topic}\nAsk up to {self.max_questions} clarifying questions."
+        prompt = (
+            f"Stage: {stage}\nTopic: {topic}\nAsk up to {self.max_questions} clarifying questions."
+        )
         result = await self._agent.run(prompt)
         u = usage_of(result)
         if u is not None:
             from research_council.providers.sdk import _cost
+
             it, ot = u.input_tokens or 0, u.output_tokens or 0
-            self.usage.add(requests=u.requests or 0, input_tokens=it, output_tokens=ot,
-                           cost_usd=_cost(self._price_model, it, ot) if self._price_model else 0.0)
+            self.usage.add(
+                requests=u.requests or 0,
+                input_tokens=it,
+                output_tokens=ot,
+                cost_usd=_cost(self._price_model, it, ot) if self._price_model else 0.0,
+            )
         return result.output.questions[: self.max_questions]
 
 

@@ -58,6 +58,10 @@ run = "uvicorn research_council.service.app:app --host 127.0.0.1 --port 8000"
 description = "Run the test suite"
 run = "pytest -q"
 
+[tasks.lint]
+description = "Lint + format-check with ruff (run `ruff check --fix . && ruff format .` to apply)"
+run = "ruff check . && ruff format --check ."
+
 [tasks.build-image]
 description = "Build the Stage-B experiment sandbox image (numpy/pandas/scipy/sklearn) for real experiments"
 run = "docker build -t research-council-exp:latest -f docker/experiment.Dockerfile ."

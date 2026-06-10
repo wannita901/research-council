@@ -18,5 +18,4 @@ class Tool(Protocol):
     name: str
     description: str
 
-    async def run(self, **kwargs) -> ToolResult:
-        ...
+    async def run(self, **kwargs) -> ToolResult: ...

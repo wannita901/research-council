@@ -8,7 +8,8 @@ remain; otherwise stops at `max_turns`. Pseudonymous (peers addressed by codenam
 from __future__ import annotations
 
 from collections import defaultdict
-from typing import Callable, Protocol, runtime_checkable
+from collections.abc import Callable
+from typing import Protocol, runtime_checkable
 
 from research_council.store.models import Candidate, CandidateDraft, Contribution, DiscussionMessage
 
@@ -18,8 +19,16 @@ _SUBSTANTIVE = {"critique", "question", "revise"}
 def _apply_revision(c: Candidate, d: CandidateDraft) -> None:
     """Patch a candidate in place with the non-empty fields of a revision draft (any proposal
     field can be argued over and revised, not just the title/plan)."""
-    for field in ("title", "problem_statement", "motivation", "hypothesis", "method",
-                  "experiment_plan", "dataset_metrics", "fallback_plan"):
+    for field in (
+        "title",
+        "problem_statement",
+        "motivation",
+        "hypothesis",
+        "method",
+        "experiment_plan",
+        "dataset_metrics",
+        "fallback_plan",
+    ):
         val = getattr(d, field, "")
         if val:
             setattr(c, field, val)
@@ -33,10 +42,13 @@ class DeliberativePeer(Protocol):
     codename: str
 
     async def deliberate(
-        self, thread: list[DiscussionMessage], candidates: list[Candidate],
-        my_open_questions: list[str], *, require_critique: bool = False,
-    ) -> Contribution:
-        ...
+        self,
+        thread: list[DiscussionMessage],
+        candidates: list[Candidate],
+        my_open_questions: list[str],
+        *,
+        require_critique: bool = False,
+    ) -> Contribution: ...
 
 
 def _other(me: str, codenames: list[str]) -> str:
@@ -45,15 +57,25 @@ def _other(me: str, codenames: list[str]) -> str:
     return codenames[(i + 1) % len(codenames)] if len(codenames) > 1 else me
 
 
-def render_view(thread: list[DiscussionMessage], candidates: list[Candidate],
-                my_open_questions: list[str], me: str) -> str:
+def render_view(
+    thread: list[DiscussionMessage],
+    candidates: list[Candidate],
+    my_open_questions: list[str],
+    me: str,
+) -> str:
     cands = "\n".join(f"- {c.id}: {c.title} — {c.gap}" for c in candidates) or "(none)"
-    convo = "\n".join(
-        f"{m.from_codename} [{m.kind}{(' → ' + m.to) if m.to else ''}]: {m.content}" for m in thread
-    ) or "(no messages yet)"
+    convo = (
+        "\n".join(
+            f"{m.from_codename} [{m.kind}{(' → ' + m.to) if m.to else ''}]: {m.content}"
+            for m in thread
+        )
+        or "(no messages yet)"
+    )
     qs = "\n".join(f"- {q}" for q in my_open_questions) or "(none)"
-    return (f"You are {me}.\nCandidates:\n{cands}\n\nDiscussion so far:\n{convo}\n\n"
-            f"Open questions addressed to you:\n{qs}\n\nContribute ONE message.")
+    return (
+        f"You are {me}.\nCandidates:\n{cands}\n\nDiscussion so far:\n{convo}\n\n"
+        f"Open questions addressed to you:\n{qs}\n\nContribute ONE message."
+    )
 
 
 async def run_deliberation(
@@ -76,9 +98,16 @@ async def run_deliberation(
     sent: dict[str, int] = {c: 0 for c in codenames}
 
     def _post(c: str, contrib: Contribution, turn: int) -> bool:
-        msg = DiscussionMessage(round=round_no, turn=turn, from_codename=c, kind=contrib.kind,
-                                to=contrib.to, content=contrib.content, refs=contrib.refs,
-                                targets=contrib.targets)
+        msg = DiscussionMessage(
+            round=round_no,
+            turn=turn,
+            from_codename=c,
+            kind=contrib.kind,
+            to=contrib.to,
+            content=contrib.content,
+            refs=contrib.refs,
+            targets=contrib.targets,
+        )
         thread.append(msg)
         sent[c] += 1
         if emit:
@@ -100,9 +129,13 @@ async def run_deliberation(
             emit_tool(c, getattr(peers[c], "last_tool_calls", []) or [])
         if contrib.kind not in _SUBSTANTIVE or not (contrib.content or "").strip():
             tgt = contrib.targets or _other(c, codenames)  # coerce a pass into a real critique
-            contrib = Contribution(kind="critique", targets=tgt, to=contrib.to,
-                                   content=(contrib.content or "").strip()
-                                   or f"@{tgt} I have concerns about your proposal's soundness and novelty.")
+            contrib = Contribution(
+                kind="critique",
+                targets=tgt,
+                to=contrib.to,
+                content=(contrib.content or "").strip()
+                or f"@{tgt} I have concerns about your proposal's soundness and novelty.",
+            )
         _post(c, contrib, turn=0)
 
     # --- FREE-FORM: organic back-and-forth, bounded by max_turns + the per-peer cap ---

@@ -17,14 +17,17 @@ class LatexFixer:
     def __init__(self, model, *, price_model: str | None = None):
         self._price_model = price_model
         self.usage = UsageMeter()
-        self._agent: Agent = Agent(model, output_type=str,
-                                   system_prompt=prompts.load("latex/fixer"))
+        self._agent: Agent = Agent(
+            model, output_type=str, system_prompt=prompts.load("latex/fixer")
+        )
 
     async def fix(self, tex: str, log: str) -> str:
-        prompt = (f"The LaTeX document below failed to compile.\n\n"
-                  f"Compiler error log (tail):\n{(log or '')[-1500:]}\n\n"
-                  f"Current paper.tex:\n{tex}\n\n"
-                  "Return the COMPLETE corrected .tex document (no commentary, no code fences).")
+        prompt = (
+            f"The LaTeX document below failed to compile.\n\n"
+            f"Compiler error log (tail):\n{(log or '')[-1500:]}\n\n"
+            f"Current paper.tex:\n{tex}\n\n"
+            "Return the COMPLETE corrected .tex document (no commentary, no code fences)."
+        )
         r = await self._agent.run(prompt)
         _cost_add(self.usage, r, self._price_model)
         out = (r.output or "").strip()
@@ -41,6 +44,11 @@ def _cost_add(meter: UsageMeter, result, price_model: str | None) -> None:
     if u is None:
         return
     from research_council.providers.sdk import _cost
+
     it, ot = u.input_tokens or 0, u.output_tokens or 0
-    meter.add(requests=u.requests or 0, input_tokens=it, output_tokens=ot,
-              cost_usd=_cost(price_model, it, ot) if price_model else 0.0)
+    meter.add(
+        requests=u.requests or 0,
+        input_tokens=it,
+        output_tokens=ot,
+        cost_usd=_cost(price_model, it, ot) if price_model else 0.0,
+    )

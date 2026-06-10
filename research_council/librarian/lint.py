@@ -23,8 +23,8 @@ _INDEX_LINK = re.compile(r"\(([a-z]+/[a-z0-9-]+\.md)\)")
 
 
 class LintIssue(BaseModel):
-    kind: str   # broken_link | orphan | index_drift | empty
-    page: str   # rel path (or index.md)
+    kind: str  # broken_link | orphan | index_drift | empty
+    page: str  # rel path (or index.md)
     detail: str = ""
 
 
@@ -46,8 +46,8 @@ def lint_structure(knowledge_root: Path | str | None = None) -> LintReport:
     if not wiki.exists():
         return rep
 
-    pages: dict[str, object] = {}   # "type/slug.md" -> WikiPage
-    keys: set[str] = set()          # "type:slug"
+    pages: dict[str, object] = {}  # "type/slug.md" -> WikiPage
+    keys: set[str] = set()  # "type:slug"
     for p in sorted(wiki.rglob("*.md")):
         if p.name in _SKIP:
             continue
@@ -64,7 +64,9 @@ def lint_structure(knowledge_root: Path | str | None = None) -> LintReport:
         for link in page.related:
             m = _LINK.search(link)
             if not m:
-                rep.issues.append(LintIssue(kind="broken_link", page=rel, detail=f"malformed {link!r}"))
+                rep.issues.append(
+                    LintIssue(kind="broken_link", page=rel, detail=f"malformed {link!r}")
+                )
                 continue
             key = f"{m.group(1)}:{m.group(2)}"
             if key in keys:
@@ -81,12 +83,18 @@ def lint_structure(knowledge_root: Path | str | None = None) -> LintReport:
 
     # index drift: index entries vs files on disk
     index = wiki / "index.md"
-    listed = set(_INDEX_LINK.findall(index.read_text(encoding="utf-8"))) if index.exists() else set()
+    listed = (
+        set(_INDEX_LINK.findall(index.read_text(encoding="utf-8"))) if index.exists() else set()
+    )
     on_disk = set(pages)
     for rel in sorted(listed - on_disk):
-        rep.issues.append(LintIssue(kind="index_drift", page="index.md", detail=f"links missing file {rel}"))
+        rep.issues.append(
+            LintIssue(kind="index_drift", page="index.md", detail=f"links missing file {rel}")
+        )
     for rel in sorted(on_disk - listed):
-        rep.issues.append(LintIssue(kind="index_drift", page="index.md", detail=f"missing entry for {rel}"))
+        rep.issues.append(
+            LintIssue(kind="index_drift", page="index.md", detail=f"missing entry for {rel}")
+        )
     return rep
 
 
@@ -102,13 +110,19 @@ def append_lint_log(knowledge_root: Path | str | None, report: LintReport, when:
 
 # ---- optional semantic audit (opt-in; needs the librarian model) ----------
 
+
 class AuditResult(BaseModel):
     contradictions: list[str] = Field(default_factory=list)
     gaps: list[str] = Field(default_factory=list)
 
 
-async def lint_semantic(model, knowledge_root: Path | str | None = None, *,
-                        types=("findings", "gaps", "concepts"), max_chars: int = 12000) -> AuditResult:
+async def lint_semantic(
+    model,
+    knowledge_root: Path | str | None = None,
+    *,
+    types=("findings", "gaps", "concepts"),
+    max_chars: int = 12000,
+) -> AuditResult:
     """One bounded LLM pass over the synthesis pages. `model` = a PydanticAI model/string."""
     from pydantic_ai import Agent
 
@@ -122,5 +136,7 @@ async def lint_semantic(model, knowledge_root: Path | str | None = None, *,
     corpus = "\n\n".join(chunks)[:max_chars]
     if not corpus.strip():
         return AuditResult()
-    agent: Agent = Agent(model, output_type=AuditResult, system_prompt=prompts.load("librarian/audit"))
+    agent: Agent = Agent(
+        model, output_type=AuditResult, system_prompt=prompts.load("librarian/audit")
+    )
     return (await agent.run(f"Wiki pages:\n{corpus}")).output

@@ -11,5 +11,4 @@ from research_council.store.models import Candidate, VerifierSignal
 class Verifier(Protocol):
     mode: str
 
-    async def verify(self, candidate: Candidate) -> VerifierSignal:
-        ...
+    async def verify(self, candidate: Candidate) -> VerifierSignal: ...

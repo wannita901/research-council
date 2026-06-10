@@ -25,21 +25,28 @@ from rich.table import Table
 console = Console()
 AXES = ("novelty", "soundness", "feasibility", "clarity")
 
-QSTYLE = Style([
-    ("qmark", "fg:#6ea8fe bold"),
-    ("question", "bold"),
-    ("pointer", "fg:#6ea8fe bold"),
-    ("highlighted", "fg:#6ea8fe bold"),
-    ("selected", "fg:#4ade80 bold"),
-    ("answer", "fg:#6ea8fe bold"),
-    ("instruction", "fg:#8b94a3 italic"),
-    ("separator", "fg:#48505e"),
-])
+QSTYLE = Style(
+    [
+        ("qmark", "fg:#6ea8fe bold"),
+        ("question", "bold"),
+        ("pointer", "fg:#6ea8fe bold"),
+        ("highlighted", "fg:#6ea8fe bold"),
+        ("selected", "fg:#4ade80 bold"),
+        ("answer", "fg:#6ea8fe bold"),
+        ("instruction", "fg:#8b94a3 italic"),
+        ("separator", "fg:#48505e"),
+    ]
+)
 _POINTER = "❯"
 
 PHASE_COLOR = {
-    "onboarding": "magenta", "research": "cyan", "propose": "blue",
-    "deliberate": "yellow", "judge": "green", "review": "white", "run": "bright_black",
+    "onboarding": "magenta",
+    "research": "cyan",
+    "propose": "blue",
+    "deliberate": "yellow",
+    "judge": "green",
+    "review": "white",
+    "run": "bright_black",
 }
 
 
@@ -62,8 +69,15 @@ def info(text: str) -> None:
 
 # ---- sync prompts (setup, before the event loop starts) ----
 def _select(message, choices, default=None, instruction="↑/↓ · enter"):
-    return questionary.select(message, choices=choices, default=default, style=QSTYLE,
-                              instruction=instruction, qmark="?", pointer=_POINTER)
+    return questionary.select(
+        message,
+        choices=choices,
+        default=default,
+        style=QSTYLE,
+        instruction=instruction,
+        qmark="?",
+        pointer=_POINTER,
+    )
 
 
 def ask_select(message, choices, default=None, instruction="↑/↓ · enter"):
@@ -71,8 +85,9 @@ def ask_select(message, choices, default=None, instruction="↑/↓ · enter"):
 
 
 def ask_checkbox(message, choices, instruction="space toggles · enter continues"):
-    return questionary.checkbox(message, choices=choices, style=QSTYLE,
-                                instruction=instruction, qmark="?", pointer=_POINTER).ask()
+    return questionary.checkbox(
+        message, choices=choices, style=QSTYLE, instruction=instruction, qmark="?", pointer=_POINTER
+    ).ask()
 
 
 def ask_text(message, default=""):
@@ -88,8 +103,14 @@ async def ask_select_async(message, choices, default=None, instruction="↑/↓ 
     return await _select(message, choices, default, instruction).ask_async()
 
 
-def setup_summary(seats: dict, tools: list, *, live: bool,
-                  facilitator: str | None = None, rounds: int | None = None) -> None:
+def setup_summary(
+    seats: dict,
+    tools: list,
+    *,
+    live: bool,
+    facilitator: str | None = None,
+    rounds: int | None = None,
+) -> None:
     t = Table(box=box.SIMPLE_HEAVY, show_header=False, pad_edge=False)
     t.add_column(style="dim")
     t.add_column(style="bold")
@@ -108,8 +129,10 @@ def setup_summary(seats: dict, tools: list, *, live: bool,
 def stream_line(round_no: int, phase: str, kind: str, author: str | None, extra: str) -> None:
     color = PHASE_COLOR.get(phase, "white")
     who = f" [dim]{escape(author)}[/dim]" if author else ""
-    console.print(f"  [dim]r{round_no}[/dim] [{color}]{phase:<10}[/{color}] "
-                  f"[bold]{kind}[/bold]{who}  {escape(extra)}")
+    console.print(
+        f"  [dim]r{round_no}[/dim] [{color}]{phase:<10}[/{color}] "
+        f"[bold]{kind}[/bold]{who}  {escape(extra)}"
+    )
 
 
 def ranking_table(ranked, composites, titles, breakdown=None, *, title) -> None:
@@ -131,7 +154,9 @@ def ranking_table(ranked, composites, titles, breakdown=None, *, title) -> None:
     console.print(t)
 
 
-def usage_table(rows, *, cache=None, total=0.0, title="Usage (approx · edit PRICES in providers/sdk.py)") -> None:
+def usage_table(
+    rows, *, cache=None, total=0.0, title="Usage (approx · edit PRICES in providers/sdk.py)"
+) -> None:
     """rows: list of (name, cost_usd, in_tok, out_tok, reqs, tool_calls_or_None)."""
     t = Table(title=title, box=box.SIMPLE_HEAVY, title_style="bold", title_justify="left")
     t.add_column("agent", style="cyan")
@@ -141,7 +166,14 @@ def usage_table(rows, *, cache=None, total=0.0, title="Usage (approx · edit PRI
     t.add_column("reqs", justify="right")
     t.add_column("tools", justify="right")
     for name, cost, it, ot, reqs, tools in rows:
-        t.add_row(name, f"{cost:.4f}", f"{it:,}", f"{ot:,}", str(reqs), "" if tools is None else str(tools))
+        t.add_row(
+            name,
+            f"{cost:.4f}",
+            f"{it:,}",
+            f"{ot:,}",
+            str(reqs),
+            "" if tools is None else str(tools),
+        )
     console.print(t)
     if cache is not None:
         h, m = cache
@@ -158,6 +190,12 @@ def spinner(text: str):
 
 @contextmanager
 def progress(description: str):
-    with Progress(SpinnerColumn(), TextColumn("[progress.description]{task.description}"),
-                  BarColumn(), MofNCompleteColumn(), console=console, transient=True) as p:
+    with Progress(
+        SpinnerColumn(),
+        TextColumn("[progress.description]{task.description}"),
+        BarColumn(),
+        MofNCompleteColumn(),
+        console=console,
+        transient=True,
+    ) as p:
         yield p

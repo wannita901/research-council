@@ -7,6 +7,18 @@ on:
   workflow_dispatch:
 
 jobs:
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: jdx/mise-action@v2
+        with:
+          cache: true
+      - name: Install dependencies
+        run: mise run deps
+      - name: Lint + format check (ruff)
+        run: mise run lint
+
   test:
     runs-on: ubuntu-latest
     steps:

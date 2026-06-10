@@ -9,8 +9,17 @@ BRIEFS = [
     ResearchBrief(vendor="openai", landscape="L", gap="gap-A"),
     ResearchBrief(vendor="anthropic", landscape="L", gap="gap-C"),
 ]
-CANDS = [Candidate(id="C1", vendor="openai", title="Idea1", gap="gap-A",
-                   hypothesis="h", method="m", experiment_plan="e")]
+CANDS = [
+    Candidate(
+        id="C1",
+        vendor="openai",
+        title="Idea1",
+        gap="gap-A",
+        hypothesis="h",
+        method="m",
+        experiment_plan="e",
+    )
+]
 THREAD = [
     DiscussionMessage(from_codename="Aiden", kind="critique", targets="C1", content="too broad"),
     DiscussionMessage(from_codename="Cathy", kind="answer", content="grounded", refs=["x"]),
@@ -18,8 +27,14 @@ THREAD = [
 
 
 def test_build_round_digest_attributes_by_codename():
-    d = build_round_digest(1, BRIEFS, CANDS, THREAD, human_comment="focus on security",
-                           codename_of={"openai": "Aiden", "anthropic": "Cathy"})
+    d = build_round_digest(
+        1,
+        BRIEFS,
+        CANDS,
+        THREAD,
+        human_comment="focus on security",
+        codename_of={"openai": "Aiden", "anthropic": "Cathy"},
+    )
     assert "Aiden: gap-A" in d.gaps and "Cathy: gap-C" in d.gaps
     assert "C1: Idea1" in d.candidates
     assert any("too broad" in c for c in d.top_critiques)
@@ -27,8 +42,14 @@ def test_build_round_digest_attributes_by_codename():
 
 
 def test_render_digest_includes_comment_and_critiques():
-    d = build_round_digest(1, BRIEFS, CANDS, THREAD, human_comment="focus on security",
-                           codename_of={"openai": "Aiden", "anthropic": "Cathy"})
+    d = build_round_digest(
+        1,
+        BRIEFS,
+        CANDS,
+        THREAD,
+        human_comment="focus on security",
+        codename_of={"openai": "Aiden", "anthropic": "Cathy"},
+    )
     text = render_digest(d)
     assert "Round 1 recap" in text and "focus on security" in text and "too broad" in text
 

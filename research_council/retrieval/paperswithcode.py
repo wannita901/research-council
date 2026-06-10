@@ -30,12 +30,14 @@ class PapersWithCodeProvider:
         out: list[Paper] = []
         for w in (data.get("results") or [])[:k]:
             pub = (w.get("published") or "")[:4]
-            out.append(Paper(
-                id=str(w.get("id") or w.get("arxiv_id") or "(paperswithcode)"),
-                title=w.get("title") or "(untitled)",
-                abstract=w.get("abstract") or "",
-                year=int(pub) if pub.isdigit() else None,
-                url=w.get("url_abs"),
-                source="paperswithcode",
-            ))
+            out.append(
+                Paper(
+                    id=str(w.get("id") or w.get("arxiv_id") or "(paperswithcode)"),
+                    title=w.get("title") or "(untitled)",
+                    abstract=w.get("abstract") or "",
+                    year=int(pub) if pub.isdigit() else None,
+                    url=w.get("url_abs"),
+                    source="paperswithcode",
+                )
+            )
         return out

@@ -24,14 +24,22 @@ def build_round_digest(
     cands = [f"{c.id}: {c.title}" for c in candidates]
     crits = [
         f"{m.from_codename} → {m.targets or 'all'}: {m.content}"
-        for m in thread if m.kind == "critique"
+        for m in thread
+        if m.kind == "critique"
     ][:max_critiques]
     grounding = [
         f"{m.from_codename}: {m.content}"
-        for m in thread if m.refs and m.kind in ("answer", "defend")
+        for m in thread
+        if m.refs and m.kind in ("answer", "defend")
     ][:4]
-    return RoundDigest(round=round_no, gaps=gaps, candidates=cands,
-                       top_critiques=crits, verifier=grounding, human_comment=human_comment)
+    return RoundDigest(
+        round=round_no,
+        gaps=gaps,
+        candidates=cands,
+        top_critiques=crits,
+        verifier=grounding,
+        human_comment=human_comment,
+    )
 
 
 def render_digest(d: RoundDigest) -> str:

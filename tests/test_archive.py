@@ -27,13 +27,13 @@ def test_archive_then_reset_then_restore(tmp_path):
 
     archived = reset_library(tmp_path, "A2")
     assert archived == "A2"
-    assert not (tmp_path / "wiki/findings/x.md").exists()         # cleared
-    assert (tmp_path / "wiki/index.md").exists()                  # reinitialised empty
+    assert not (tmp_path / "wiki/findings/x.md").exists()  # cleared
+    assert (tmp_path / "wiki/index.md").exists()  # reinitialised empty
     assert (tmp_path / ".archive/A2/wiki/findings/x.md").exists()  # archived before clearing
 
     restore_library(tmp_path, "A1", backup_stamp="B1")
-    assert (tmp_path / "wiki/findings/x.md").read_text() == "page x"   # A1 content back
-    assert (tmp_path / ".archive/B1/wiki/index.md").exists()           # the empty state was backed up
+    assert (tmp_path / "wiki/findings/x.md").read_text() == "page x"  # A1 content back
+    assert (tmp_path / ".archive/B1/wiki/index.md").exists()  # the empty state was backed up
 
 
 def test_reset_hard_skips_archive(tmp_path):

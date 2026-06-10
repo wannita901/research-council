@@ -32,7 +32,9 @@ def test_unknown_run_404():
 def test_autonomous_run_streams_to_completion():
     # `with` keeps the event-loop portal open so the background debate task runs.
     with TestClient(app) as client:
-        rid = client.post("/debates", json={"topic": "t", "rounds": 1, "interactive": False}).json()["run_id"]
+        rid = client.post(
+            "/debates", json={"topic": "t", "rounds": 1, "interactive": False}
+        ).json()["run_id"]
         with client.stream("GET", f"/debates/{rid}/stream") as r:  # drains until sentinel
             body = "".join(r.iter_text())
         assert "research_brief" in body and "recommendation" in body
@@ -43,7 +45,9 @@ def test_autonomous_run_streams_to_completion():
 
 def test_interactive_review_gate_over_http():
     with TestClient(app) as client:
-        rid = client.post("/debates", json={"topic": "t", "rounds": 1, "interactive": True}).json()["run_id"]
+        rid = client.post("/debates", json={"topic": "t", "rounds": 1, "interactive": True}).json()[
+            "run_id"
+        ]
         s = _poll(client, rid, lambda s: s["awaiting_review"])
         assert s["awaiting_review"]
         assert client.post(f"/debates/{rid}/action", json={"action": "conclude"}).json()["ok"]
@@ -74,8 +78,9 @@ def test_ideation_autonomous_streams_to_completion():
 
 def test_ideation_auto_iterate_over_http():
     with TestClient(app) as client:
-        rid = client.post("/ideations",
-                          json={"topic": "t", "interactive": False, "auto_iterate": 2}).json()["run_id"]
+        rid = client.post(
+            "/ideations", json={"topic": "t", "interactive": False, "auto_iterate": 2}
+        ).json()["run_id"]
         with client.stream("GET", f"/ideations/{rid}/stream") as r:
             body = "".join(r.iter_text())
         assert body.count("research_brief") >= 6  # 2 rounds × 3 peers
@@ -94,10 +99,14 @@ def test_ideation_interactive_review_gate_over_http():
 
 def test_ideation_accepts_preset_constraints():
     with TestClient(app) as client:
-        rid = client.post("/ideations", json={
-            "topic": "t", "interactive": False,
-            "constraints": {"What is success?": "a clear baseline win"},
-        }).json()["run_id"]
+        rid = client.post(
+            "/ideations",
+            json={
+                "topic": "t",
+                "interactive": False,
+                "constraints": {"What is success?": "a clear baseline win"},
+            },
+        ).json()["run_id"]
         with client.stream("GET", f"/ideations/{rid}/stream") as r:
             body = "".join(r.iter_text())
         assert "a clear baseline win" in body  # constraints emitted into the trace/stream

@@ -19,17 +19,30 @@ def test_lint_clean_wiki(tmp_path):
 
 
 def test_lint_flags_broken_links_orphans_empty_and_drift(tmp_path):
-    _write(tmp_path, WikiPage(type="papers", title="Anchor",
-                              related=["[[approaches:good]]", "[[concepts:missing-page]]"], body="anchor"))
-    _write(tmp_path, WikiPage(type="approaches", title="Good", body="content"))   # linked → not orphan
-    _write(tmp_path, WikiPage(type="gaps", title="Orphan", body="x"))             # no inbound → orphan
-    _write(tmp_path, WikiPage(type="findings", title="Empty", body=""))           # empty body
-    (tmp_path / "wiki" / "index.md").write_text("# Wiki index\n", encoding="utf-8")  # lists nothing → drift
+    _write(
+        tmp_path,
+        WikiPage(
+            type="papers",
+            title="Anchor",
+            related=["[[approaches:good]]", "[[concepts:missing-page]]"],
+            body="anchor",
+        ),
+    )
+    _write(
+        tmp_path, WikiPage(type="approaches", title="Good", body="content")
+    )  # linked → not orphan
+    _write(tmp_path, WikiPage(type="gaps", title="Orphan", body="x"))  # no inbound → orphan
+    _write(tmp_path, WikiPage(type="findings", title="Empty", body=""))  # empty body
+    (tmp_path / "wiki" / "index.md").write_text(
+        "# Wiki index\n", encoding="utf-8"
+    )  # lists nothing → drift
 
     kinds = lint_structure(tmp_path).by_kind()
     assert any("missing-page" in i.detail for i in kinds.get("broken_link", []))
     orphans = {i.page for i in kinds.get("orphan", [])}
-    assert "gaps/orphan.md" in orphans and "approaches/good.md" not in orphans  # papers anchor exempt; linked page exempt
+    assert (
+        "gaps/orphan.md" in orphans and "approaches/good.md" not in orphans
+    )  # papers anchor exempt; linked page exempt
     assert any(i.page == "findings/empty.md" for i in kinds.get("empty", []))
     assert kinds.get("index_drift")  # 4 files on disk, none catalogued
 

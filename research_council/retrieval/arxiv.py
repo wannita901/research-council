@@ -10,7 +10,9 @@ from research_council.store.models import Paper
 ARXIV = "https://export.arxiv.org/api/query"
 ATOM = "{http://www.w3.org/2005/Atom}"
 # arXiv asks for a descriptive User-Agent and a delay between requests.
-_HEADERS = {"User-Agent": "research-council/0.0.1 (https://github.com/; mailto:research@example.org)"}
+_HEADERS = {
+    "User-Agent": "research-council/0.0.1 (https://github.com/; mailto:research@example.org)"
+}
 
 
 class ArxivProvider:
@@ -43,12 +45,14 @@ class ArxivProvider:
         for e in root.findall(f"{ATOM}entry")[:k]:
             idu = (e.findtext(f"{ATOM}id") or "").strip()
             pub = (e.findtext(f"{ATOM}published") or "")[:4]
-            out.append(Paper(
-                id=idu.rsplit("/", 1)[-1] or idu or "(arxiv)",
-                title=" ".join((e.findtext(f"{ATOM}title") or "").split()),
-                abstract=" ".join((e.findtext(f"{ATOM}summary") or "").split()),
-                year=int(pub) if pub.isdigit() else None,
-                url=idu or None,
-                source="arxiv",
-            ))
+            out.append(
+                Paper(
+                    id=idu.rsplit("/", 1)[-1] or idu or "(arxiv)",
+                    title=" ".join((e.findtext(f"{ATOM}title") or "").split()),
+                    abstract=" ".join((e.findtext(f"{ATOM}summary") or "").split()),
+                    year=int(pub) if pub.isdigit() else None,
+                    url=idu or None,
+                    source="arxiv",
+                )
+            )
         return out

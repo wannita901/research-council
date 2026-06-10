@@ -34,9 +34,16 @@ def test_next_stage():
 def test_full_walk_with_handoffs():
     p = new_project("t", "proj-2")
     # Stage A finished → selected idea recorded
-    record_result(p, "ideation", run_id="run-x", summary="HypoSE-Bench",
-                  artifacts={"idea": {"title": "HypoSE-Bench", "vendor": "anthropic"},
-                             "experiment_plan": "Juliet + CodeQL"})
+    record_result(
+        p,
+        "ideation",
+        run_id="run-x",
+        summary="HypoSE-Bench",
+        artifacts={
+            "idea": {"title": "HypoSE-Bench", "vendor": "anthropic"},
+            "experiment_plan": "Juliet + CodeQL",
+        },
+    )
     assert p.stages["ideation"].status == "awaiting_approval"
 
     # approve A → B active; handoff carries the idea + plan forward

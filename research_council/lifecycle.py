@@ -18,11 +18,21 @@ from pathlib import Path
 from research_council.store.models import STAGES, Project, StageHandoff, StageState
 
 
-def new_project(topic: str, project_id: str, *, created: str = "", constraints: dict | None = None) -> Project:
-    stages = {n: StageState(name=n, status=("active" if n == STAGES[0] else "pending")) for n in STAGES}
-    return Project(id=project_id, topic=topic, created=created, current=STAGES[0],
-                   constraints=constraints or {}, stages=stages,
-                   log=[f"created · {STAGES[0]} active"])
+def new_project(
+    topic: str, project_id: str, *, created: str = "", constraints: dict | None = None
+) -> Project:
+    stages = {
+        n: StageState(name=n, status=("active" if n == STAGES[0] else "pending")) for n in STAGES
+    }
+    return Project(
+        id=project_id,
+        topic=topic,
+        created=created,
+        current=STAGES[0],
+        constraints=constraints or {},
+        stages=stages,
+        log=[f"created · {STAGES[0]} active"],
+    )
 
 
 def next_stage(stage: str) -> str | None:
@@ -30,11 +40,22 @@ def next_stage(stage: str) -> str | None:
     return STAGES[i + 1] if i + 1 < len(STAGES) else None
 
 
-def record_result(project: Project, stage: str, *, run_id: str | None = None,
-                  summary: str = "", artifacts: dict | None = None) -> Project:
+def record_result(
+    project: Project,
+    stage: str,
+    *,
+    run_id: str | None = None,
+    summary: str = "",
+    artifacts: dict | None = None,
+) -> Project:
     """A stage finished running → park it at awaiting_approval with its outputs."""
     s = project.stages[stage]
-    s.run_id, s.summary, s.artifacts, s.status = run_id, summary, (artifacts or {}), "awaiting_approval"
+    s.run_id, s.summary, s.artifacts, s.status = (
+        run_id,
+        summary,
+        (artifacts or {}),
+        "awaiting_approval",
+    )
     project.log.append(f"{stage} → awaiting_approval")
     return project
 
@@ -45,9 +66,13 @@ def build_handoff(project: Project, from_stage: str) -> StageHandoff | None:
         return None
     a = project.stages[from_stage].artifacts
     return StageHandoff(
-        from_stage=from_stage, to_stage=to,
-        idea=a.get("idea", {}), experiment_plan=a.get("experiment_plan", ""),
-        constraints=project.constraints, notes=project.stages[from_stage].summary, artifacts=a,
+        from_stage=from_stage,
+        to_stage=to,
+        idea=a.get("idea", {}),
+        experiment_plan=a.get("experiment_plan", ""),
+        constraints=project.constraints,
+        notes=project.stages[from_stage].summary,
+        artifacts=a,
     )
 
 
@@ -77,11 +102,17 @@ def run_stage_stub(stage: str, handoff: StageHandoff) -> tuple[str, dict]:
     """Stages B and C are not implemented yet (Tier 3). Carry the handoff forward and
     report what each WOULD do, so the lifecycle is walkable. Returns (summary, artifacts)."""
     idea = handoff.idea.get("title", "(the selected idea)")
-    base = {"idea": handoff.idea, "experiment_plan": handoff.experiment_plan,
-            "status": "not_implemented", "from_handoff": handoff.model_dump()}
+    base = {
+        "idea": handoff.idea,
+        "experiment_plan": handoff.experiment_plan,
+        "status": "not_implemented",
+        "from_handoff": handoff.model_dump(),
+    }
     if stage == "experimentation":
-        summary = (f"[stub] would implement and run '{idea}' (plan: "
-                   f"{handoff.experiment_plan[:80] or 'n/a'}) in a Docker sandbox, then verify the artifacts.")
+        summary = (
+            f"[stub] would implement and run '{idea}' (plan: "
+            f"{handoff.experiment_plan[:80] or 'n/a'}) in a Docker sandbox, then verify the artifacts."
+        )
     elif stage == "writing":
         summary = "[stub] would scaffold-paper from the results, draft sections, and reviewer-critique vs the venue rubric."
     else:

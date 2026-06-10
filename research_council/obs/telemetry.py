@@ -29,8 +29,15 @@ class UsageMeter:
     tool_calls: int = 0
     cost_usd: float = 0.0
 
-    def add(self, *, requests: int = 0, input_tokens: int = 0, output_tokens: int = 0,
-            tool_calls: int = 0, cost_usd: float = 0.0) -> None:
+    def add(
+        self,
+        *,
+        requests: int = 0,
+        input_tokens: int = 0,
+        output_tokens: int = 0,
+        tool_calls: int = 0,
+        cost_usd: float = 0.0,
+    ) -> None:
         self.requests += requests
         self.input_tokens += input_tokens
         self.output_tokens += output_tokens

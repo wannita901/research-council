@@ -57,7 +57,9 @@ def _clear(root: Path) -> None:
             shutil.rmtree(p)
 
 
-def reset_library(knowledge_root: Path | str | None, stamp: str, *, hard: bool = False) -> str | None:
+def reset_library(
+    knowledge_root: Path | str | None, stamp: str, *, hard: bool = False
+) -> str | None:
     """Clear the library back to an empty wiki. Archives first unless `hard`. Returns the
     archive stamp (or None for a hard wipe)."""
     root = _root(knowledge_root)
@@ -67,8 +69,9 @@ def reset_library(knowledge_root: Path | str | None, stamp: str, *, hard: bool =
     return archived
 
 
-def restore_library(knowledge_root: Path | str | None, stamp: str, *,
-                    backup_stamp: str | None = None) -> None:
+def restore_library(
+    knowledge_root: Path | str | None, stamp: str, *, backup_stamp: str | None = None
+) -> None:
     """Overwrite the current library with archive <stamp>. Backs up current first if asked."""
     root = _root(knowledge_root)
     src = root / ARCHIVE / stamp

@@ -20,9 +20,9 @@ HARVEST_CAP = 8  # max external papers routed per run (each is one LLM call)
 
 
 class HarvestReport(BaseModel):
-    internal: list[str] = Field(default_factory=list)   # pages written/merged for the synthesis
-    external: list[str] = Field(default_factory=list)    # citekeys ingested
-    skipped_external: int = 0                             # cited papers over the cap / not in cache
+    internal: list[str] = Field(default_factory=list)  # pages written/merged for the synthesis
+    external: list[str] = Field(default_factory=list)  # citekeys ingested
+    skipped_external: int = 0  # cited papers over the cap / not in cache
 
 
 def run_meta(events: list[dict]) -> tuple[str, str]:
@@ -49,9 +49,15 @@ def collect_external(events: list[dict], papers_by_id: dict, cap: int = HARVEST_
     out: list[Source] = []
     for pid in refs[:cap]:
         p = papers_by_id[pid]
-        out.append(Source(citekey=pid, title=getattr(p, "title", pid),
-                          text=getattr(p, "abstract", "") or getattr(p, "title", ""),
-                          origin="external", url=getattr(p, "url", None)))
+        out.append(
+            Source(
+                citekey=pid,
+                title=getattr(p, "title", pid),
+                text=getattr(p, "abstract", "") or getattr(p, "title", ""),
+                origin="external",
+                url=getattr(p, "url", None),
+            )
+        )
     return out, skipped
 
 
@@ -67,39 +73,62 @@ def build_internal(events: list[dict], topic: str, run_id: str) -> Source | None
             gaps.append(f"- {p.get('codename', '?')}: {p['gap']}")
         elif k == "candidate":
             cid = p.get("id") or p.get("codename") or p.get("title", "")
-            cands[cid] = {"title": p.get("title", ""), "hypothesis": p.get("hypothesis", ""),
-                          "plan": p.get("experiment_plan", "")}
+            cands[cid] = {
+                "title": p.get("title", ""),
+                "hypothesis": p.get("hypothesis", ""),
+                "plan": p.get("experiment_plan", ""),
+            }
         elif k == "recommendation":
             ranked = p.get("ranked") or ranked
         elif k == "discussion_message" and p.get("kind") == "critique":
-            crits.append(f"- {p.get('from_codename')} → {p.get('targets')}: {p.get('content', '')[:160]}")
+            crits.append(
+                f"- {p.get('from_codename')} → {p.get('targets')}: {p.get('content', '')[:160]}"
+            )
     if not (gaps or cands):
         return None
 
     lines = [f"# Council findings — {topic}", ""]
     if ranked and ranked[0] in cands:
         w = cands[ranked[0]]
-        lines += ["## Selected direction", f"**{w['title']}** — {w['hypothesis']}", "",
-                  f"Plan: {w['plan']}", ""]
+        lines += [
+            "## Selected direction",
+            f"**{w['title']}** — {w['hypothesis']}",
+            "",
+            f"Plan: {w['plan']}",
+            "",
+        ]
     if gaps:
         lines += ["## Gaps surfaced", *gaps, ""]
     if len(cands) > 1:
         lines += ["## Candidates considered", *[f"- {v['title']}" for v in cands.values()], ""]
     if crits:
         lines += ["## Key critiques", *crits[:6], ""]
-    return Source(citekey=f"council:{run_id}", title=f"Council findings — {topic[:60]}",
-                  text="\n".join(lines), origin="internal")
+    return Source(
+        citekey=f"council:{run_id}",
+        title=f"Council findings — {topic[:60]}",
+        text="\n".join(lines),
+        origin="internal",
+    )
 
 
-def preview(events: list[dict], papers_by_id: dict, cap: int = HARVEST_CAP) -> tuple[int, bool, int]:
+def preview(
+    events: list[dict], papers_by_id: dict, cap: int = HARVEST_CAP
+) -> tuple[int, bool, int]:
     """(#external, has_internal, #skipped) — for an opt-in prompt before spending tokens."""
     ext, skipped = collect_external(events, papers_by_id, cap)
     run_id, topic = run_meta(events)
     return len(ext), build_internal(events, topic, run_id) is not None, skipped
 
 
-async def harvest_run(events: list[dict], papers_by_id: dict, ingestor, *,
-                      cap: int = HARVEST_CAP, on_step=None, on_ingest=None) -> HarvestReport:
+async def harvest_run(
+    events: list[dict],
+    papers_by_id: dict,
+    ingestor,
+    *,
+    cap: int = HARVEST_CAP,
+    on_step=None,
+    on_ingest=None,
+) -> HarvestReport:
     """on_step(done, total, label) → progress UI; on_ingest(source, IngestReport) → trace."""
     rep = HarvestReport()
     run_id, topic = run_meta(events)

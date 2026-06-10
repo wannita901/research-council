@@ -9,12 +9,15 @@ from research_council.verify.latex import build_paper_latex, latex_engine, scaff
 
 def _draft():
     return PaperDraft(
-        title="Cost & Scope of R_2 #1",                      # specials that must be escaped
+        title="Cost & Scope of R_2 #1",  # specials that must be escaped
         abstract="We test 50% of cases with a_b model.",
-        sections={"Introduction": "Prior work [smith24] is great.",
-                  "Method": "We use 100% synthetic data.",
-                  "Results": "![fig](assets/result.png)\nWe report f1."},
-        citations=[Citation(key="smith24", text="Smith et al., A Study, 2024")])
+        sections={
+            "Introduction": "Prior work [smith24] is great.",
+            "Method": "We use 100% synthetic data.",
+            "Results": "![fig](assets/result.png)\nWe report f1.",
+        },
+        citations=[Citation(key="smith24", text="Smith et al., A Study, 2024")],
+    )
 
 
 def test_scaffold_escapes_specials_and_avoids_bibtex():
@@ -30,6 +33,7 @@ def test_scaffold_escapes_specials_and_avoids_bibtex():
 
 def test_build_falls_back_gracefully_without_engine(tmp_path, monkeypatch):
     import research_council.verify.latex as lx
+
     monkeypatch.setattr(lx, "latex_engine", lambda: (None, ""))
     out = build_paper_latex(_draft(), tmp_path, {"doc_class": "acmart"}, attempts=3)
     assert out["status"] == "fallback_no_tex" and out["pdf"] == ""

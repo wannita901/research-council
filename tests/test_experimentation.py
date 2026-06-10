@@ -31,8 +31,9 @@ def test_local_sandbox_timeout():
 
 def test_build_sandbox_refuses_unsafe_by_default(monkeypatch):
     import research_council.verify.sandbox as sb
+
     monkeypatch.setattr(sb, "docker_available", lambda: False)
-    s, warn = sb.build_sandbox("docker")               # no docker, not allowed → nothing
+    s, warn = sb.build_sandbox("docker")  # no docker, not allowed → nothing
     assert s is None and "Docker" in warn
     s2, warn2 = sb.build_sandbox("docker", allow_local=True)  # explicit opt-in → local + warning
     assert isinstance(s2, sb.LocalSandbox) and "UNISOLATED" in warn2
@@ -54,8 +55,11 @@ class _FakeReviewer:
         self._approve, self._findings = approve, findings or []
 
     async def review(self, idea, plan, code, run):
-        return CodeReview(reviewer_vendor=self.vendor, approve=self._approve,
-                          findings=[f.model_copy(deep=True) for f in self._findings])
+        return CodeReview(
+            reviewer_vendor=self.vendor,
+            approve=self._approve,
+            findings=[f.model_copy(deep=True) for f in self._findings],
+        )
 
 
 def _approvers(n=2):
@@ -67,52 +71,90 @@ _ONE = StageBCaps(max_iters=1, k=2, usd_budget=0.0, timeout=5)
 
 
 async def test_feasible_and_approved_first_try():
-    res = await run_experimentation({"title": "X"}, "toy plan",
-                                    _FakeCoder(["print('METRIC f1=0.62')"]),
-                                    _approvers(2), LocalSandbox(), caps=_BALANCED)
+    res = await run_experimentation(
+        {"title": "X"},
+        "toy plan",
+        _FakeCoder(["print('METRIC f1=0.62')"]),
+        _approvers(2),
+        LocalSandbox(),
+        caps=_BALANCED,
+    )
     assert res.feasible and res.approved and res.approvals == 2
     assert res.metric == "f1=0.62" and res.iterations == 1 and res.stopped_reason == "approved"
 
 
 async def test_retries_then_approved():
     coder = _FakeCoder(["raise RuntimeError('bad')", "print('METRIC f1=0.5')"])
-    res = await run_experimentation({"title": "X"}, "p", coder, _approvers(2),
-                                    LocalSandbox(), caps=_BALANCED)
+    res = await run_experimentation(
+        {"title": "X"}, "p", coder, _approvers(2), LocalSandbox(), caps=_BALANCED
+    )
     assert res.approved and res.iterations == 2 and res.metric == "f1=0.5"
 
 
 async def test_feasible_but_blocked_is_not_approved():
-    blocker = ReviewFinding(kind="soundness", severity="high", msg="reports train acc", fix="hold out test")
-    reviewers = [_FakeReviewer(approve=False, findings=[blocker], vendor="a"),
-                 _FakeReviewer(approve=True, vendor="b")]
-    res = await run_experimentation({"title": "X"}, "p", _FakeCoder(["print('METRIC f1=0.9')"]),
-                                    reviewers, LocalSandbox(), caps=_ONE)
+    blocker = ReviewFinding(
+        kind="soundness", severity="high", msg="reports train acc", fix="hold out test"
+    )
+    reviewers = [
+        _FakeReviewer(approve=False, findings=[blocker], vendor="a"),
+        _FakeReviewer(approve=True, vendor="b"),
+    ]
+    res = await run_experimentation(
+        {"title": "X"},
+        "p",
+        _FakeCoder(["print('METRIC f1=0.9')"]),
+        reviewers,
+        LocalSandbox(),
+        caps=_ONE,
+    )
     assert res.feasible and not res.approved and res.stopped_reason == "iters_exhausted"
 
 
 async def test_ran_but_no_metric_is_not_feasible():
-    res = await run_experimentation({"title": "X"}, "p", _FakeCoder(["x = 1  # no metric"]),
-                                    _approvers(2), LocalSandbox(), caps=_ONE)
+    res = await run_experimentation(
+        {"title": "X"},
+        "p",
+        _FakeCoder(["x = 1  # no metric"]),
+        _approvers(2),
+        LocalSandbox(),
+        caps=_ONE,
+    )
     assert res.ran and not res.feasible and res.metric is None
 
 
 async def test_budget_exhausted_stops_loop():
     blocker = ReviewFinding(kind="correctness", severity="high", msg="bug", fix="fix it")
-    reviewers = [_FakeReviewer(approve=False, findings=[blocker], vendor="a", cost=10.0),
-                 _FakeReviewer(approve=True, vendor="b")]
+    reviewers = [
+        _FakeReviewer(approve=False, findings=[blocker], vendor="a", cost=10.0),
+        _FakeReviewer(approve=True, vendor="b"),
+    ]
     caps = StageBCaps(max_iters=5, k=2, usd_budget=1.5, timeout=5)
-    res = await run_experimentation({"title": "X"}, "p", _FakeCoder(["print('METRIC f1=0.9')"] * 5),
-                                    reviewers, LocalSandbox(), caps=caps)
+    res = await run_experimentation(
+        {"title": "X"},
+        "p",
+        _FakeCoder(["print('METRIC f1=0.9')"] * 5),
+        reviewers,
+        LocalSandbox(),
+        caps=caps,
+    )
     assert res.stopped_reason == "budget_exhausted" and res.iterations == 1
 
 
 async def test_verification_probe_runs_in_sandbox():
     probe = VerificationProbe(code="print('PROBE leak confirmed')")
     finding = ReviewFinding(kind="soundness", severity="high", msg="leak", fix="split", probe=probe)
-    reviewers = [_FakeReviewer(approve=False, findings=[finding], vendor="a"),
-                 _FakeReviewer(approve=True, vendor="b")]
-    res = await run_experimentation({"title": "X"}, "p", _FakeCoder(["print('METRIC f1=0.9')"]),
-                                    reviewers, LocalSandbox(), caps=_ONE)
+    reviewers = [
+        _FakeReviewer(approve=False, findings=[finding], vendor="a"),
+        _FakeReviewer(approve=True, vendor="b"),
+    ]
+    res = await run_experimentation(
+        {"title": "X"},
+        "p",
+        _FakeCoder(["print('METRIC f1=0.9')"]),
+        reviewers,
+        LocalSandbox(),
+        caps=_ONE,
+    )
     rv = res.reviews[0]
     assert rv.findings[0].probe.ran and "leak confirmed" in rv.findings[0].probe.output
 
@@ -131,10 +173,13 @@ async def test_run_experiments_one_loop_per_rq_with_csv(tmp_path):
     from research_council.debate.experimentation import run_experiments, write_experiments
     from research_council.store.models import ResearchQuestion
 
-    rqs = [ResearchQuestion(id="rq1", question="does it work?", plan="p1", metrics="acc"),
-           ResearchQuestion(id="rq2", question="beats baseline?", plan="p2", metrics="acc")]
-    results = await run_experiments({"title": "X"}, rqs, _CyclingCoder(), _approvers(2),
-                                    LocalSandbox(), caps=_BALANCED)
+    rqs = [
+        ResearchQuestion(id="rq1", question="does it work?", plan="p1", metrics="acc"),
+        ResearchQuestion(id="rq2", question="beats baseline?", plan="p2", metrics="acc"),
+    ]
+    results = await run_experiments(
+        {"title": "X"}, rqs, _CyclingCoder(), _approvers(2), LocalSandbox(), caps=_BALANCED
+    )
     assert len(results) == 2 and all(r.result.approved for r in results)
     assert results[0].rq_id == "rq1" and results[1].rq_id == "rq2"
 
@@ -175,8 +220,15 @@ async def test_run_experiments_continues_from_prior(tmp_path):
 
     rqs = [ResearchQuestion(id="rq1", question="q", plan="p", metrics="acc")]
     prior = {"rq1": {"code": "print('OLD CODE')", "feedback": "fix the metric"}}
-    await run_experiments({"title": "X"}, rqs, _RecordingCoder(), _approvers(2), LocalSandbox(),
-                          caps=_BALANCED, prior=prior)
+    await run_experiments(
+        {"title": "X"},
+        rqs,
+        _RecordingCoder(),
+        _approvers(2),
+        LocalSandbox(),
+        caps=_BALANCED,
+        prior=prior,
+    )
     assert seen["prior_code"] == "print('OLD CODE')"  # improved the prior, not from scratch
 
 
@@ -185,11 +237,24 @@ def test_write_experiment_materializes_artifacts(tmp_path):
     from research_council.store.models import CodeReview, ExperimentResult, ReviewFinding
 
     res = ExperimentResult(
-        ran=True, feasible=True, approved=True, approvals=2, iterations=2, metric="f1=0.62",
-        code="print('METRIC f1=0.62')", log="METRIC f1=0.62", backend="local",
+        ran=True,
+        feasible=True,
+        approved=True,
+        approvals=2,
+        iterations=2,
+        metric="f1=0.62",
+        code="print('METRIC f1=0.62')",
+        log="METRIC f1=0.62",
+        backend="local",
         stopped_reason="approved",
-        reviews=[CodeReview(reviewer_vendor="openai", approve=True,
-                            findings=[ReviewFinding(kind="style", severity="low", msg="nit", fix="rename")])])
+        reviews=[
+            CodeReview(
+                reviewer_vendor="openai",
+                approve=True,
+                findings=[ReviewFinding(kind="style", severity="low", msg="nit", fix="rename")],
+            )
+        ],
+    )
     d = write_experiment(res, tmp_path)
     assert (d / "experiment.py").read_text().startswith("print(")
     result_md = (d / "result.md").read_text()
@@ -219,5 +284,7 @@ async def test_code_reviewer_offline_via_testmodel():
     from research_council.agents.code_reviewer import CodeReviewer
 
     rv = CodeReviewer(TestModel(), vendor="openai")
-    out = await rv.review({"title": "X"}, "p", "print('METRIC f1=1.0')", LocalSandbox().run("print('hi')"))
+    out = await rv.review(
+        {"title": "X"}, "p", "print('METRIC f1=1.0')", LocalSandbox().run("print('hi')")
+    )
     assert isinstance(out, CodeReview) and out.reviewer_vendor == "openai"

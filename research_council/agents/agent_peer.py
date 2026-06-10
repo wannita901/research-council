@@ -15,8 +15,22 @@ from pydantic_ai.messages import ModelResponse, ToolCallPart
 from pydantic_ai.usage import UsageLimits
 
 from research_council import prompts
+from research_council.debate.deliberation import render_view
 from research_council.obs.telemetry import UsageMeter, usage_of
 from research_council.providers.sdk import _cost
+from research_council.retrieval.base import RetrievalProvider
+from research_council.store.models import (
+    BriefDraft,
+    Candidate,
+    CandidateDraft,
+    Contribution,
+    DiscussionMessage,
+    ResearchBrief,
+    Score,
+    ScoreSheet,
+)
+from research_council.tools.search import SearchTool
+from research_council.tools.verify import VerifyTool
 
 
 def _extract_tool_calls(msgs: list) -> list[dict]:
@@ -41,26 +55,14 @@ def _drop_pending_tool_calls(msgs: list) -> list:
     calls, so trim trailing model responses that contain any tool-call part — keeping all the
     earlier, already-answered observations."""
     out = list(msgs)
-    while out and isinstance(out[-1], ModelResponse) and any(
-        isinstance(p, ToolCallPart) for p in out[-1].parts
+    while (
+        out
+        and isinstance(out[-1], ModelResponse)
+        and any(isinstance(p, ToolCallPart) for p in out[-1].parts)
     ):
         out.pop()
     return out
 
-from research_council.debate.deliberation import render_view
-from research_council.retrieval.base import RetrievalProvider
-from research_council.store.models import (
-    BriefDraft,
-    Candidate,
-    CandidateDraft,
-    Contribution,
-    DiscussionMessage,
-    ResearchBrief,
-    Score,
-    ScoreSheet,
-)
-from research_council.tools.search import SearchTool
-from research_council.tools.verify import VerifyTool
 
 # PydanticAI model-name prefixes per vendor seat. `openai-chat` keeps Chat Completions
 # (plain `openai:` defaults to the Responses API in v2); `google` replaces the deprecated
@@ -94,9 +96,18 @@ async def verify_claim(ctx: RunContext[ResearchDeps], claim: str, kind: str = "e
 
 
 class AgentPeer:
-    def __init__(self, vendor: str, codename: str, model, retrieval: RetrievalProvider,
-                 *, max_iters: int = 5, max_tool_calls: int = 8, k: int = 8,
-                 price_model: str | None = None):
+    def __init__(
+        self,
+        vendor: str,
+        codename: str,
+        model,
+        retrieval: RetrievalProvider,
+        *,
+        max_iters: int = 5,
+        max_tool_calls: int = 8,
+        k: int = 8,
+        price_model: str | None = None,
+    ):
         self.vendor = vendor
         self.codename = codename
         self._price_model = price_model  # bare seat id (e.g. "gpt-5.4") for costing; None → free
@@ -119,18 +130,26 @@ class AgentPeer:
             tools=[search, verify_claim],
         )
         self._propose_agent: Agent = Agent(
-            model, output_type=CandidateDraft, system_prompt=prompts.load("peer/propose", codename=codename),
+            model,
+            output_type=CandidateDraft,
+            system_prompt=prompts.load("peer/propose", codename=codename),
         )
         self._judge_agent: Agent = Agent(
-            model, output_type=ScoreSheet, system_prompt=prompts.load("peer/judge", codename=codename),
+            model,
+            output_type=ScoreSheet,
+            system_prompt=prompts.load("peer/judge", codename=codename),
         )
         # Tool-less twins used to finalize when the tool/iteration budget is hit mid-loop:
         # they coerce a structured result out of what was already gathered, no more tool calls.
         self._research_finalize: Agent = Agent(
-            model, output_type=BriefDraft, system_prompt=prompts.load("peer/research", codename=codename),
+            model,
+            output_type=BriefDraft,
+            system_prompt=prompts.load("peer/research", codename=codename),
         )
         self._delib_finalize: Agent = Agent(
-            model, output_type=Contribution, system_prompt=prompts.load("peer/deliberate", codename=codename),
+            model,
+            output_type=Contribution,
+            system_prompt=prompts.load("peer/deliberate", codename=codename),
         )
 
     def _track(self, x) -> None:
@@ -142,13 +161,15 @@ class AgentPeer:
         ot = getattr(u, "output_tokens", 0) or 0
         self.usage.add(
             requests=getattr(u, "requests", 0) or 0,
-            input_tokens=it, output_tokens=ot,
+            input_tokens=it,
+            output_tokens=ot,
             tool_calls=getattr(u, "tool_calls", 0) or 0,
             cost_usd=_cost(self._price_model, it, ot) if self._price_model else 0.0,
         )
 
-    async def _capped(self, agent: Agent, finalizer: Agent, prompt: str,
-                      finalize_prompt: str = "peer/finalize"):
+    async def _capped(
+        self, agent: Agent, finalizer: Agent, prompt: str, finalize_prompt: str = "peer/finalize"
+    ):
         """Run an agentic (tool-using) agent under its caps. If a cap is hit before a final
         result, don't crash — finalize tool-lessly from the gathered context. The caps thus
         BOUND the loop instead of aborting the whole debate."""
@@ -176,18 +197,31 @@ class AgentPeer:
     async def research(self, topic: str, context: str = "") -> ResearchBrief:
         prompt = f"Topic: {topic}" + (f"\n\nPrior context:\n{context}" if context else "")
         d: BriefDraft = await self._capped(self._research_agent, self._research_finalize, prompt)
-        return ResearchBrief(vendor=self.vendor, landscape=d.landscape, gap=d.gap,
-                             rationale=d.rationale, refs=d.refs)
+        return ResearchBrief(
+            vendor=self.vendor, landscape=d.landscape, gap=d.gap, rationale=d.rationale, refs=d.refs
+        )
 
-    async def deliberate(self, thread: list[DiscussionMessage], candidates: list[Candidate],
-                         my_open_questions: list[str], *, require_critique: bool = False) -> Contribution:
+    async def deliberate(
+        self,
+        thread: list[DiscussionMessage],
+        candidates: list[Candidate],
+        my_open_questions: list[str],
+        *,
+        require_critique: bool = False,
+    ) -> Contribution:
         prompt = render_view(thread, candidates, my_open_questions, self.codename)
         if require_critique:
-            prompt += ("\n\nOPENING TURN: you MUST contribute a `critique` (or a `question`) "
-                       "addressed to a peer whose candidate is NOT your own. Do NOT pass, concede, "
-                       "or set done — name the peer's codename in `targets` and give a concrete concern.")
-            return await self._capped(self._delib_agent, self._delib_finalize, prompt,
-                                      finalize_prompt="peer/finalize_critique")
+            prompt += (
+                "\n\nOPENING TURN: you MUST contribute a `critique` (or a `question`) "
+                "addressed to a peer whose candidate is NOT your own. Do NOT pass, concede, "
+                "or set done — name the peer's codename in `targets` and give a concrete concern."
+            )
+            return await self._capped(
+                self._delib_agent,
+                self._delib_finalize,
+                prompt,
+                finalize_prompt="peer/finalize_critique",
+            )
         return await self._capped(self._delib_agent, self._delib_finalize, prompt)
 
     async def propose(self, brief: ResearchBrief, constraints_text: str = "") -> Candidate:
@@ -197,30 +231,52 @@ class AgentPeer:
         r = await self._propose_agent.run(prompt)
         self._track(r)
         d: CandidateDraft = r.output
-        return Candidate(id=self.codename, vendor=self.vendor, title=d.title, gap=brief.gap,
-                         hypothesis=d.hypothesis, method=d.method, experiment_plan=d.experiment_plan,
-                         problem_statement=d.problem_statement, motivation=d.motivation,
-                         research_questions=d.research_questions,
-                         dataset_metrics=d.dataset_metrics, fallback_plan=d.fallback_plan,
-                         refs=brief.refs)
+        return Candidate(
+            id=self.codename,
+            vendor=self.vendor,
+            title=d.title,
+            gap=brief.gap,
+            hypothesis=d.hypothesis,
+            method=d.method,
+            experiment_plan=d.experiment_plan,
+            problem_statement=d.problem_statement,
+            motivation=d.motivation,
+            research_questions=d.research_questions,
+            dataset_metrics=d.dataset_metrics,
+            fallback_plan=d.fallback_plan,
+            refs=brief.refs,
+        )
 
     async def score(self, anon_candidates: list[dict], context: str = "") -> list[Score]:
         def _fmt(a: dict) -> str:
-            rqs = "; ".join(f"{q.get('id', '')}: {q.get('question', '')}"
-                            for q in a.get("research_questions", []))
-            return (f"### {a['label']}: {a.get('title', '')}\n"
-                    f"Problem: {a.get('problem_statement', '') or a.get('gap', '')}\n"
-                    f"Motivation: {a.get('motivation', '')}\n"
-                    f"Hypothesis: {a.get('hypothesis', '')}\n"
-                    f"Method: {a.get('method', '')}\n"
-                    f"Research questions: {rqs}\n"
-                    f"Experiment plan: {a.get('experiment_plan', '')}\n"
-                    f"Dataset/metrics: {a.get('dataset_metrics', '')}\n"
-                    f"Fallback: {a.get('fallback_plan', '')}")
+            rqs = "; ".join(
+                f"{q.get('id', '')}: {q.get('question', '')}"
+                for q in a.get("research_questions", [])
+            )
+            return (
+                f"### {a['label']}: {a.get('title', '')}\n"
+                f"Problem: {a.get('problem_statement', '') or a.get('gap', '')}\n"
+                f"Motivation: {a.get('motivation', '')}\n"
+                f"Hypothesis: {a.get('hypothesis', '')}\n"
+                f"Method: {a.get('method', '')}\n"
+                f"Research questions: {rqs}\n"
+                f"Experiment plan: {a.get('experiment_plan', '')}\n"
+                f"Dataset/metrics: {a.get('dataset_metrics', '')}\n"
+                f"Fallback: {a.get('fallback_plan', '')}"
+            )
+
         listing = "\n\n".join(_fmt(a) for a in anon_candidates)
         r = await self._judge_agent.run(f"Proposals:\n{listing}")
         self._track(r)
         sheet: ScoreSheet = r.output
-        return [Score(judge_vendor=self.vendor, candidate_id=i.label, novelty=i.novelty,
-                      soundness=i.soundness, feasibility=i.feasibility, clarity=i.clarity)
-                for i in sheet.items]
+        return [
+            Score(
+                judge_vendor=self.vendor,
+                candidate_id=i.label,
+                novelty=i.novelty,
+                soundness=i.soundness,
+                feasibility=i.feasibility,
+                clarity=i.clarity,
+            )
+            for i in sheet.items
+        ]

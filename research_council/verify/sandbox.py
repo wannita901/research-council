@@ -21,7 +21,7 @@ from pathlib import Path
 
 @dataclass
 class SandboxResult:
-    ok: bool          # exit_code == 0 and not timed out
+    ok: bool  # exit_code == 0 and not timed out
     exit_code: int
     stdout: str
     stderr: str
@@ -44,13 +44,32 @@ class LocalSandbox:
             _write(code, d)
             t0 = time.monotonic()
             try:
-                p = subprocess.run(["python", "experiment.py"], cwd=d, capture_output=True,
-                                   text=True, timeout=timeout)
-                return SandboxResult(p.returncode == 0, p.returncode, p.stdout, p.stderr,
-                                     time.monotonic() - t0, False, "local")
+                p = subprocess.run(
+                    ["python", "experiment.py"],
+                    cwd=d,
+                    capture_output=True,
+                    text=True,
+                    timeout=timeout,
+                )
+                return SandboxResult(
+                    p.returncode == 0,
+                    p.returncode,
+                    p.stdout,
+                    p.stderr,
+                    time.monotonic() - t0,
+                    False,
+                    "local",
+                )
             except subprocess.TimeoutExpired as e:
-                return SandboxResult(False, -1, e.stdout or "", (e.stderr or "") + "\n[timeout]",
-                                     time.monotonic() - t0, True, "local")
+                return SandboxResult(
+                    False,
+                    -1,
+                    e.stdout or "",
+                    (e.stderr or "") + "\n[timeout]",
+                    time.monotonic() - t0,
+                    True,
+                    "local",
+                )
 
 
 class DockerSandbox:
@@ -58,24 +77,59 @@ class DockerSandbox:
 
     name = "docker"
 
-    def __init__(self, image: str = "python:3.14-slim", memory: str = "512m", network: str = "none"):
+    def __init__(
+        self, image: str = "python:3.14-slim", memory: str = "512m", network: str = "none"
+    ):
         self.image, self.memory, self.network = image, memory, network
 
     def run(self, code: str, *, timeout: int = 30) -> SandboxResult:
         with tempfile.TemporaryDirectory() as d:
             _write(code, d)
-            cmd = ["docker", "run", "--rm", "--network", self.network, "--memory", self.memory,
-                   "--cpus", "1", "--pids-limit", "256", "-v", f"{d}:/work:ro", "-w", "/work",
-                   self.image, "timeout", str(timeout), "python", "experiment.py"]
+            cmd = [
+                "docker",
+                "run",
+                "--rm",
+                "--network",
+                self.network,
+                "--memory",
+                self.memory,
+                "--cpus",
+                "1",
+                "--pids-limit",
+                "256",
+                "-v",
+                f"{d}:/work:ro",
+                "-w",
+                "/work",
+                self.image,
+                "timeout",
+                str(timeout),
+                "python",
+                "experiment.py",
+            ]
             t0 = time.monotonic()
             try:
                 p = subprocess.run(cmd, capture_output=True, text=True, timeout=timeout + 20)
                 timed = p.returncode == 124  # `timeout` exit code
-                return SandboxResult(p.returncode == 0, p.returncode, p.stdout, p.stderr,
-                                     time.monotonic() - t0, timed, "docker")
+                return SandboxResult(
+                    p.returncode == 0,
+                    p.returncode,
+                    p.stdout,
+                    p.stderr,
+                    time.monotonic() - t0,
+                    timed,
+                    "docker",
+                )
             except subprocess.TimeoutExpired as e:
-                return SandboxResult(False, -1, e.stdout or "", (e.stderr or "") + "\n[docker timeout]",
-                                     time.monotonic() - t0, True, "docker")
+                return SandboxResult(
+                    False,
+                    -1,
+                    e.stdout or "",
+                    (e.stderr or "") + "\n[docker timeout]",
+                    time.monotonic() - t0,
+                    True,
+                    "docker",
+                )
 
 
 def docker_available() -> bool:
@@ -95,8 +149,12 @@ _FALLBACK_IMAGE = "python:3.14-slim"
 
 def _image_present(name: str) -> bool:
     try:
-        return subprocess.run(["docker", "image", "inspect", name],
-                              capture_output=True, timeout=6).returncode == 0
+        return (
+            subprocess.run(
+                ["docker", "image", "inspect", name], capture_output=True, timeout=6
+            ).returncode
+            == 0
+        )
     except Exception:
         return False
 
@@ -115,7 +173,11 @@ def build_sandbox(prefer: str = "docker", *, allow_local: bool = False):
         image, _ = best_experiment_image()
         return DockerSandbox(image=image), None
     if allow_local:
-        return LocalSandbox(), ("⚠ Docker unavailable — using the LOCAL sandbox, which runs "
-                                "generated code UNISOLATED on this machine.")
-    return None, ("no isolated sandbox: Docker not available. Install/start Docker, or pass "
-                  "--allow-local-sandbox to run unsandboxed (unsafe).")
+        return LocalSandbox(), (
+            "⚠ Docker unavailable — using the LOCAL sandbox, which runs "
+            "generated code UNISOLATED on this machine."
+        )
+    return None, (
+        "no isolated sandbox: Docker not available. Install/start Docker, or pass "
+        "--allow-local-sandbox to run unsandboxed (unsafe)."
+    )

@@ -17,11 +17,13 @@ class _FakeFacilitator:
 
 
 async def test_run_onboarding_collects_answers():
-    fac = _FakeFacilitator([
-        OnboardingQuestion(question="What is the research area?"),
-        OnboardingQuestion(question="What counts as success?"),
-        OnboardingQuestion(question="(skip me)"),
-    ])
+    fac = _FakeFacilitator(
+        [
+            OnboardingQuestion(question="What is the research area?"),
+            OnboardingQuestion(question="What counts as success?"),
+            OnboardingQuestion(question="(skip me)"),
+        ]
+    )
 
     async def answer_fn(q: OnboardingQuestion) -> str:
         return "" if q.question.startswith("(skip") else f"answer to {q.question}"
@@ -42,6 +44,7 @@ def test_render_constraints():
 async def test_facilitator_questions_offline():
     pytest.importorskip("pydantic_ai")
     from pydantic_ai.models.test import TestModel
+
     from research_council.agents.facilitator import Facilitator
 
     qs = await Facilitator(TestModel(), max_questions=5).questions("ideation", "topic")

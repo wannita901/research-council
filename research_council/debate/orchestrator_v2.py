@@ -11,7 +11,8 @@ from __future__ import annotations
 
 import asyncio
 from collections import defaultdict
-from typing import Any, Awaitable, Callable
+from collections.abc import Awaitable, Callable
+from typing import Any
 
 from research_council.agents.facilitator import Facilitator, render_constraints, run_onboarding
 from research_council.debate.anonymize import anonymize
@@ -39,16 +40,19 @@ SAFETY_MAX_ROUNDS = 8
 def _auto_policy(auto_rounds: int):
     """Default (no-human) reviewer: auto-iterate until `auto_rounds`, then conclude.
     auto_rounds=1 → a single round (the system never continues without approval)."""
+
     async def review(rec: Recommendation, candidates: list[Candidate], rnd: int) -> ReviewAction:
         return ReviewAction(action="iterate" if rnd < auto_rounds else "conclude")
+
     return review
 
 
 _AXES = ("novelty", "soundness", "feasibility", "clarity")
 
 
-def aggregate_v2(scores: list[Score], weights: dict[str, float], id_map,
-                 *, drop_self: bool = True) -> Recommendation:
+def aggregate_v2(
+    scores: list[Score], weights: dict[str, float], id_map, *, drop_self: bool = True
+) -> Recommendation:
     """Mean of judges' weighted scores per candidate. Self-scores (a judge scoring its own
     candidate) are excluded by default — the self-preference guard alongside anonymization."""
     by: dict[str, list[Score]] = defaultdict(list)
@@ -76,8 +80,12 @@ def aggregate_v2(scores: list[Score], weights: dict[str, float], id_map,
         composites[cid] = round(sum(weights[a] * ax[a] for a in _AXES), 4)
         breakdown[cid] = ax
     ranked = sorted(composites, key=composites.get, reverse=True)
-    return Recommendation(ranked=ranked, composites=composites, breakdown=breakdown,
-                          rationale="anonymized panel vote · self-scores excluded")
+    return Recommendation(
+        ranked=ranked,
+        composites=composites,
+        breakdown=breakdown,
+        rationale="anonymized panel vote · self-scores excluded",
+    )
 
 
 async def run_ideation(
@@ -87,13 +95,15 @@ async def run_ideation(
     *,
     facilitator: Facilitator | None = None,
     answer_fn: Callable[[OnboardingQuestion], Awaitable[str]] | None = None,
-    reviewer: Callable[[Recommendation, list[Candidate], int], Awaitable[ReviewAction]] | None = None,
+    reviewer: Callable[[Recommendation, list[Candidate], int], Awaitable[ReviewAction]]
+    | None = None,
     weights: dict[str, float] | None = None,
-    auto_rounds: int = 1,   # no-human runs auto-iterate this many rounds, then conclude
+    auto_rounds: int = 1,  # no-human runs auto-iterate this many rounds, then conclude
     max_turns: int = 4,
     max_msgs_per_peer: int = 3,
     anonymize_on: bool = True,
-    constraints: Constraints | None = None,  # pre-supplied onboarding answers (skips the facilitator)
+    constraints: Constraints
+    | None = None,  # pre-supplied onboarding answers (skips the facilitator)
     on_round_end: Callable[[int], Awaitable[None]] | None = None,  # e.g. per-round wiki harvest
     emit: Callable[[Event], None] | None = None,
 ) -> tuple[Recommendation, list[Candidate]]:
@@ -125,33 +135,56 @@ async def run_ideation(
         rnd += 1
         ctx = "\n\n".join(x for x in [constraints_text, digest_text] if x)
 
-        def emit_tools(phase: str, cn: str, tcs: list[dict]) -> None:
+        def emit_tools(phase: str, cn: str, tcs: list[dict], rnd: int = rnd) -> None:
             for tc in tcs:
                 out(phase, "tool_call", {**tc, "codename": cn}, round=rnd)
 
         briefs = await asyncio.gather(*(p.research(topic, ctx) for _, p in order))
-        for (cn, p), b in zip(order, briefs):
-            out("research", "research_brief", {**b.model_dump(), "codename": cn},
-                round=rnd, author_vendor=b.vendor)
+        for (cn, p), b in zip(order, briefs, strict=False):
+            out(
+                "research",
+                "research_brief",
+                {**b.model_dump(), "codename": cn},
+                round=rnd,
+                author_vendor=b.vendor,
+            )
             emit_tools("research", cn, getattr(p, "last_tool_calls", []) or [])
 
-        candidates = list(await asyncio.gather(
-            *(p.propose(b, constraints_text) for (_, p), b in zip(order, briefs))))
+        candidates = list(
+            await asyncio.gather(
+                *(p.propose(b, constraints_text) for (_, p), b in zip(order, briefs, strict=False))
+            )
+        )
         for c in candidates:
-            out("propose", "candidate", {**c.model_dump(), "codename": vendor_to_cn.get(c.vendor, c.id)},
-                round=rnd, author_vendor=c.vendor)
+            out(
+                "propose",
+                "candidate",
+                {**c.model_dump(), "codename": vendor_to_cn.get(c.vendor, c.id)},
+                round=rnd,
+                author_vendor=c.vendor,
+            )
 
         thread = await run_deliberation(
-            peers, candidates, round_no=rnd, max_turns=max_turns, max_msgs_per_peer=max_msgs_per_peer,
-            emit=lambda m: out("deliberate", "discussion_message", m.model_dump(), round=rnd),
+            peers,
+            candidates,
+            round_no=rnd,
+            max_turns=max_turns,
+            max_msgs_per_peer=max_msgs_per_peer,
+            emit=lambda m, rnd=rnd: out(
+                "deliberate", "discussion_message", m.model_dump(), round=rnd
+            ),
             emit_tool=lambda cn, tcs: emit_tools("deliberate", cn, tcs),
         )
         # candidates revised mid-deliberation (version bumped) are re-emitted before judging
         for c in candidates:
             if c.version > 1:
-                out("deliberate", "candidate_revised",
+                out(
+                    "deliberate",
+                    "candidate_revised",
                     {**c.model_dump(), "codename": vendor_to_cn.get(c.vendor, c.id)},
-                    round=rnd, author_vendor=c.vendor)
+                    round=rnd,
+                    author_vendor=c.vendor,
+                )
 
         anon, id_map = anonymize(candidates, anonymize_on, seed=rnd)
         score_lists = await asyncio.gather(*(p.score(anon) for _, p in order))
@@ -180,12 +213,19 @@ async def run_ideation(
             break
 
         comment = action.feedback if action.action == "amend" else ""
-        digest = build_round_digest(rnd, list(briefs), candidates, thread,
-                                    human_comment=comment, codename_of=vendor_to_cn)
+        digest = build_round_digest(
+            rnd, list(briefs), candidates, thread, human_comment=comment, codename_of=vendor_to_cn
+        )
         digest_text = render_digest(digest)
 
     if final_choice:
-        out("judge", "final_choice", {"candidate_id": final_choice}, round=rnd, author_vendor="human")
+        out(
+            "judge",
+            "final_choice",
+            {"candidate_id": final_choice},
+            round=rnd,
+            author_vendor="human",
+        )
 
     # cost/usage summary — peers/facilitator that track usage (offline stubs are skipped)
     by: dict[str, dict] = {}

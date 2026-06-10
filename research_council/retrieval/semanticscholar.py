@@ -40,12 +40,14 @@ class SemanticScholarProvider:
             return []
         out: list[Paper] = []
         for w in (data.get("data") or [])[:k]:
-            out.append(Paper(
-                id=w.get("paperId") or "(semanticscholar)",
-                title=w.get("title") or "(untitled)",
-                abstract=w.get("abstract") or "",
-                year=w.get("year"),
-                url=w.get("url"),
-                source="semanticscholar",
-            ))
+            out.append(
+                Paper(
+                    id=w.get("paperId") or "(semanticscholar)",
+                    title=w.get("title") or "(untitled)",
+                    abstract=w.get("abstract") or "",
+                    year=w.get("year"),
+                    url=w.get("url"),
+                    source="semanticscholar",
+                )
+            )
         return out

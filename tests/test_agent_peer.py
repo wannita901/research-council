@@ -22,10 +22,12 @@ def test_model_name_mapping():
 
 async def test_agent_peer_research_runs_offline():
     peer = AgentPeer(
-        vendor="openai", codename="Aiden",
+        vendor="openai",
+        codename="Aiden",
         model=TestModel(),  # drives the loop deterministically, calls tools, no network
         retrieval=build_stub_retrieval(["wiki", "openalex"]),
-        max_iters=4, max_tool_calls=6,
+        max_iters=4,
+        max_tool_calls=6,
     )
     brief = await peer.research("Do LLM code-review agents beat SAST on security bugs?")
     assert isinstance(brief, ResearchBrief)
@@ -35,8 +37,11 @@ async def test_agent_peer_research_runs_offline():
 
 async def test_usage_is_tracked_and_costed():
     peer = AgentPeer(
-        vendor="openai", codename="Aiden", model=TestModel(),
-        retrieval=build_stub_retrieval(["wiki"]), price_model="gpt-5.4",
+        vendor="openai",
+        codename="Aiden",
+        model=TestModel(),
+        retrieval=build_stub_retrieval(["wiki"]),
+        price_model="gpt-5.4",
     )
     await peer.research("does X beat Y?")
     await peer.propose(await peer.research("again"))
@@ -52,7 +57,9 @@ async def test_usage_is_tracked_and_costed():
 async def test_tool_calls_are_recorded():
     # TestModel calls every available tool once → research should record search + verify_claim.
     peer = AgentPeer(
-        vendor="openai", codename="Aiden", model=TestModel(),
+        vendor="openai",
+        codename="Aiden",
+        model=TestModel(),
         retrieval=build_stub_retrieval(["wiki"]),
     )
     await peer.research("does X beat Y?")
@@ -66,8 +73,12 @@ async def test_research_finalizes_gracefully_when_tool_budget_hit():
     # it should finalize tool-lessly and still return a ResearchBrief (this is the bug the
     # live run hit: UsageLimitExceeded killed the whole debate).
     peer = AgentPeer(
-        vendor="gemini", codename="Julien", model=TestModel(),
-        retrieval=build_stub_retrieval(["wiki"]), max_iters=3, max_tool_calls=0,
+        vendor="gemini",
+        codename="Julien",
+        model=TestModel(),
+        retrieval=build_stub_retrieval(["wiki"]),
+        max_iters=3,
+        max_tool_calls=0,
     )
     brief = await peer.research("anything")
     assert isinstance(brief, ResearchBrief) and brief.vendor == "gemini"

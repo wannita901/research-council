@@ -68,13 +68,20 @@ class Run:
     def emit(self, ev: Event) -> None:
         self.queue.put_nowait(ev)
 
-    async def reviewer(self, rec: Recommendation, candidates: list[Candidate], rnd: int) -> ReviewAction:
+    async def reviewer(
+        self, rec: Recommendation, candidates: list[Candidate], rnd: int
+    ) -> ReviewAction:
         self.recommendation, self.candidates = rec, candidates
         self.status = "awaiting_review"
-        ev = self.trace.emit("review", "review_request", {
-            "recommendation": rec.model_dump(),
-            "candidates": [c.model_dump() for c in candidates],
-        }, round=rnd)
+        ev = self.trace.emit(
+            "review",
+            "review_request",
+            {
+                "recommendation": rec.model_dump(),
+                "candidates": [c.model_dump() for c in candidates],
+            },
+            round=rnd,
+        )
         self.queue.put_nowait(ev)
         self._review = asyncio.get_running_loop().create_future()
         action = await self._review
@@ -94,6 +101,7 @@ def _build_peers(cfg, live: bool):
         return [StubPeer(v) for v in cfg.seats]
     from research_council.agents.llm_peer import LLMPeer
     from research_council.providers.sdk import build_provider
+
     return [LLMPeer(v, build_provider(v, m)) for v, m in cfg.seats.items()]
 
 
@@ -130,8 +138,14 @@ async def start_debate(req: DebateRequest):
 async def _run(run: Run, peers, retrieval, verifier, reviewer) -> None:
     try:
         rec, cands = await run_debate(
-            run.cfg, run.topic, peers, retrieval, verifier, run.trace,
-            emit=run.emit, reviewer=reviewer,
+            run.cfg,
+            run.topic,
+            peers,
+            retrieval,
+            verifier,
+            run.trace,
+            emit=run.emit,
+            reviewer=reviewer,
         )
         run.recommendation, run.candidates, run.status = rec, cands, "done"
     except Exception as e:  # surface failure to clients; never hang the run
@@ -159,7 +173,9 @@ async def get_debate(run_id: str):
 @app.post("/debates/{run_id}/action")
 async def post_action(run_id: str, req: ActionRequest):
     run = _get(run_id)
-    ok = run.submit_action(ReviewAction(action=req.action, choice=req.choice, feedback=req.feedback))
+    ok = run.submit_action(
+        ReviewAction(action=req.action, choice=req.choice, feedback=req.feedback)
+    )
     if not ok:
         raise HTTPException(409, "no pending review for this run")
     return {"ok": True}
@@ -195,6 +211,7 @@ async def stream(run_id: str):
 
 # ---------------------------------------------------------------- v2 ideation
 
+
 class IdeationRequest(BaseModel):
     topic: str
     stage: str = "ideation"
@@ -215,11 +232,19 @@ def _build_v2_peers(cfg, live: bool, retrieval) -> dict:
         cn = CODENAMES.get(vendor, vendor)
         if live:
             from research_council.agents.agent_peer import AgentPeer, agent_model_name
-            peers[cn] = AgentPeer(vendor, cn, agent_model_name(vendor, model), retrieval,
-                                  max_iters=cfg.max_iters, max_tool_calls=cfg.max_tool_calls,
-                                  price_model=model)
+
+            peers[cn] = AgentPeer(
+                vendor,
+                cn,
+                agent_model_name(vendor, model),
+                retrieval,
+                max_iters=cfg.max_iters,
+                max_tool_calls=cfg.max_tool_calls,
+                price_model=model,
+            )
         else:
             from research_council.agents.stub_agent_peer import StubV2Peer
+
             peers[cn] = StubV2Peer(vendor, cn, retrieval)
     return peers
 
@@ -241,7 +266,8 @@ async def start_ideation(req: IdeationRequest):
     reviewer = run.reviewer if req.interactive else None
     constraints = Constraints(stage=cfg.stage, answers=req.constraints) if req.constraints else None
     run.task = asyncio.create_task(
-        _run_ideation(run, peers, reviewer, req.auto_iterate, cfg.anonymize, constraints))
+        _run_ideation(run, peers, reviewer, req.auto_iterate, cfg.anonymize, constraints)
+    )
     return {"run_id": run.run_id}
 
 
@@ -250,8 +276,14 @@ async def _run_ideation(run: Run, peers, reviewer, auto_iterate, anonymize, cons
 
     try:
         rec, cands = await run_ideation(
-            run.topic, peers, run.trace, reviewer=reviewer, auto_rounds=auto_iterate,
-            anonymize_on=anonymize, constraints=constraints, emit=run.emit,
+            run.topic,
+            peers,
+            run.trace,
+            reviewer=reviewer,
+            auto_rounds=auto_iterate,
+            anonymize_on=anonymize,
+            constraints=constraints,
+            emit=run.emit,
         )
         run.recommendation, run.candidates, run.status = rec, cands, "done"
     except Exception as e:  # surface failure to clients; never hang the run
@@ -272,7 +304,9 @@ async def get_ideation(run_id: str):
 @app.post("/ideations/{run_id}/action")
 async def post_ideation_action(run_id: str, req: ActionRequest):
     run = _get(run_id)
-    ok = run.submit_action(ReviewAction(action=req.action, choice=req.choice, feedback=req.feedback))
+    ok = run.submit_action(
+        ReviewAction(action=req.action, choice=req.choice, feedback=req.feedback)
+    )
     if not ok:
         raise HTTPException(409, "no pending review for this run")
     return {"ok": True}

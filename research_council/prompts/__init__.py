@@ -17,13 +17,13 @@ verbatim. Files are cached per process, so edits take effect on the next run.
 
 from __future__ import annotations
 
-from functools import lru_cache
+from functools import cache
 from pathlib import Path
 
 _DIR = Path(__file__).parent
 
 
-@lru_cache(maxsize=None)
+@cache
 def _raw(name: str) -> str:
     path = _DIR / f"{name}.md"
     if not path.exists():

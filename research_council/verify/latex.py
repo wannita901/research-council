@@ -16,15 +16,24 @@ from __future__ import annotations
 import re
 import shutil
 import subprocess
+from collections.abc import Callable
 from pathlib import Path
-from typing import Callable
 
 from research_council.store.models import PaperDraft
 
 Emit = Callable[[str, str, dict], None] | None
 _ORDER = ["Introduction", "Related Work", "Method", "Experiment", "Results", "Conclusion"]
-_SPECIALS = {"&": r"\&", "%": r"\%", "$": r"\$", "#": r"\#", "_": r"\_",
-             "{": r"\{", "}": r"\}", "~": r"\textasciitilde{}", "^": r"\textasciicircum{}"}
+_SPECIALS = {
+    "&": r"\&",
+    "%": r"\%",
+    "$": r"\$",
+    "#": r"\#",
+    "_": r"\_",
+    "{": r"\{",
+    "}": r"\}",
+    "~": r"\textasciitilde{}",
+    "^": r"\textasciicircum{}",
+}
 
 
 def latex_engine() -> tuple[str | None, str]:
@@ -51,9 +60,13 @@ def _body_to_tex(md: str, keys: set[str], figure_rel: str) -> str:
         line = raw.rstrip()
         img = re.match(r"!\[[^\]]*\]\(([^)]+)\)", line.strip())
         if img:
-            out += [r"\begin{figure}[t]", r"\centering",
-                    rf"\includegraphics[width=.7\linewidth]{{{img.group(1)}}}",
-                    r"\caption{Experiment results.}", r"\end{figure}"]
+            out += [
+                r"\begin{figure}[t]",
+                r"\centering",
+                rf"\includegraphics[width=.7\linewidth]{{{img.group(1)}}}",
+                r"\caption{Experiment results.}",
+                r"\end{figure}",
+            ]
             continue
         if line.strip().startswith(("- ", "* ")):
             out.append(r"\par " + _cite(_esc(line.strip()[2:]), keys))
@@ -76,19 +89,30 @@ def _docclass(doc_class: str) -> str:
     }.get(doc_class, r"\documentclass{article}")
 
 
-def scaffold_tex(draft: PaperDraft, venue_cfg: dict, *, doc_class: str | None = None,
-                 figure_rel: str = "") -> str:
+def scaffold_tex(
+    draft: PaperDraft, venue_cfg: dict, *, doc_class: str | None = None, figure_rel: str = ""
+) -> str:
     dc = doc_class or venue_cfg.get("doc_class", "article")
     keys = {c.key for c in draft.citations}
-    parts = [_docclass(dc),
-             r"\usepackage{graphicx}", r"\usepackage[utf8]{inputenc}", r"\usepackage{hyperref}",
-             rf"\title{{{_esc(draft.title or 'Untitled')}}}",
-             r"\author{Research Council}",
-             r"\begin{document}", r"\maketitle",
-             r"\begin{abstract}", _esc(draft.abstract), r"\end{abstract}"]
+    parts = [
+        _docclass(dc),
+        r"\usepackage{graphicx}",
+        r"\usepackage[utf8]{inputenc}",
+        r"\usepackage{hyperref}",
+        rf"\title{{{_esc(draft.title or 'Untitled')}}}",
+        r"\author{Research Council}",
+        r"\begin{document}",
+        r"\maketitle",
+        r"\begin{abstract}",
+        _esc(draft.abstract),
+        r"\end{abstract}",
+    ]
     for name in [*_ORDER, *[k for k in draft.sections if k not in _ORDER]]:
         if name in draft.sections:
-            parts += [rf"\section{{{_esc(name)}}}", _body_to_tex(draft.sections[name], keys, figure_rel)]
+            parts += [
+                rf"\section{{{_esc(name)}}}",
+                _body_to_tex(draft.sections[name], keys, figure_rel),
+            ]
     if draft.citations:
         parts.append(rf"\begin{{thebibliography}}{{{len(draft.citations)}}}")
         for c in draft.citations:
@@ -118,8 +142,9 @@ def _compile(engine: str, kind: str, tex_path: Path, timeout: int = 180) -> tupl
     return ok, (p.stdout + "\n" + p.stderr)[-3000:]
 
 
-def build_paper_latex(draft: PaperDraft, paper_dir: Path, venue_cfg: dict, *,
-                      attempts: int = 3, emit: Emit = None) -> dict:
+def build_paper_latex(
+    draft: PaperDraft, paper_dir: Path, venue_cfg: dict, *, attempts: int = 3, emit: Emit = None
+) -> dict:
     """Scaffold → compile → mechanical fix/fallback. Returns {status, pdf, log, tex}."""
     paper_dir = Path(paper_dir)
     paper_dir.mkdir(parents=True, exist_ok=True)
@@ -133,7 +158,7 @@ def build_paper_latex(draft: PaperDraft, paper_dir: Path, venue_cfg: dict, *,
         classes.append("article")
 
     last_log = ""
-    for i, dc in enumerate(classes[:max(1, attempts)]):
+    for dc in classes[: max(1, attempts)]:
         tex = scaffold_tex(draft, venue_cfg, doc_class=dc, figure_rel=figure_rel)
         tex_path.write_text(tex, encoding="utf-8")
         if engine is None:
@@ -147,8 +172,12 @@ def build_paper_latex(draft: PaperDraft, paper_dir: Path, venue_cfg: dict, *,
             emit("writing", "latex_compile", {"engine": kind, "doc_class": dc, "ok": ok})
         if ok:
             (paper_dir / "build.log").write_text(log, encoding="utf-8")
-            return {"status": "built", "pdf": str(tex_path.with_suffix(".pdf")),
-                    "log": log, "tex": str(tex_path)}
+            return {
+                "status": "built",
+                "pdf": str(tex_path.with_suffix(".pdf")),
+                "log": log,
+                "tex": str(tex_path),
+            }
 
     (paper_dir / "build.log").write_text(last_log, encoding="utf-8")
     return {"status": "build_failed", "pdf": "", "log": last_log, "tex": str(tex_path)}
@@ -165,5 +194,10 @@ def compile_existing(paper_dir: Path, *, timeout: int = 180) -> dict:
     ok, log = _compile(engine, kind, tex_path, timeout)
     (paper_dir / "build.log").write_text(log, encoding="utf-8")
     if ok:
-        return {"status": "built", "pdf": str(tex_path.with_suffix(".pdf")), "log": log, "tex": str(tex_path)}
+        return {
+            "status": "built",
+            "pdf": str(tex_path.with_suffix(".pdf")),
+            "log": log,
+            "tex": str(tex_path),
+        }
     return {"status": "build_failed", "pdf": "", "log": log, "tex": str(tex_path)}

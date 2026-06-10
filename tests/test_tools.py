@@ -16,7 +16,9 @@ async def test_search_tool_returns_results_and_refs():
 
 
 async def test_verify_tool_grounded_when_results():
-    res = await VerifyTool(build_stub_retrieval(["openalex"])).run(claim="X helps Y", kind="citation")
+    res = await VerifyTool(build_stub_retrieval(["openalex"])).run(
+        claim="X helps Y", kind="citation"
+    )
     assert "grounded=True" in res.content and res.refs
 
 

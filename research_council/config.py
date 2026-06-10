@@ -12,7 +12,11 @@ from research_council.store.models import RunConfig
 CONFIG_DIR = Path(__file__).parent / "config"
 
 # Per-vendor model can be set via env (mise.toml [env]); overrides the yaml default.
-ENV_MODEL = {"openai": "RC_OPENAI_MODEL", "anthropic": "RC_ANTHROPIC_MODEL", "gemini": "RC_GEMINI_MODEL"}
+ENV_MODEL = {
+    "openai": "RC_OPENAI_MODEL",
+    "anthropic": "RC_ANTHROPIC_MODEL",
+    "gemini": "RC_GEMINI_MODEL",
+}
 
 
 def load_config(stage: str = "ideation", profile: str | None = None) -> RunConfig:
@@ -29,6 +33,7 @@ def load_config(stage: str = "ideation", profile: str | None = None) -> RunConfi
         cfg.facilitator_model = fac
     # Stage-A caps now scale with RC_PROFILE (or --profile); per-field RC_MAX_* still wins.
     from research_council.debate.caps import stage_a_caps
+
     for field, value in stage_a_caps(profile).items():
         setattr(cfg, field, value)
     return cfg

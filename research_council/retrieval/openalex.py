@@ -44,12 +44,14 @@ class OpenAlexProvider:
         out: list[Paper] = []
         for w in data.get("results", [])[:k]:
             wid = w.get("id") or ""
-            out.append(Paper(
-                id=wid.rsplit("/", 1)[-1] or wid or "(openalex)",
-                title=w.get("title") or w.get("display_name") or "(untitled)",
-                abstract=_reconstruct_abstract(w.get("abstract_inverted_index")),
-                year=w.get("publication_year"),
-                url=w.get("doi") or wid or None,
-                source="openalex",
-            ))
+            out.append(
+                Paper(
+                    id=wid.rsplit("/", 1)[-1] or wid or "(openalex)",
+                    title=w.get("title") or w.get("display_name") or "(untitled)",
+                    abstract=_reconstruct_abstract(w.get("abstract_inverted_index")),
+                    year=w.get("publication_year"),
+                    url=w.get("doi") or wid or None,
+                    source="openalex",
+                )
+            )
         return out

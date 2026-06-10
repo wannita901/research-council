@@ -28,7 +28,14 @@ def test_run_conductor_completes_offline(tmp_path, monkeypatch):
 
     # Stage A artifact is a full research proposal document, not just a title
     proposal = (tmp_path / pid / "proposal.md").read_text()
-    for head in ("Problem Statement", "Motivation", "Hypothesis", "Proposed Method",
-                 "Step-by-step Experiment Plan", "Dataset / Metrics", "Fallback Plan"):
+    for head in (
+        "Problem Statement",
+        "Motivation",
+        "Hypothesis",
+        "Proposed Method",
+        "Step-by-step Experiment Plan",
+        "Dataset / Metrics",
+        "Fallback Plan",
+    ):
         assert f"## {head}" in proposal
     assert proj.stages["ideation"].artifacts.get("proposal_path", "").endswith("proposal.md")

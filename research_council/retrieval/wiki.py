@@ -59,11 +59,13 @@ class WikiProvider:
         scored.sort(key=lambda x: x[0], reverse=True)
         out: list[Paper] = []
         for _, p, text in scored[:k]:
-            out.append(Paper(
-                id=f"wiki:{p.relative_to(self.root)}",
-                title=_first_heading(text, p.stem),
-                abstract=text.strip()[:300],
-                source="wiki",
-                origin=_origin(text),
-            ))
+            out.append(
+                Paper(
+                    id=f"wiki:{p.relative_to(self.root)}",
+                    title=_first_heading(text, p.stem),
+                    abstract=text.strip()[:300],
+                    source="wiki",
+                    origin=_origin(text),
+                )
+            )
         return out

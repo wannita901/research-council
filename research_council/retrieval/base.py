@@ -11,5 +11,4 @@ from research_council.store.models import Paper
 class RetrievalProvider(Protocol):
     name: str
 
-    async def search(self, query: str, k: int = 10) -> list[Paper]:
-        ...
+    async def search(self, query: str, k: int = 10) -> list[Paper]: ...

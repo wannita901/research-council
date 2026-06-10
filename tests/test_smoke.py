@@ -55,8 +55,17 @@ async def test_anonymize_off_uses_real_ids():
     from research_council.debate.anonymize import anonymize
     from research_council.store.models import Candidate
 
-    cands = [Candidate(id="openai", vendor="openai", title="t", gap="g",
-                       hypothesis="h", method="m", experiment_plan="e")]
+    cands = [
+        Candidate(
+            id="openai",
+            vendor="openai",
+            title="t",
+            gap="g",
+            hypothesis="h",
+            method="m",
+            experiment_plan="e",
+        )
+    ]
     anon, id_map = anonymize(cands, on=False)
     assert anon[0]["label"] == "openai"
     assert id_map["openai"].vendor == "openai"

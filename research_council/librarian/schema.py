@@ -15,8 +15,15 @@ from pydantic import BaseModel, Field, field_validator
 
 # The 9 typed folders (plan/9). approaches=built · methods=validated · concepts=idea · motivations=why.
 TAXONOMY = [
-    "papers", "tasks", "motivations", "concepts", "approaches",
-    "methods", "benchmarks", "findings", "gaps",
+    "papers",
+    "tasks",
+    "motivations",
+    "concepts",
+    "approaches",
+    "methods",
+    "benchmarks",
+    "findings",
+    "gaps",
 ]
 ORIGINS = ("external", "internal")
 
@@ -41,7 +48,7 @@ class WikiPage(BaseModel):
     title: str
     slug: str = ""  # kebab; filename stem (derived from title if blank)
     origin: str = "external"
-    papers: list[str] = Field(default_factory=list)   # source citekeys this page draws on
+    papers: list[str] = Field(default_factory=list)  # source citekeys this page draws on
     related: list[str] = Field(default_factory=list)  # cross-links as "[[type:slug]]"
     updated: str = ""  # YYYY-MM-DD
     body: str = ""
@@ -68,8 +75,14 @@ class WikiPage(BaseModel):
 
 
 def render_page(p: WikiPage) -> str:
-    fm = {"type": p.type, "title": p.title, "origin": p.origin,
-          "papers": list(p.papers), "related": list(p.related), "updated": p.updated}
+    fm = {
+        "type": p.type,
+        "title": p.title,
+        "origin": p.origin,
+        "papers": list(p.papers),
+        "related": list(p.related),
+        "updated": p.updated,
+    }
     front = yaml.safe_dump(fm, sort_keys=False, allow_unicode=True).strip()
     return f"---\n{front}\n---\n\n{p.body.strip()}\n"
 

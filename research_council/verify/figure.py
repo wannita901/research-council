@@ -55,6 +55,7 @@ def render_result_figure(experiment: dict, assets_dir: Path) -> str | None:
         return None
     try:
         import matplotlib
+
         matplotlib.use("Agg")
         import matplotlib.pyplot as plt
     except Exception:

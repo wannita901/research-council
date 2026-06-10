@@ -21,8 +21,9 @@ class CodeReviewer:
         self.vendor = vendor
         self._price_model = price_model
         self.usage = UsageMeter()
-        self._agent: Agent = Agent(model, output_type=CodeReview,
-                                   system_prompt=prompts.load("experiment/reviewer"))
+        self._agent: Agent = Agent(
+            model, output_type=CodeReview, system_prompt=prompts.load("experiment/reviewer")
+        )
 
     async def review(self, idea: dict, plan: str, code: str, run) -> CodeReview:
         prompt = (
@@ -49,6 +50,11 @@ def _cost_add(meter: UsageMeter, result, price_model: str | None) -> None:
     if u is None:
         return
     from research_council.providers.sdk import _cost
+
     it, ot = u.input_tokens or 0, u.output_tokens or 0
-    meter.add(requests=u.requests or 0, input_tokens=it, output_tokens=ot,
-              cost_usd=_cost(price_model, it, ot) if price_model else 0.0)
+    meter.add(
+        requests=u.requests or 0,
+        input_tokens=it,
+        output_tokens=ot,
+        cost_usd=_cost(price_model, it, ot) if price_model else 0.0,
+    )

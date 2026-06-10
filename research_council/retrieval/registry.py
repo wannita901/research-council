@@ -39,9 +39,12 @@ class StubRetrieval:
     async def search(self, query: str, k: int = 10) -> list[Paper]:
         n = min(k, 3)
         return [
-            Paper(id=f"{self.name}:p{i}",
-                  title=f"[{self.name}] result {i} for {query[:40]}",
-                  abstract="(stub abstract)", source=self.name)
+            Paper(
+                id=f"{self.name}:p{i}",
+                title=f"[{self.name}] result {i} for {query[:40]}",
+                abstract="(stub abstract)",
+                source=self.name,
+            )
             for i in range(1, n + 1)
         ]
 
