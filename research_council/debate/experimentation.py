@@ -137,7 +137,7 @@ async def run_experimentation(
                 {"attempt": attempt, "chars": len(code), "notes": draft.notes},
             )
 
-        res = sandbox.run(code, timeout=caps.timeout)
+        res = sandbox.run(code, timeout=caps.timeout, requirements=draft.requirements)
         last_ran = res.ok
         metric = _metric_of(res.stdout)
         feasible = bool(res.ok and metric)
@@ -189,6 +189,9 @@ async def run_experimentation(
             approvals=approvals,
             reviews=reviews,
             usd=spent,
+            requirements=list(draft.requirements),
+            figures=list(res.figures),
+            figures_data=res.figures,
         )
         best = _better(best, cur)
 
@@ -302,6 +305,15 @@ def write_experiments(rq_results: list[RQResult], out_dir: Path | str) -> Path:
         (sub / "question.md").write_text(
             f"# {rr.rq_id.upper()}\n\n{rr.question}\n", encoding="utf-8"
         )
+        if r.requirements:
+            (sub / "requirements.txt").write_text(
+                "\n".join(r.requirements) + "\n", encoding="utf-8"
+            )
+        # figures the experiment saved → <rq>/figures/<name> (real plots from the data)
+        if r.figures_data:
+            (sub / "figures").mkdir(exist_ok=True)
+            for fname, blob in r.figures_data.items():
+                (sub / "figures" / fname).write_bytes(blob)
         name, val = _metric_parts(r.metric)
         rows.append(
             {

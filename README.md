@@ -74,7 +74,7 @@ council run --live --profile balanced          # the real thing
 | **Docker** running | sandboxing experiment code in stage ② (`--network none`) | `docker info` |
 | `tectonic` or `latexmk` *(optional)* | compiling `paper.pdf` in stage ③ (otherwise you still get `paper.tex`) | `tectonic --version` |
 
-> Optional: `mise run build-image` builds a sandbox image with numpy / pandas / scipy / scikit-learn so experiments aren't limited to the standard library.
+> Experiments can declare their own pip dependencies — these are installed in a network-enabled prep step, then the code runs with **no network** (real libraries, isolated execution). Optional: `mise run build-image` pre-bakes the common scientific stack (numpy / pandas / scipy / scikit-learn / matplotlib) so those are instant. The experiment also saves real plots, which the paper embeds.
 
 ## Commands & flags
 

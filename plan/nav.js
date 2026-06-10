@@ -42,6 +42,7 @@ const PAGES = [
   { file: "20_proposal-and-evidence.html",  n: 20, phase: 7, title: "Proposal Artifact + Evidence Rule" },
   { file: "21_rq-driven-experiments.html",  n: 21, phase: 7, title: "RQ-driven Stage B + CSV" },
   { file: "23_deliberation-balance.html",   n: 23, phase: 7, title: "Deliberation Balance + Caps in mise" },
+  { file: "24_libraries-and-figures.html",  n: 24, phase: 7, title: "Stage-B Libraries + Figures" },
 ];
 
 const STATUS_ICON = { done: "✓", wip: "◐", next: "▸", todo: "○" };

@@ -73,7 +73,7 @@ class Writer:
         constraints: dict | None = None,
         *,
         allowed_citations: list[Citation] | None = None,
-        figure: str = "",
+        figures: list[str] | None = None,
     ) -> PaperDraft:
         prompt = (
             f"Proposal: {idea.get('title', '')}\n"
@@ -86,9 +86,13 @@ class Writer:
             f"{_experiment_block(experiment)}\n{_refs_block(allowed_citations or [])}\n"
             "Write the paper to reflect BOTH the proposal and the actual experiment result.\n"
         )
-        if figure:
+        figures = figures or []
+        if figures:
             prompt += (
-                f"\nA results figure has been generated at: {figure} — reference it in Results.\n"
+                "\nResults figures already generated from the real data (reference them in the "
+                "Results section, e.g. 'Figure 1 shows…'):\n"
+                + "\n".join(f"- {f}" for f in figures)
+                + "\n"
             )
         if constraints:
             prompt += "\nConstraints:\n" + "\n".join(f"- {k}: {v}" for k, v in constraints.items())
@@ -98,8 +102,7 @@ class Writer:
         # enforce grounding: drop any citation key the writer wasn't handed
         allowed = {c.key for c in (allowed_citations or [])}
         out.citations = [c for c in out.citations if c.key in allowed] if allowed else []
-        if figure and not out.figure:
-            out.figure = figure
+        out.figures = figures  # the engine owns which figures exist (real plots from Stage B)
         return out
 
     async def revise(self, draft: PaperDraft, change_requests, sections: list[str]) -> PaperDraft:
@@ -130,7 +133,7 @@ class Writer:
         _cost_add(self.usage, r, self._price_model)
         out = r.output
         out.citations = draft.citations  # never introduce citations in the coherence pass
-        out.figure = draft.figure
+        out.figures = draft.figures
         return out
 
 

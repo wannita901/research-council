@@ -29,7 +29,9 @@ class _FakeWriter:
     def __init__(self):
         self.usage = UsageMeter()
 
-    async def draft(self, idea, experiment, constraints=None, *, allowed_citations=None, figure=""):
+    async def draft(
+        self, idea, experiment, constraints=None, *, allowed_citations=None, figures=None
+    ):
         return PaperDraft(
             title="A Toy Study of X",
             abstract="we did X and measured Y",
@@ -39,7 +41,7 @@ class _FakeWriter:
                 "Results": f"observed metric {experiment.get('metric')}",
             },
             citations=list(allowed_citations or []),
-            figure=figure,
+            figures=list(figures or []),
         )
 
     async def revise(self, draft, change_requests, sections):
@@ -207,6 +209,26 @@ def test_load_prior_paper_round_trips(tmp_path):
     assert draft.title == "My Title" and draft.abstract == "the abstract"
     assert draft.sections.get("Method") == "the method body" and build_error == ""
     assert load_prior_paper(tmp_path / "nope") == (None, "")
+
+
+async def test_embeds_real_experiment_figures(tmp_path):
+    # Stage B left a figure on disk → Stage C copies it into paper/assets and references it
+    figdir = tmp_path / "experiment" / "rq1" / "figures"
+    figdir.mkdir(parents=True)
+    (figdir / "plot.png").write_bytes(b"PNG")
+    reviewers = [_Reviewer([0.85], vendor="a"), _Reviewer([0.85], vendor="b")]
+    await run_writing(
+        _handoff(),
+        _FakeWriter(),
+        reviewers,
+        venue="generic",
+        out_dir=tmp_path,
+        caps=_C2,
+        latex=False,
+    )
+    assert (tmp_path / "paper" / "assets" / "rq1_plot.png").read_bytes() == b"PNG"
+    paper = (tmp_path / "paper" / "paper.md").read_text()
+    assert "## Figures" in paper and "rq1_plot.png" in paper
 
 
 async def test_grounding_filters_unknown_citations_via_testmodel():

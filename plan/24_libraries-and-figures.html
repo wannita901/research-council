@@ -1,0 +1,51 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Phase 7 · Stage-B Libraries + Figures · research-council</title>
+  <link rel="stylesheet" href="style.css">
+  <script src="nav.js"></script>
+</head>
+<body>
+  <main class="content">
+    <header>
+      <div class="eyebrow">Phase 7 · Implementation (v2)</div>
+      <h1>Real Libraries in Stage B + Figures from Real Data</h1>
+      <div class="meta">Built 2026-06-10 · 126 tests green · experiments can install deps + plot; the paper embeds the real figures</div>
+    </header>
+
+    <p class="lead">Two linked gaps: Stage-B code was effectively stdlib-only (the sandbox runs <code>--network none</code>, so no <code>pip install</code>), and the paper's figure was a single bar chart synthesized host-side from the scalar metric — not a real plot of the experiment's data. Fixed both.</p>
+
+    <h2>1 · Libraries — declare-deps install phase</h2>
+    <p>The coder now returns a <code>requirements</code> list alongside the code. The sandbox runs in two phases so untrusted code still never touches the network:</p>
+    <pre><code>PREP (network ON):  pip install --target /site &lt;requirements&gt;   ← in a throwaway container
+RUN  (--network none): python experiment.py  with PYTHONPATH=/site (mounted read-only)
+</code></pre>
+    <ul>
+      <li><strong>Real libraries, isolated execution.</strong> Install has network; the experiment does not.</li>
+      <li>If <code>pip install</code> fails (bad/typo'd package), it surfaces as the run failure → the council sees it and fixes/drops the dep on the next iteration (existing feedback loop).</li>
+      <li><code>mise run build-image</code> still pre-bakes numpy/pandas/scipy/sklearn/matplotlib so common deps are instant; declared requirements install on top.</li>
+      <li><strong>Caveat:</strong> the install step pip-installs LLM-chosen packages (supply-chain surface). It runs inside the throwaway container, not on the host; pin/allowlist is a future hardening.</li>
+    </ul>
+
+    <h2>2 · Figures — Stage B plots, Stage C embeds</h2>
+    <pre><code>Stage B: experiment.py saves plots → figures/*.png   (from its REAL computed data)
+         → collected by the sandbox → projects/&lt;id&gt;/experiment/&lt;rq&gt;/figures/
+Stage C: copies them into paper/assets/ (prefixed by RQ) → embeds in paper.md + LaTeX
+         (\includegraphics) and the writer references them in Results
+fallback: if the experiment produced no figure, Stage C synthesizes one bar chart host-side
+</code></pre>
+    <ul>
+      <li>The sandbox collects <code>*.png/pdf/svg</code> (top-level or <code>figures/</code>) back as bytes; Stage B writes them under each RQ; Stage C copies + references them.</li>
+      <li>Figures are real plots of the experiment's data, not a host-side approximation — matching how research figures are actually produced.</li>
+    </ul>
+
+    <h2>3 · Files</h2>
+    <p><code>verify/sandbox.py</code> (install phase + <code>_collect_figures</code>, <code>SandboxResult.figures</code>); <code>store/models.py</code> (<code>ExperimentDraft.requirements</code>; <code>ExperimentResult.requirements/figures/figures_data[excluded]</code>; <code>PaperDraft.figures</code>); <code>prompts/experiment/coder.md</code> (declare deps, save figures to <code>figures/</code>, non-interactive backend); <code>debate/experimentation.py</code> (pass requirements, carry figures, write per-RQ <code>figures/</code> + <code>requirements.txt</code>); <code>agents/writer.py</code> + <code>debate/writing.py</code> (<code>_collect_experiment_figures</code> → assets, writer references); <code>verify/latex.py</code> (<code>\includegraphics</code> per figure). Tests: sandbox figure collection, per-RQ figure write, Stage-C embed.</p>
+
+    <h2>4 · Deferred</h2>
+    <p>Package allowlist/pinning for the install phase · figure captions authored by the writer (currently generic) · vector (pdf) figures end-to-end in LaTeX.</p>
+  </main>
+</body>
+</html>

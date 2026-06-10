@@ -142,8 +142,10 @@ def _write_paper(
         (paper / "sections" / f"{_slug(name)}.md").write_text(
             f"# {name}\n\n{text}\n", encoding="utf-8"
         )
-    if draft.figure:
-        body += ["## Figure", f"![results]({draft.figure})", ""]
+    if draft.figures:
+        body += ["## Figures"]
+        for i, fig in enumerate(draft.figures, 1):
+            body += [f"**Figure {i}.**", f"![figure {i}]({fig})", ""]
     if draft.citations:
         body += ["## References"]
         for c in draft.citations:
@@ -172,6 +174,27 @@ def _write_paper(
     ]
     (paper / "review.md").write_text("\n".join(rv) + "\n", encoding="utf-8")
     return paper / "paper.md"
+
+
+def _collect_experiment_figures(out_dir: Path) -> list[str]:
+    """Copy the real figures Stage B saved (experiment/<rq>/figures/*) into paper/assets/,
+    prefixed by RQ to avoid collisions. Returns their paths relative to the paper dir."""
+    exp = Path(out_dir) / "experiment"
+    assets = Path(out_dir) / "paper" / "assets"
+    rels: list[str] = []
+    if not exp.is_dir():
+        return rels
+    for sub in sorted(p for p in exp.iterdir() if p.is_dir()):
+        figdir = sub / "figures"
+        if not figdir.is_dir():
+            continue
+        for p in sorted(figdir.glob("*")):
+            if p.is_file() and p.suffix.lower() in (".png", ".pdf", ".svg"):
+                assets.mkdir(parents=True, exist_ok=True)
+                dest = f"{sub.name}_{p.name}"
+                (assets / dest).write_bytes(p.read_bytes())
+                rels.append(f"assets/{dest}")
+    return rels
 
 
 def load_prior_paper(out_dir: Path | str):
@@ -237,24 +260,21 @@ async def run_writing(
     experiment = handoff.artifacts or {}
     out_dir = Path(out_dir)
 
-    # results figure from the real metric (best-effort, trusted host code — not LLM output)
-    figure = ""
-    if experiment.get("metric") or experiment.get("rqs"):
+    # Prefer the REAL figures the experiment saved (Stage B); copy them into paper/assets/.
+    # Fall back to a single host-synthesized chart only if the experiment produced none.
+    figures = _collect_experiment_figures(out_dir)
+    if not figures and (experiment.get("metric") or experiment.get("rqs")):
         from research_council.verify.figure import render_result_figure
 
-        figure = render_result_figure(experiment, out_dir / "paper" / "assets") or ""
-        if figure:
-            figure = (
-                str(Path(figure).relative_to(out_dir / "paper"))
-                if str(figure).startswith(str(out_dir / "paper"))
-                else figure
-            )
+        host = render_result_figure(experiment, out_dir / "paper" / "assets")
+        if host:
+            figures = [f"assets/{Path(host).name}"]
 
     if prior_draft is not None:
         # continue improving the existing paper instead of redrafting from scratch
         draft = prior_draft
-        if figure and not draft.figure:
-            draft.figure = figure
+        if figures and not draft.figures:
+            draft.figures = figures
         if emit:
             emit(
                 "writing",
@@ -267,7 +287,7 @@ async def run_writing(
             experiment,
             handoff.constraints,
             allowed_citations=allowed_citations,
-            figure=figure,
+            figures=figures,
         )
         if emit:
             emit(

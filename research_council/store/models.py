@@ -287,10 +287,14 @@ class Project(BaseModel):
 
 # --- Stage B · experimentation (#11, council loop plan/18) -------------------
 class ExperimentDraft(BaseModel):
-    """Coder agent output — a single self-contained script + notes."""
+    """Coder agent output — a self-contained script + the pip packages it needs (plan/24).
+
+    `requirements` are installed in a network-enabled prep step BEFORE the script runs; the
+    script itself then runs with no network. Empty = standard library only."""
 
     code: str = ""
     notes: str = ""
+    requirements: list[str] = Field(default_factory=list)  # e.g. ["numpy", "scikit-learn"]
 
 
 # Review finding kinds; correctness/soundness at high severity block approval.
@@ -347,6 +351,11 @@ class ExperimentResult(BaseModel):
     reviews: list[CodeReview] = Field(default_factory=list)  # final-iteration reviews
     usd: float = 0.0  # spend on this stage
     stopped_reason: str = ""  # approved | iters_exhausted | budget_exhausted
+    requirements: list[str] = Field(default_factory=list)  # pip deps the experiment used
+    figures: list[str] = Field(default_factory=list)  # figure filenames the experiment saved
+    # raw figure bytes — excluded from model_dump (kept out of project.json), written to disk
+    # by write_experiments and consumed by Stage C.
+    figures_data: dict[str, bytes] = Field(default_factory=dict, exclude=True, repr=False)
 
 
 class RQResult(BaseModel):
@@ -376,7 +385,7 @@ class PaperDraft(BaseModel):
     abstract: str = ""
     sections: dict[str, str] = Field(default_factory=dict)  # name -> markdown body
     citations: list[Citation] = Field(default_factory=list)
-    figure: str = ""  # relative path to a generated results figure, if any
+    figures: list[str] = Field(default_factory=list)  # relative paths to results figures (plan/24)
 
 
 class ChangeRequest(BaseModel):

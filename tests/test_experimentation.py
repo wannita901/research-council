@@ -232,6 +232,40 @@ async def test_run_experiments_continues_from_prior(tmp_path):
     assert seen["prior_code"] == "print('OLD CODE')"  # improved the prior, not from scratch
 
 
+def test_local_sandbox_collects_figures():
+    script = (
+        "import os\n"
+        "os.makedirs('figures', exist_ok=True)\n"
+        "open('figures/plot.png', 'wb').write(b'PNGDATA')\n"
+        "print('METRIC acc=0.9')\n"
+    )
+    r = LocalSandbox().run(script)
+    assert r.ok and r.figures.get("plot.png") == b"PNGDATA"
+
+
+async def test_run_experiments_saves_figures(tmp_path):
+    from research_council.debate.experimentation import run_experiments, write_experiments
+    from research_council.store.models import ResearchQuestion
+
+    class _FigCoder:
+        def __init__(self):
+            self.usage = UsageMeter()
+
+        async def draft(self, idea, plan, *, error="", prior_code="", feedback=""):
+            return ExperimentDraft(
+                code="import os\nos.makedirs('figures', exist_ok=True)\n"
+                "open('figures/r.png', 'wb').write(b'PNG')\nprint('METRIC acc=0.9')\n"
+            )
+
+    rqs = [ResearchQuestion(id="rq1", question="q", plan="p", metrics="acc")]
+    res = await run_experiments(
+        {"title": "X"}, rqs, _FigCoder(), _approvers(2), LocalSandbox(), caps=_BALANCED
+    )
+    assert res[0].result.figures == ["r.png"]  # figure recorded on the result
+    write_experiments(res, tmp_path)
+    assert (tmp_path / "experiment" / "rq1" / "figures" / "r.png").read_bytes() == b"PNG"
+
+
 def test_write_experiment_materializes_artifacts(tmp_path):
     from research_council.debate.experimentation import write_experiment
     from research_council.store.models import CodeReview, ExperimentResult, ReviewFinding

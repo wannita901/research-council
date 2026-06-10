@@ -53,7 +53,7 @@ def _esc(text: str) -> str:
     return text
 
 
-def _body_to_tex(md: str, keys: set[str], figure_rel: str) -> str:
+def _body_to_tex(md: str, keys: set[str]) -> str:
     """Convert a section's markdown body to LaTeX: escape specials, lists, citations, images."""
     out: list[str] = []
     for raw in md.splitlines():
@@ -89,9 +89,7 @@ def _docclass(doc_class: str) -> str:
     }.get(doc_class, r"\documentclass{article}")
 
 
-def scaffold_tex(
-    draft: PaperDraft, venue_cfg: dict, *, doc_class: str | None = None, figure_rel: str = ""
-) -> str:
+def scaffold_tex(draft: PaperDraft, venue_cfg: dict, *, doc_class: str | None = None) -> str:
     dc = doc_class or venue_cfg.get("doc_class", "article")
     keys = {c.key for c in draft.citations}
     parts = [
@@ -111,8 +109,16 @@ def scaffold_tex(
         if name in draft.sections:
             parts += [
                 rf"\section{{{_esc(name)}}}",
-                _body_to_tex(draft.sections[name], keys, figure_rel),
+                _body_to_tex(draft.sections[name], keys),
             ]
+    for i, fig in enumerate(draft.figures, 1):
+        parts += [
+            r"\begin{figure}[t]",
+            r"\centering",
+            rf"\includegraphics[width=.7\linewidth]{{{fig}}}",
+            rf"\caption{{Figure {i}.}}",
+            r"\end{figure}",
+        ]
     if draft.citations:
         parts.append(rf"\begin{{thebibliography}}{{{len(draft.citations)}}}")
         for c in draft.citations:
@@ -148,7 +154,6 @@ def build_paper_latex(
     """Scaffold → compile → mechanical fix/fallback. Returns {status, pdf, log, tex}."""
     paper_dir = Path(paper_dir)
     paper_dir.mkdir(parents=True, exist_ok=True)
-    figure_rel = draft.figure or ""
     tex_path = paper_dir / "paper.tex"
 
     engine, kind = latex_engine()
@@ -159,7 +164,7 @@ def build_paper_latex(
 
     last_log = ""
     for dc in classes[: max(1, attempts)]:
-        tex = scaffold_tex(draft, venue_cfg, doc_class=dc, figure_rel=figure_rel)
+        tex = scaffold_tex(draft, venue_cfg, doc_class=dc)
         tex_path.write_text(tex, encoding="utf-8")
         if engine is None:
             (paper_dir / "build.log").write_text("no tectonic/latexmk on PATH\n", encoding="utf-8")
