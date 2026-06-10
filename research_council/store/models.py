@@ -34,13 +34,29 @@ class BriefDraft(BaseModel):
     refs: list[str] = Field(default_factory=list)
 
 
+class ResearchQuestion(BaseModel):
+    """One research question in the proposal — its own focused experiment + metric(s).
+    Stage B runs one council loop per RQ (id assigned by the orchestrator if blank)."""
+
+    id: str = ""                       # rq1, rq2, … (assigned downstream)
+    question: str = ""
+    plan: str = ""                     # step-by-step plan to answer THIS question
+    metrics: str = ""                  # metric(s) that answer THIS question
+
+
 class CandidateDraft(BaseModel):
-    """Agent output for the propose phase (id/vendor/gap set by the orchestrator)."""
+    """Agent output for the propose phase — a full research proposal the council argues over
+    (id/vendor/gap set by the orchestrator). Empty fields in a `revise` draft mean 'unchanged'."""
 
     title: str = ""
+    problem_statement: str = ""        # the concrete problem being addressed
+    motivation: str = ""               # why it matters now (impact)
     hypothesis: str = ""
-    method: str = ""
-    experiment_plan: str = ""
+    method: str = ""                   # the proposed method / approach
+    experiment_plan: str = ""          # overall step-by-step plan
+    research_questions: list[ResearchQuestion] = Field(default_factory=list)  # per-RQ experiments
+    dataset_metrics: str = ""          # datasets + evaluation metrics
+    fallback_plan: str = ""            # what to do if the main plan fails
 
 
 class ScoreItem(BaseModel):
@@ -58,15 +74,50 @@ class ScoreSheet(BaseModel):
 
 
 class Candidate(BaseModel):
+    """A full research proposal — the Stage-A artifact the council argues over and that flows
+    (via StageHandoff.idea) into Stage B (implement/improve the plan) and C (write the paper)."""
+
     id: str  # unique per debate; v2 uses the authoring codename
     vendor: str
     title: str
-    gap: str
+    gap: str                           # the research gap (from the author's brief)
     hypothesis: str
     method: str
     experiment_plan: str
+    problem_statement: str = ""
+    motivation: str = ""
+    research_questions: list[ResearchQuestion] = Field(default_factory=list)
+    dataset_metrics: str = ""
+    fallback_plan: str = ""
     refs: list[str] = Field(default_factory=list)
     version: int = 1
+
+    def numbered_rqs(self) -> list[ResearchQuestion]:
+        """Research questions with ids assigned (rq1, rq2, …). Falls back to a single RQ built
+        from the overall experiment_plan when none were proposed (preserves single-experiment)."""
+        if self.research_questions:
+            return [rq.model_copy(update={"id": rq.id or f"rq{i}"})
+                    for i, rq in enumerate(self.research_questions, 1)]
+        return [ResearchQuestion(id="rq1", question=self.hypothesis or self.title,
+                                 plan=self.experiment_plan, metrics=self.dataset_metrics)]
+
+    def as_proposal_md(self) -> str:
+        """Render the proposal as a markdown document (the Stage-A artifact)."""
+        rows = [("Problem Statement", self.problem_statement), ("Motivation", self.motivation),
+                ("Hypothesis", self.hypothesis), ("Proposed Method", self.method),
+                ("Step-by-step Experiment Plan", self.experiment_plan),
+                ("Dataset / Metrics", self.dataset_metrics), ("Fallback Plan", self.fallback_plan)]
+        body = [f"# {self.title}", "", f"*Research gap:* {self.gap}", ""]
+        for head, text in rows:
+            body += [f"## {head}", (text or "_(not specified)_"), ""]
+        if self.research_questions:
+            body += ["## Research Questions"]
+            for rq in self.numbered_rqs():
+                body += [f"### {rq.id.upper()}: {rq.question}",
+                         f"- *Plan:* {rq.plan or '—'}", f"- *Metrics:* {rq.metrics or '—'}", ""]
+        if self.refs:
+            body += ["## References", *[f"- {r}" for r in self.refs]]
+        return "\n".join(body).strip() + "\n"
 
 
 class Contribution(BaseModel):
@@ -105,20 +156,20 @@ class RoundDigest(BaseModel):
     human_comment: str = ""
 
 
-class IntakeQuestion(BaseModel):
+class OnboardingQuestion(BaseModel):
     id: str = ""
     question: str
     why: str = ""
 
 
-class IntakeQuestions(BaseModel):
+class OnboardingQuestions(BaseModel):
     """Facilitator output wrapper (plan/15 #5)."""
 
-    questions: list[IntakeQuestion] = Field(default_factory=list)
+    questions: list[OnboardingQuestion] = Field(default_factory=list)
 
 
 class Constraints(BaseModel):
-    """Answers captured at a stage's intake; injected into the council's context."""
+    """Answers captured at a stage's onboarding; injected into the council's context."""
 
     stage: str = "ideation"
     answers: dict[str, str] = Field(default_factory=dict)  # question -> answer
@@ -215,12 +266,51 @@ class Project(BaseModel):
     log: list[str] = Field(default_factory=list)
 
 
-# --- Stage B · experimentation (#11) -----------------------------------------
+# --- Stage B · experimentation (#11, council loop plan/18) -------------------
 class ExperimentDraft(BaseModel):
     """Coder agent output — a single self-contained script + notes."""
 
     code: str = ""
     notes: str = ""
+
+
+# Review finding kinds; correctness/soundness at high severity block approval.
+FINDING_KINDS = ("correctness", "soundness", "reproducibility", "overclaim", "style")
+SEVERITIES = ("high", "medium", "low")
+
+
+class VerificationProbe(BaseModel):
+    """A short script a reviewer runs in the sandbox to substantiate/retract a finding."""
+
+    code: str = ""
+    ran: bool = False
+    output: str = ""        # trimmed stdout/stderr
+    supports: bool = False  # did the probe confirm the finding?
+
+
+class ReviewFinding(BaseModel):
+    kind: str = "style"                 # one of FINDING_KINDS
+    severity: str = "low"               # one of SEVERITIES
+    msg: str = ""
+    fix: str = ""                       # concrete suggested fix
+    probe: VerificationProbe | None = None
+
+    @property
+    def blocking(self) -> bool:
+        return self.kind in ("correctness", "soundness") and self.severity == "high"
+
+
+class CodeReview(BaseModel):
+    """One reviewer's verdict on a code draft + its run."""
+
+    reviewer_vendor: str = ""
+    approve: bool = False
+    findings: list[ReviewFinding] = Field(default_factory=list)
+    summary: str = ""
+
+    @property
+    def has_blocker(self) -> bool:
+        return any(f.blocking for f in self.findings)
 
 
 class ExperimentResult(BaseModel):
@@ -231,6 +321,99 @@ class ExperimentResult(BaseModel):
     code: str = ""
     log: str = ""
     backend: str = ""        # docker | local
+    # council-loop additions (plan/18)
+    approved: bool = False                                  # feasible AND K-of-N reviewers approved
+    approvals: int = 0                                      # reviewers who approved on the final iteration
+    iterations: int = 0                                     # implement→run→review cycles spent
+    reviews: list[CodeReview] = Field(default_factory=list)  # final-iteration reviews
+    usd: float = 0.0                                        # spend on this stage
+    stopped_reason: str = ""                                # approved | iters_exhausted | budget_exhausted
+
+
+class RQResult(BaseModel):
+    """One research question's experiment outcome (plan/21 — RQ-driven Stage B)."""
+
+    rq_id: str = ""
+    question: str = ""
+    result: ExperimentResult = Field(default_factory=ExperimentResult)
+
+
+# --- Stage C · writing (#12, venue rubric #10, council loop plan/18) ---------
+class Citation(BaseModel):
+    """A reference. `grounded` = drawn from an LLM-wiki origin:external page (trusted);
+    otherwise it was search-augmented and is tagged needs-verification."""
+
+    key: str = ""                  # bibtex-style key
+    text: str = ""                 # human-readable reference
+    source_id: str = ""            # wiki page id / url
+    grounded: bool = True          # True → from the wiki prior-art corpus
+    needs_verification: bool = False
+
+
+class PaperDraft(BaseModel):
+    """Writer agent output — a structured paper."""
+
+    title: str = ""
+    abstract: str = ""
+    sections: dict[str, str] = Field(default_factory=dict)  # name -> markdown body
+    citations: list[Citation] = Field(default_factory=list)
+    figure: str = ""               # relative path to a generated results figure, if any
+
+
+class ChangeRequest(BaseModel):
+    """A reviewer's revision request, tagged by the section it touches (plan/18)."""
+
+    section: str = ""              # which section to revise ("" = whole-paper / abstract)
+    severity: str = "low"          # high | medium | low
+    msg: str = ""
+
+    @property
+    def blocking(self) -> bool:
+        return self.severity == "high"
+
+
+class ReviewNotes(BaseModel):
+    """Reviewer agent output — scored against the venue rubric."""
+
+    scores: dict[str, float] = Field(default_factory=dict)  # criterion -> 0..1
+    comments: list[str] = Field(default_factory=list)
+    verdict: str = ""  # e.g. accept | accept-with-revisions | reject
+    change_requests: list[ChangeRequest] = Field(default_factory=list)
+    reviewer_vendor: str = ""
+
+    @property
+    def mean(self) -> float:
+        return round(sum(self.scores.values()) / len(self.scores), 4) if self.scores else 0.0
+
+    @property
+    def has_blocker(self) -> bool:
+        return any(c.blocking for c in self.change_requests)
+
+
+class VenueChoice(BaseModel):
+    """Stage-C writing constraints — supplied by --venue or gathered at onboarding (plan/18)."""
+
+    venue: str = "generic"
+    emphasis: str = ""             # what to foreground (e.g. "the automation angle")
+    double_blind: bool = False
+    page_limit: int | None = None  # override the venue default
+    rationale: str = ""            # if council-recommended, why this venue
+
+
+class WritingResult(BaseModel):
+    venue: str = ""
+    title: str = ""
+    paper_path: str = ""
+    pdf_path: str = ""             # set if the LaTeX build succeeded
+    sections: list[str] = Field(default_factory=list)
+    review: ReviewNotes = Field(default_factory=ReviewNotes)
+    score_history: list[float] = Field(default_factory=list)  # mean rubric score per round
+    revisions: int = 0
+    accepted: bool = False         # met the accept bar (vs best-so-far on exhaust)
+    citations: list[Citation] = Field(default_factory=list)
+    usd: float = 0.0
+    stopped_reason: str = ""       # accepted | revisions_exhausted | budget_exhausted
+    latex: str = ""                # built | fallback_no_tex | build_failed | skipped
 
 
 # --- run config & trace envelope ------------------------------------------
@@ -248,7 +431,7 @@ class RunConfig(BaseModel):
         }
     )
     tools: list[str] = Field(default_factory=lambda: ["wiki", "openalex"])
-    # Intake facilitator (writes the clarifying questions) — a Claude model by default;
+    # Onboarding facilitator (writes the clarifying questions) — a Claude model by default;
     # override via RC_FACILITATOR_MODEL in mise. Vendor is fixed to anthropic.
     facilitator_model: str = "claude-sonnet-4-6"
     weights: dict[str, float] = Field(default_factory=lambda: dict(DEFAULT_WEIGHTS))

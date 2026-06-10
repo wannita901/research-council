@@ -27,7 +27,13 @@ def anonymize(candidates: list[Candidate], on: bool = True,
             "label": label,
             "title": c.title if on else f"[{c.vendor}] {c.title}",
             "gap": c.gap,
+            "problem_statement": c.problem_statement,
+            "motivation": c.motivation,
+            "hypothesis": c.hypothesis,
             "method": c.method,
             "experiment_plan": c.experiment_plan,
+            "research_questions": [rq.model_dump() for rq in c.numbered_rqs()],
+            "dataset_metrics": c.dataset_metrics,
+            "fallback_plan": c.fallback_plan,
         })
     return anon, id_map

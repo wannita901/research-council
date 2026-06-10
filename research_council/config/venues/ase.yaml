@@ -1,0 +1,9 @@
+name: ASE (automated software engineering)
+doc_class: ieeetran
+page_limit: 11
+rubric:
+  novelty: Is the technique/automation new relative to existing approaches?
+  soundness: Correct method and rigorous evaluation (baselines, datasets, metrics, threats)?
+  significance: Does it meaningfully automate or improve an SE task?
+  reproducibility: Artifact available, runnable, with a clear protocol?
+  clarity: Clear problem framing, technique description, and results?

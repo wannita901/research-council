@@ -1,0 +1,9 @@
+# Default venue rubric. Add more as config/venues/<name>.yaml; the council can extend these.
+name: Generic CS venue
+doc_class: article          # scaffold-paper --class
+page_limit: 8
+rubric:                     # criterion -> what a reviewer checks
+  novelty: Is the contribution genuinely new versus the cited prior art?
+  soundness: Is the method correct and the evaluation rigorous (baselines, metrics, threats)?
+  significance: Does the result matter to the field?
+  clarity: Is it clearly written, well-structured, and reproducible?

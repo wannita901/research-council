@@ -3,9 +3,13 @@ experiment plan, write ONE self-contained Python script that runs the SMALLEST m
 step of the plan at toy scale and demonstrates feasibility.
 
 Hard rules:
-- Standard library only — no pip installs, no network access (the sandbox has none).
-- Tiny/synthetic data is fine; the point is that it RUNS and produces a number, not that
-  it's the full experiment.
+- No network access and NO pip installs (the sandbox runs with --network none). The standard
+  library is always available; numpy, pandas, scipy, scikit-learn, and matplotlib are USUALLY
+  preinstalled — you may use them, but guard the import (`try: import numpy ... except
+  ImportError: <stdlib fallback>`) so the script still runs if they're absent.
+- Tiny/synthetic or sub-sampled data is fine and EXPECTED — this is the smallest runnable step
+  that demonstrates feasibility, not the full study. Do NOT fabricate the result you want:
+  don't hard-code the answer into synthetic data; measure it honestly.
 - Be robust: the script must exit 0.
 - The LAST thing the script prints must be exactly one line: `METRIC <name>=<value>`
   (e.g. `METRIC f1=0.62`) — this is how feasibility is verified.

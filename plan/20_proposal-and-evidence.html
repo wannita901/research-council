@@ -1,0 +1,61 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Phase 7 · Proposal Artifact + Evidence Rule · research-council</title>
+  <link rel="stylesheet" href="style.css">
+  <script src="nav.js"></script>
+</head>
+<body>
+  <main class="content">
+    <header>
+      <div class="eyebrow">Phase 7 · Implementation (v2)</div>
+      <h1>Research Proposal as the Stage-A Artifact + the Evidence Rule</h1>
+      <div class="meta">Built 2026-06-09 · 114 tests green · three asks: rename onboarding · proposal artifact · cite/evidence everywhere</div>
+    </header>
+
+    <p class="lead">Three refinements that sharpen what the council actually produces and the rigor it holds itself to.</p>
+
+    <h2>1 · "intake" → "onboarding"</h2>
+    <p>The front-door clarifying-question step is now called <strong>onboarding</strong> everywhere (user-facing + code). Renamed symbols: <code>OnboardingQuestion(s)</code>, <code>run_onboarding</code>, the trace phase <code>onboarding</code>, the prompt <code>facilitator/onboarding.md</code>, CLI labels. The distinct Stage-C venue step was renamed <code>VenueChoice</code>/<code>_venue_choice</code> (it's selection, not onboarding) so the word "intake" is gone entirely.</p>
+
+    <h2>2 · Stage A produces a full research proposal (not a title)</h2>
+    <p>The council now argues over a complete proposal. <code>Candidate</code>/<code>CandidateDraft</code> gained <code>problem_statement</code>, <code>motivation</code>, <code>dataset_metrics</code>, <code>fallback_plan</code> (alongside the existing title/hypothesis/method/experiment_plan/gap). The full shape:</p>
+    <table>
+      <thead><tr><th>Proposal field</th><th>Note</th></tr></thead>
+      <tbody>
+        <tr><td>Title</td><td>specific, informative</td></tr>
+        <tr><td>Problem Statement</td><td>the concrete problem</td></tr>
+        <tr><td>Motivation</td><td>why it matters / impact</td></tr>
+        <tr><td>Hypothesis</td><td>the testable claim</td></tr>
+        <tr><td>Proposed Method</td><td>the approach, implementable</td></tr>
+        <tr><td>Step-by-step Experiment Plan</td><td>numbered steps from smallest runnable step up; named baselines</td></tr>
+        <tr><td>Dataset / Metrics</td><td>data + the metric(s) that confirm/refute the hypothesis</td></tr>
+        <tr><td>Fallback Plan</td><td>what to do if the main plan fails, so the project still yields a result</td></tr>
+      </tbody>
+    </table>
+    <ul>
+      <li><strong>Argued over:</strong> <code>_apply_revision</code> now patches <em>any</em> proposal field during deliberation; the <code>propose</code> prompt asks for all fields; judges score the full proposal (<code>anonymize</code> exposes every field, authorship still hidden).</li>
+      <li><strong>Saved as an artifact:</strong> <code>projects/&lt;id&gt;/proposal.md</code> (via <code>Candidate.as_proposal_md()</code>), recorded on the ideation stage and printed at the gate.</li>
+      <li><strong>Flows downstream:</strong> the whole proposal rides <code>StageHandoff.idea</code> → Stage B's coder implements the plan (METRIC = a proposal metric; sees dataset/fallback) → Stage C's writer drafts from <em>both</em> the proposal and the experiment result.</li>
+    </ul>
+
+    <h2>3 · Evidence rule — every claim cites a reference or shows evidence, always</h2>
+    <p>Baked into the prompts and enforced by the reviewers at every stage:</p>
+    <table>
+      <thead><tr><th>Where</th><th>Rule</th></tr></thead>
+      <tbody>
+        <tr><td><code>peer/propose</code></td><td>every factual claim (esp. problem/motivation) cites a brief reference <code>[ref-id]</code>, or is restated as an explicit assumption — never an unsupported assertion.</td></tr>
+        <tr><td><code>peer/deliberate</code></td><td>peers challenge any uncited claim — ask for the reference or push to soften it; cite when defending/revising.</td></tr>
+        <tr><td><code>writing/writer</code></td><td>every nontrivial claim is backed by a citation <em>or</em> the experiment ("in our run, f1=0.62"); every number traces to the metric/log.</td></tr>
+        <tr><td><code>writing/reviewer</code></td><td>files a <strong>HIGH-severity (blocking)</strong> change-request for ANY claim or result lacking a citation/evidence.</td></tr>
+        <tr><td>Stage B</td><td>a "result" already needs evidence by construction: it must <em>run</em> and emit a <code>METRIC</code>, with reviewer verification probes as backing.</td></tr>
+      </tbody>
+    </table>
+
+    <h2>4 · Files</h2>
+    <p><code>store/models.py</code> (proposal fields + <code>as_proposal_md</code>), <code>debate/deliberation.py</code> (revise any field), <code>debate/anonymize.py</code> (judge sees full proposal), <code>agents/{coder,writer}.py</code> (consume the proposal), <code>prompts/peer/{propose,deliberate}.md</code> + <code>prompts/writing/{writer,reviewer}.md</code> (evidence rule), <code>cli.py</code> (<code>_write_proposal</code>/<code>_record_ideation</code>). Tests: <code>test_proposal.py</code> (render/revise/anonymize) + <code>test_conductor.py</code> (proposal.md written end-to-end).</p>
+  </main>
+</body>
+</html>

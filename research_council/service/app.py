@@ -204,7 +204,7 @@ class IdeationRequest(BaseModel):
     anonymize: bool | None = None
     live: bool = False
     interactive: bool = True  # False → autonomous (auto-iterate, no review gate)
-    constraints: dict[str, str] | None = None  # pre-supplied intake answers {question: answer}
+    constraints: dict[str, str] | None = None  # pre-supplied onboarding answers {question: answer}
 
 
 def _build_v2_peers(cfg, live: bool, retrieval) -> dict:

@@ -1,0 +1,9 @@
+name: EMNLP (NLP)
+doc_class: article          # ACL uses its own acl style; closest scaffold class is article
+page_limit: 8
+rubric:
+  novelty: Is the NLP contribution (model/method/resource/analysis) original?
+  soundness: Correct claims, adequate experiments, baselines, significance testing?
+  significance: Useful to the NLP community; advances understanding or capability?
+  reproducibility: Data/code/settings reported; reproducibility checklist satisfied?
+  clarity: Clear writing, motivation, and error/limitation analysis?

@@ -87,11 +87,33 @@ def docker_available() -> bool:
         return False
 
 
+# Our experiment image (built via `mise run build-image`) preinstalls the scientific stack so
+# the council can run real-ish experiments offline; we fall back to bare python if it's absent.
+EXPERIMENT_IMAGE = "research-council-exp:latest"
+_FALLBACK_IMAGE = "python:3.12-slim"
+
+
+def _image_present(name: str) -> bool:
+    try:
+        return subprocess.run(["docker", "image", "inspect", name],
+                              capture_output=True, timeout=6).returncode == 0
+    except Exception:
+        return False
+
+
+def best_experiment_image() -> tuple[str, bool]:
+    """(image, has_scientific_stack). Prefer our prebuilt image; else bare python (stdlib-only)."""
+    if _image_present(EXPERIMENT_IMAGE):
+        return EXPERIMENT_IMAGE, True
+    return _FALLBACK_IMAGE, False
+
+
 def build_sandbox(prefer: str = "docker", *, allow_local: bool = False):
     """Return (sandbox, warning). Docker preferred; local only if explicitly allowed
     (it runs code unsandboxed). Returns (None, reason) if nothing safe is available."""
     if prefer == "docker" and docker_available():
-        return DockerSandbox(), None
+        image, _ = best_experiment_image()
+        return DockerSandbox(image=image), None
     if allow_local:
         return LocalSandbox(), ("⚠ Docker unavailable — using the LOCAL sandbox, which runs "
                                 "generated code UNISOLATED on this machine.")

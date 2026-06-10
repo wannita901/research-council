@@ -75,7 +75,7 @@ verify_claim(claim, kind) -> { grounded: bool, confidence: 0..1, evidence: [refs
       <tbody>
         <tr><td>8</td><td class="item">Stage state machine + gates</td><td><code>Project{topic,current,stages,constraints}</code> · 3 stages ideation→experimentation→writing · human approval gate advances · JSON per project under <code>projects/&lt;id&gt;/</code> · CLI <code>council project new/status/list/approve</code> (backend endpoints TODO)</td><td><span class="st-done">✅ built</span></td></tr>
         <tr><td>9</td><td class="item">Cross-stage memory</td><td><code>StageHandoff</code> carries the selected idea + experiment_plan + constraints forward (chained A→B→C); wiki <code>origin:internal</code> = shared memory</td><td><span class="st-done">✅ built</span></td></tr>
-        <tr><td>10</td><td class="item">Venue rubric source</td><td>curated <code>config/venues/*.yaml</code> checklists, council-extendable (default locked; wired when Stage C is built)</td><td><span class="st-now">locked · pending Stage C</span></td></tr>
+        <tr><td>10</td><td class="item">Venue rubric source</td><td><strong>built</strong>: curated <code>config/venues/*.yaml</code> — <strong>7 venues</strong> (generic · icse · fse · ase · neurips · emnlp · iclr) — name, doc_class, page_limit, rubric criteria; loaded by Stage C's reviewer. Council-extendable.</td><td><span class="st-done">✅ built</span></td></tr>
       </tbody>
     </table>
 
@@ -83,8 +83,8 @@ verify_claim(claim, kind) -> { grounded: bool, confidence: 0..1, evidence: [refs
     <table>
       <thead><tr><th>#</th><th class="item">Decision</th><th>Note</th><th>Status</th></tr></thead>
       <tbody>
-        <tr><td>11</td><td class="item">Experimentation internals</td><td><strong>v0 built</strong>: Coder agent drafts a minimal script → <code>verify/sandbox.py</code> runs it (DockerSandbox, <code>--network none</code>, mem/cpu/pids caps, timeout; LocalSandbox opt-in) → feasibility = ran + printed <code>METRIC</code> → bounded fix-and-retry. Wired into <code>council project approve --live</code>. TODO: multi-agent collaboration/code-review, richer artifacts/data prep.</td><td><span class="st-now">v0 built</span></td></tr>
-        <tr><td>12</td><td class="item">Writing internals</td><td>section assignment · figure pipeline (Stage-B results → plots) · citation/reference mgmt · rubric application</td><td><span class="st-defer">deferred</span></td></tr>
+        <tr><td>11</td><td class="item">Experimentation internals</td><td><strong>council loop built</strong> (<a href="18_stage-bc-loops.html">18</a>): author implements → Docker sandbox runs → <strong>2 cross-vendor reviewers</strong> emit typed findings (+optional evidence probe) → revise, until <strong>feasible + K-of-2 approve</strong> or the cap (profiles: conservative/balanced/thorough; USD-budget guard). Wired into <code>council project approve --live --profile …</code>. <em>Deferred: LLM-driven multi-file repos, role rotation.</em></td><td><span class="st-done">✅ built</span></td></tr>
+        <tr><td>12</td><td class="item">Writing internals</td><td><strong>council loop built</strong> (<a href="18_stage-bc-loops.html">18</a>): lead drafts → <strong>2 PC reviewers</strong> score vs rubric + file section-tagged change-requests → lead revises targeted sections → re-review, until <strong>mean ≥ accept-bar, no high-sev blocker</strong> or the cap → coherence pass → <strong>LaTeX build-verify-fix</strong> (tectonic, graceful fallback). Grounded-first citations + host-side results figure + council venue intake. Wired into <code>approve --live --venue … --profile …</code>. <em>Deferred: LLM latex-fixer, search-augmented citations.</em></td><td><span class="st-done">✅ built</span></td></tr>
       </tbody>
     </table>
 

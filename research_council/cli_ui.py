@@ -5,7 +5,7 @@ editing work everywhere — plain input() leaked escape codes (^[[C/^[[D) on ←
 
 Two prompt flavors:
   • sync `ask_*`        — for setup, which runs BEFORE asyncio.run (no running loop).
-  • async `ask_*_async` — for intake/review callbacks, which run INSIDE the orchestrator's
+  • async `ask_*_async` — for onboarding/review callbacks, which run INSIDE the orchestrator's
     event loop, where questionary's .ask() would nest a second loop and fail.
 """
 
@@ -38,7 +38,7 @@ QSTYLE = Style([
 _POINTER = "❯"
 
 PHASE_COLOR = {
-    "intake": "magenta", "research": "cyan", "propose": "blue",
+    "onboarding": "magenta", "research": "cyan", "propose": "blue",
     "deliberate": "yellow", "judge": "green", "review": "white", "run": "bright_black",
 }
 
@@ -79,7 +79,7 @@ def ask_text(message, default=""):
     return questionary.text(message, default=default, style=QSTYLE, qmark="?").ask()
 
 
-# ---- async prompts (intake / review, inside the orchestrator loop) ----
+# ---- async prompts (onboarding / review, inside the orchestrator loop) ----
 async def ask_text_async(message, default=""):
     return await questionary.text(message, default=default, style=QSTYLE, qmark="?").ask_async()
 

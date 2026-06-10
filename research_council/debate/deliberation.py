@@ -16,15 +16,15 @@ _SUBSTANTIVE = {"critique", "question", "revise"}
 
 
 def _apply_revision(c: Candidate, d: CandidateDraft) -> None:
-    """Patch a candidate in place with the non-empty fields of a revision draft."""
-    if d.title:
-        c.title = d.title
-    if d.hypothesis:
-        c.hypothesis = d.hypothesis
-    if d.method:
-        c.method = d.method
-    if d.experiment_plan:
-        c.experiment_plan = d.experiment_plan
+    """Patch a candidate in place with the non-empty fields of a revision draft (any proposal
+    field can be argued over and revised, not just the title/plan)."""
+    for field in ("title", "problem_statement", "motivation", "hypothesis", "method",
+                  "experiment_plan", "dataset_metrics", "fallback_plan"):
+        val = getattr(d, field, "")
+        if val:
+            setattr(c, field, val)
+    if getattr(d, "research_questions", None):  # a non-empty list replaces the RQ set
+        c.research_questions = d.research_questions
     c.version += 1
 
 

@@ -192,13 +192,26 @@ class AgentPeer:
         d: CandidateDraft = r.output
         return Candidate(id=self.codename, vendor=self.vendor, title=d.title, gap=brief.gap,
                          hypothesis=d.hypothesis, method=d.method, experiment_plan=d.experiment_plan,
+                         problem_statement=d.problem_statement, motivation=d.motivation,
+                         research_questions=d.research_questions,
+                         dataset_metrics=d.dataset_metrics, fallback_plan=d.fallback_plan,
                          refs=brief.refs)
 
     async def score(self, anon_candidates: list[dict], context: str = "") -> list[Score]:
-        listing = "\n".join(
-            f"{a['label']}: {a.get('title', '')} — {a.get('gap', '')}" for a in anon_candidates
-        )
-        r = await self._judge_agent.run(f"Candidates:\n{listing}")
+        def _fmt(a: dict) -> str:
+            rqs = "; ".join(f"{q.get('id', '')}: {q.get('question', '')}"
+                            for q in a.get("research_questions", []))
+            return (f"### {a['label']}: {a.get('title', '')}\n"
+                    f"Problem: {a.get('problem_statement', '') or a.get('gap', '')}\n"
+                    f"Motivation: {a.get('motivation', '')}\n"
+                    f"Hypothesis: {a.get('hypothesis', '')}\n"
+                    f"Method: {a.get('method', '')}\n"
+                    f"Research questions: {rqs}\n"
+                    f"Experiment plan: {a.get('experiment_plan', '')}\n"
+                    f"Dataset/metrics: {a.get('dataset_metrics', '')}\n"
+                    f"Fallback: {a.get('fallback_plan', '')}")
+        listing = "\n\n".join(_fmt(a) for a in anon_candidates)
+        r = await self._judge_agent.run(f"Proposals:\n{listing}")
         self._track(r)
         sheet: ScoreSheet = r.output
         return [Score(judge_vendor=self.vendor, candidate_id=i.label, novelty=i.novelty,

@@ -37,6 +37,10 @@ const PAGES = [
   { file: "15_design-backlog.html",       n: 15, phase: 6, title: "Design Backlog (open decisions)" },
   { file: "16_llmwiki-spec-revisit.html", n: 16, phase: 7, title: "LLM-Wiki Spec Revisit (grounded)" },
   { file: "17_ui-design-samples.html",    n: 17, phase: 7, title: "UI Design Samples" },
+  { file: "18_stage-bc-loops.html",       n: 18, phase: 7, title: "Stage B/C Council Loops" },
+  { file: "19_conversational-conductor.html", n: 19, phase: 7, title: "Conversational Conductor" },
+  { file: "20_proposal-and-evidence.html",  n: 20, phase: 7, title: "Proposal Artifact + Evidence Rule" },
+  { file: "21_rq-driven-experiments.html",  n: 21, phase: 7, title: "RQ-driven Stage B + CSV" },
 ];
 
 const STATUS_ICON = { done: "✓", wip: "◐", next: "▸", todo: "○" };

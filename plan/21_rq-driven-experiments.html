@@ -1,0 +1,47 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Phase 7 · RQ-driven Stage B + CSV · research-council</title>
+  <link rel="stylesheet" href="style.css">
+  <script src="nav.js"></script>
+</head>
+<body>
+  <main class="content">
+    <header>
+      <div class="eyebrow">Phase 7 · Implementation (v2)</div>
+      <h1>RQ-driven Stage B — one experiment per research question + CSV results</h1>
+      <div class="meta">Built 2026-06-09 · 118 tests green · a real paper has several RQs, not one script</div>
+    </header>
+
+    <p class="lead">Stage B used to run a single <code>experiment.py</code> with one <code>METRIC</code>. Real research is multiple experiments — typically one per research question. The proposal now carries <strong>research questions</strong>, Stage B runs <strong>one council loop per RQ</strong>, and results aggregate into a <strong>CSV</strong>.</p>
+
+    <h2>1 · The proposal carries research questions</h2>
+    <p><code>Candidate</code>/<code>CandidateDraft</code> gained <code>research_questions: [ResearchQuestion{id, question, plan, metrics}]</code>. The <code>propose</code> prompt asks for 1–3 independently-runnable RQs; the council argues over them (<code>_apply_revision</code> can replace the RQ set; judges see them via <code>anonymize</code>). <code>Candidate.numbered_rqs()</code> assigns <code>rq1, rq2, …</code> and <strong>falls back to a single RQ</strong> synthesized from the overall plan when none were proposed — so single-experiment behavior is preserved.</p>
+
+    <h2>2 · Stage B runs one loop per RQ</h2>
+    <pre><code>for each RQ:
+  council loop (implement → run → review → revise)   ← the plan/18 loop, unchanged
+  → ExperimentResult (code, metric, approvals, …)
+per-RQ budget: each RQ gets its own usd allowance (budget_base = spend so far)
+</code></pre>
+    <p><code>run_experiments(idea, rqs, coder, reviewers, sandbox, caps)</code> reuses the same agents across RQs but enforces the cap on the <em>marginal</em> spend (<code>spent − budget_base</code>), so the budget scales per-RQ rather than being consumed by the first one.</p>
+
+    <h2>3 · Artifacts — per-RQ folders + aggregated CSV</h2>
+    <pre><code>projects/&lt;id&gt;/experiment/
+├── results.csv        rq_id, question, metric, value, feasible, approved, approvals, iterations, stopped_reason, backend
+├── rq1/  experiment.py · log.txt · reviews.md · question.md
+├── rq2/  …
+└── …
+</code></pre>
+    <p>The CSV is the analysis-friendly summary (sort/plot/load into the paper); each RQ folder keeps the code the council actually ran, its log, and the reviews. Stage C reads the per-RQ results: the writer reports results <em>per RQ</em>, and the results figure plots one labelled bar per RQ.</p>
+
+    <h2>4 · Files</h2>
+    <p><code>store/models.py</code> (<code>ResearchQuestion</code>, <code>research_questions</code> on the proposal, <code>numbered_rqs()</code>, <code>RQResult</code>), <code>debate/experimentation.py</code> (<code>run_experiments</code>, <code>write_experiments</code> + CSV, per-RQ <code>budget_base</code>), <code>debate/deliberation.py</code> + <code>debate/anonymize.py</code> + <code>agents/{agent_peer,stub_agent_peer}.py</code> (propose/revise/judge over RQs), <code>prompts/peer/propose.md</code>, <code>agents/writer.py</code> + <code>verify/figure.py</code> (Stage C consumes per-RQ results), <code>cli.py</code> <code>_run_stage_b</code>. Tests: <code>test_experimentation.py</code> (multi-RQ loop + CSV), <code>test_proposal.py</code> (numbered_rqs + render).</p>
+
+    <h2>5 · Deferred</h2>
+    <p>Multiple metrics per RQ (currently the primary <code>METRIC</code> per experiment) · cross-RQ dependencies (each RQ is independent for now) · a shared (vs per-RQ) budget mode.</p>
+  </main>
+</body>
+</html>

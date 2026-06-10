@@ -1,0 +1,121 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Phase 7 · Stage B/C Council Loops · research-council</title>
+  <link rel="stylesheet" href="style.css">
+  <script src="nav.js"></script>
+</head>
+<body>
+  <main class="content">
+    <header>
+      <div class="eyebrow">Phase 7 · Implementation (v2)</div>
+      <h1>Stage B &amp; C — Council Collaboration Loops</h1>
+      <div class="meta">Designed 2026-06-09 (grilled) · upgrades the single-shot Stage B/C in <a href="13_research-lifecycle.html">13</a> to capped, multi-agent iterate-until-good loops · extends <a href="15_design-backlog.html">15</a> #11/#12</div>
+    </header>
+
+    <p class="lead">v0 Stage B was one coder + retry; v0 Stage C was one writer + one reviewer. Both are now <strong>council loops</strong>: the 3 cross-vendor peers (Aiden/Cathy/Julien) collaborate to <em>implement→run→review</em> (B) and <em>draft→review→improve</em> (C), iterating until a real quality bar is met — and <strong>token-capped</strong> so they can't run away. Both still end at the existing human gate (<code>awaiting_approval</code>) and feed the next stage via <code>StageHandoff</code>.</p>
+
+    <h2>1 · Stage B — experimentation loop <span class="tag">author + reviewers</span></h2>
+    <p>One peer implements; the other two cross-vendor peers review the <em>code and the result</em>; the author revises; re-run. Roles rotate per round so no single vendor is always the author.</p>
+    <pre><code>iter 1: author drafts code → Docker sandbox run → 2 reviewers review
+        → author revises addressing blockers + stderr
+iter 2: re-run → re-review → ... until (feasible AND K approvals) or cap
+</code></pre>
+    <table>
+      <thead><tr><th>Decision</th><th>Locked value</th></tr></thead>
+      <tbody>
+        <tr><td>Topology</td><td>1 author + 2 reviewers (rotating); 1 sandbox exec / iteration</td></tr>
+        <tr><td>Success / stop</td><td><strong>feasible</strong> (ran + <code>METRIC name=value</code>) <strong>AND</strong> K-of-2 reviewers approve</td></tr>
+        <tr><td>Review output</td><td>typed findings <code>{kind: correctness|soundness|reproducibility|overclaim|style, severity, msg, fix}</code></td></tr>
+        <tr><td>Blocking</td><td>any high-severity <code>correctness</code> or <code>soundness</code> finding blocks approval; style/overclaim advisory</td></tr>
+        <tr><td>Evidence-backed</td><td>a reviewer MAY attach a <strong>verification probe</strong> (≤1/reviewer/iter) that runs in the same Docker sandbox to substantiate/retract a finding</td></tr>
+        <tr><td>Caps (Balanced default)</td><td><code>max_iters=3</code> · <code>K=2</code> · <code>usd_budget=$1.50</code> · Docker <code>--network none</code>, 30s/run · best-so-far on exhaust (honest <code>feasible</code> flag)</td></tr>
+        <tr><td>Profiles</td><td>Conservative (2/K=1/$0.60) · Balanced · Thorough (5/K=2/$4.00/60s) — overridable per-run</td></tr>
+      </tbody>
+    </table>
+
+    <h2>2 · Stage C — writing loop <span class="tag">lead writer + PC reviewers</span></h2>
+    <p>One peer is lead author and drafts the whole paper in markdown (cheap to iterate); the other two act as a venue program committee — score each rubric criterion 0–1 and file change-requests tagged by section; the lead revises <em>only the touched sections</em>; re-review. LaTeX is the export at the very end.</p>
+    <pre><code>draft (whole paper, markdown)
+ → 2 reviewers score vs venue rubric + change-requests (tagged by section)
+ → lead revises ONLY the targeted sections
+ → re-review … until accept or cap
+ → final coherence pass → LaTeX build-verify-fix → paper.pdf
+</code></pre>
+    <table>
+      <thead><tr><th>Decision</th><th>Locked value</th></tr></thead>
+      <tbody>
+        <tr><td>Topology</td><td>1 lead writer + 2 PC reviewers (rotating)</td></tr>
+        <tr><td>Accept / stop</td><td>mean rubric score <strong>≥ 0.70</strong> AND no high-severity change-request</td></tr>
+        <tr><td>Revise granularity</td><td><strong>targeted sections</strong> (change-requests are section-tagged) + one final coherence pass on the last round</td></tr>
+        <tr><td>Caps (Balanced default)</td><td><code>max_revisions=3</code> · <code>accept ≥ 0.70</code> · <code>usd_budget=$1.50</code> · best-scoring draft on exhaust</td></tr>
+        <tr><td>Profiles</td><td>Conservative (2/0.65/$0.60) · Balanced · Thorough (5/0.78+no high-med/$4.00)</td></tr>
+        <tr><td>Citations</td><td><strong>grounded-first</strong>: cite only LLM-wiki <code>origin:external</code> prior-art pages (no invented bibtex keys); <strong>search may augment</strong> when the wiki is thin — searched refs are provenance-tagged <code>needs-verification</code> and kept distinct from the grounded core</td></tr>
+        <tr><td>Figures</td><td>exactly one results figure auto-generated from the experiment METRIC/log → <code>paper/assets/result.png</code>, <code>\includegraphics</code>'d</td></tr>
+        <tr><td>Venue intake</td><td><code>--venue</code> wins if given; else the <strong>council recommends</strong> best-fit venue(s) with rationale → human confirms/overrides; also gathers emphasis / double-blind / page-limit override</td></tr>
+      </tbody>
+    </table>
+
+    <h2>3 · LaTeX build-verify-fix tool <span class="tag">"compiles clean" = the METRIC of writing</span></h2>
+    <p>Mirrors the Docker sandbox for code. Runs <strong>once on the accepted draft</strong> (not every revision) so the costly compile stays out of the inner loop.</p>
+    <pre><code>accept markdown paper
+ → scaffold .tex from venue doc_class (acmart/ieeetran/article) via scripts/scaffold-paper
+ → tectonic compile  (single self-contained binary; fetches packages on demand; reproducible)
+      error / overfull-hbox?  → fixer agent patches .tex → recompile   (cap ~3, own usd sub-budget)
+ → paper.pdf + build.log
+no tectonic/latexmk on machine → emit .tex + warning, DON'T hard-fail   (mirrors build_sandbox refusal pattern)
+</code></pre>
+    <div class="callout good">
+      <div class="label">Why a build tool (not just export)</div>
+      The <code>/insights</code> report flagged recurring LaTeX/bibtex build failures (incl. a self-referential <code>@</code>-in-comment bug). Treating "compiles clean" as a verifiable gate — like "ran + emitted METRIC" — is exactly the verification-backed discipline that worked best in past sessions. Tectonic avoids the fragile system-TeX dependency.
+    </div>
+
+    <h2>4 · Token bounding (the explicit ask)</h2>
+    <ul>
+      <li>Per-stage <strong>USD budget guard</strong>: a meter sums peer usage after each agent turn; when it would exceed <code>usd_budget</code>, the loop stops and returns best-so-far (no partial half-turn).</li>
+      <li>Hard <strong>iteration cap</strong> (<code>max_iters</code> / <code>max_revisions</code>) independent of budget — whichever binds first wins.</li>
+      <li>Verification probes and the LaTeX fixer have their own small sub-caps so they can't blow the stage budget.</li>
+      <li>All caps overridable per-run; the three profiles (Conservative/Balanced/Thorough) are presets.</li>
+    </ul>
+
+    <h2>5 · Contracts &amp; files to touch</h2>
+    <table>
+      <thead><tr><th>Path</th><th>Action</th></tr></thead>
+      <tbody>
+        <tr><td><code>store/models.py</code></td><td><strong>new</strong>: <code>ReviewFinding{kind,severity,msg,fix,probe?}</code>, <code>CodeReview{author_vendor,approve,findings}</code>, <code>ChangeRequest{section,severity,msg}</code>, <code>VenueChoice{venue,emphasis,double_blind,page_limit}</code>; extend <code>ExperimentResult</code> (reviews, approvals, iterations) + <code>WritingResult</code> (score history, pdf_path, citations)</td></tr>
+        <tr><td><code>agents/coder.py</code></td><td>add <code>revise(idea, plan, code, findings, stderr)</code> path alongside <code>draft</code></td></tr>
+        <tr><td><code>agents/code_reviewer.py</code></td><td><strong>new</strong>: <code>CodeReviewer.review(idea, plan, code, run)</code> → typed findings + optional probe; probe runs via sandbox</td></tr>
+        <tr><td><code>agents/writer.py</code></td><td>extend: <code>PaperReviewer</code> emits section-tagged change-requests + per-criterion scores; <code>Writer.revise(sections, change_requests)</code>; <code>Writer.coherence_pass</code></td></tr>
+        <tr><td><code>agents/latex_fixer.py</code></td><td><strong>new</strong>: reads <code>build.log</code> → patches <code>.tex</code></td></tr>
+        <tr><td><code>debate/experimentation.py</code></td><td><strong>rewrite</strong> single-shot → council loop (author+reviewers+probe, K-of-N, budget guard)</td></tr>
+        <tr><td><code>debate/writing.py</code></td><td><strong>rewrite</strong> single-shot → lead+PC loop (targeted revise, accept bar, coherence pass) + LaTeX step</td></tr>
+        <tr><td><code>verify/latex.py</code></td><td><strong>new</strong>: <code>LatexSandbox</code> (tectonic→latexmk), <code>build_latex(prefer="tectonic")</code> with graceful fallback; figure render helper (plot script → sandbox → png)</td></tr>
+        <tr><td><code>agents/facilitator.py</code></td><td>add a Stage-C venue intake (recommend + confirm) reusing the intake pattern</td></tr>
+        <tr><td><code>prompts/experiment/reviewer.md</code>, <code>prompts/writing/{reviewer,coherence}.md</code>, <code>prompts/latex/fixer.md</code></td><td><strong>new</strong> system prompts</td></tr>
+        <tr><td><code>cli.py</code> <code>_run_stage_b</code>/<code>_run_stage_c</code></td><td>build author+reviewers from the 3 seats; add <code>--profile</code>, venue intake, LaTeX wiring</td></tr>
+        <tr><td><code>config/venues/*.yaml</code></td><td><span class="yes">✓ done</span> — generic·icse·fse·ase·neurips·emnlp·iclr (7)</td></tr>
+        <tr><td><code>tests/test_experimentation.py</code>, <code>tests/test_writing.py</code>, <code>tests/test_latex.py</code></td><td>extend/new — offline (fake peers, LocalSandbox controlled scripts, tectonic skipped if absent)</td></tr>
+      </tbody>
+    </table>
+
+    <h2>6 · Build order</h2>
+    <ol>
+      <li>Contracts in <code>models.py</code> (findings, reviews, change-requests, venue intake, extended results).</li>
+      <li>Stage B loop: <code>CodeReviewer</code> + coder <code>revise</code> + rewrite <code>run_experimentation</code> (budget guard, K-of-N, probes). Offline tests.</li>
+      <li>Stage C loop: reviewer change-requests + scores, lead targeted revise + coherence, rewrite <code>run_writing</code> (accept bar, budget). Offline tests.</li>
+      <li>LaTeX: <code>verify/latex.py</code> + <code>latex_fixer</code> + figure render; wire as the post-accept export. Tectonic-optional tests.</li>
+      <li>Venue intake (recommend+confirm) + CLI profiles wiring. <code>mise run test</code> green.</li>
+    </ol>
+    <p><strong>Built 2026-06-09 (v0, 110 tests green).</strong> As-shipped notes vs the design above:</p>
+    <ul>
+      <li><strong>Figure:</strong> rendered host-side from the real METRIC by <em>trusted</em> code (<code>verify/figure.py</code>, matplotlib as a <em>soft</em> dependency — no figure if it's absent, never a crash). This sidesteps needing the sandbox to return a PNG artifact.</li>
+      <li><strong>LaTeX fix loop:</strong> v0 is <em>mechanical</em> — special-char escaping (kills the <code>@</code>/<code>&amp;</code>/<code>_</code> class of bugs at the source), inline <code>thebibliography</code> instead of bibtex, and a doc-class→<code>article</code> fallback on failure. An <em>LLM</em> latex-fixer agent is the obvious next upgrade.</li>
+      <li><strong>Citations:</strong> grounded-only is wired (<code>grounded_citations()</code> reads the wiki's <code>origin:external</code> pages; the writer drops any key it wasn't handed). Search-<em>augmentation</em> is deferred.</li>
+      <li><strong>Role rotation:</strong> author/lead is fixed within a single stage run (keeps the author's context) — cross-run rotation deferred.</li>
+    </ul>
+    <p><strong>Deferred:</strong> section co-authoring · competitive drafts · LLM latex-fixer · web-search citation verification · multi-file experiment repos (single script for now).</p>
+  </main>
+</body>
+</html>

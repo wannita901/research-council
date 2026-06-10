@@ -77,7 +77,7 @@ async def run_debate(
         if emit:
             emit(ev)
 
-    out("intake", "topic", {"topic": topic, "config": cfg.model_dump()})
+    out("onboarding", "topic", {"topic": topic, "config": cfg.model_dump()})
 
     # Phase 1 — independent research, in parallel.
     briefs = await asyncio.gather(*(p.research(topic, retrieval) for p in peers))

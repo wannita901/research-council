@@ -1,7 +1,7 @@
-"""Intake (plan/15 #5) — a cheap facilitator asks stage-specific clarifying questions
+"""Onboarding (plan/15 #5) — a cheap facilitator asks stage-specific clarifying questions
 to set constraints before the council works. Runs at project start and each stage.
 
-`run_intake` is runner-agnostic: it takes an async `answer_fn` (CLI prompt / backend
+`run_onboarding` is runner-agnostic: it takes an async `answer_fn` (CLI prompt / backend
 endpoint / auto-skip), so it's testable offline and reusable across runners.
 """
 
@@ -13,7 +13,7 @@ from pydantic_ai import Agent
 
 from research_council import prompts
 from research_council.obs.telemetry import UsageMeter, usage_of
-from research_council.store.models import Constraints, IntakeQuestion, IntakeQuestions
+from research_council.store.models import Constraints, OnboardingQuestion, OnboardingQuestions
 
 
 class Facilitator:
@@ -21,10 +21,10 @@ class Facilitator:
         self.max_questions = max_questions
         self._price_model = price_model
         self.usage = UsageMeter()
-        self._agent: Agent = Agent(model, output_type=IntakeQuestions,
-                                   system_prompt=prompts.load("facilitator/intake"))
+        self._agent: Agent = Agent(model, output_type=OnboardingQuestions,
+                                   system_prompt=prompts.load("facilitator/onboarding"))
 
-    async def questions(self, stage: str, topic: str) -> list[IntakeQuestion]:
+    async def questions(self, stage: str, topic: str) -> list[OnboardingQuestion]:
         prompt = f"Stage: {stage}\nTopic: {topic}\nAsk up to {self.max_questions} clarifying questions."
         result = await self._agent.run(prompt)
         u = usage_of(result)
@@ -36,11 +36,11 @@ class Facilitator:
         return result.output.questions[: self.max_questions]
 
 
-async def run_intake(
+async def run_onboarding(
     facilitator: Facilitator,
     stage: str,
     topic: str,
-    answer_fn: Callable[[IntakeQuestion], Awaitable[str]],
+    answer_fn: Callable[[OnboardingQuestion], Awaitable[str]],
 ) -> Constraints:
     """Generate questions, collect human answers via `answer_fn`, return Constraints."""
     questions = await facilitator.questions(stage, topic)

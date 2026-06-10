@@ -139,12 +139,12 @@ def test_aggregate_excludes_self_scores():
     assert keep.composites["Aiden"] == 0.5 and keep.composites["Cathy"] == 0.5  # self+rival averaged
 
 
-async def test_intake_runs_when_facilitator_present(tmp_path: Path):
-    from research_council.store.models import Constraints, IntakeQuestion
+async def test_onboarding_runs_when_facilitator_present(tmp_path: Path):
+    from research_council.store.models import Constraints, OnboardingQuestion
 
     class _Fac:
         async def questions(self, stage, topic):
-            return [IntakeQuestion(question="What is success?")]
+            return [OnboardingQuestion(question="What is success?")]
 
     async def answer_fn(q):
         return "a clear baseline win"

@@ -1,6 +1,6 @@
 """v2 ideation orchestrator (plan/12 + plan/13 Stage A) — agentic, stitched together.
 
-  intake → ROUND[ research(+constraints/digest) → propose → deliberate → judge(anon) ]
+  onboarding → ROUND[ research(+constraints/digest) → propose → deliberate → judge(anon) ]
          → human gate → re-enter with RoundDigest + comment
 
 Kept alongside v1 (debate/orchestrator.py). Peers are duck-typed: any object with
@@ -13,7 +13,7 @@ import asyncio
 from collections import defaultdict
 from typing import Any, Awaitable, Callable
 
-from research_council.agents.facilitator import Facilitator, render_constraints, run_intake
+from research_council.agents.facilitator import Facilitator, render_constraints, run_onboarding
 from research_council.debate.anonymize import anonymize
 from research_council.debate.deliberation import run_deliberation
 from research_council.debate.memory import build_round_digest, render_digest
@@ -23,7 +23,7 @@ from research_council.store.models import (
     Candidate,
     Constraints,
     Event,
-    IntakeQuestion,
+    OnboardingQuestion,
     Recommendation,
     ReviewAction,
     Score,
@@ -86,13 +86,13 @@ async def run_ideation(
     trace: TraceWriter,
     *,
     facilitator: Facilitator | None = None,
-    answer_fn: Callable[[IntakeQuestion], Awaitable[str]] | None = None,
+    answer_fn: Callable[[OnboardingQuestion], Awaitable[str]] | None = None,
     reviewer: Callable[[Recommendation, list[Candidate], int], Awaitable[ReviewAction]] | None = None,
     weights: dict[str, float] | None = None,
     auto_rounds: int = 1,   # no-human runs auto-iterate this many rounds, then conclude
     max_turns: int = 4,
     anonymize_on: bool = True,
-    constraints: Constraints | None = None,  # pre-supplied intake answers (skips the facilitator)
+    constraints: Constraints | None = None,  # pre-supplied onboarding answers (skips the facilitator)
     on_round_end: Callable[[int], Awaitable[None]] | None = None,  # e.g. per-round wiki harvest
     emit: Callable[[Event], None] | None = None,
 ) -> tuple[Recommendation, list[Candidate]]:
@@ -105,13 +105,13 @@ async def run_ideation(
         if emit:
             emit(ev)
 
-    out("intake", "topic", {"topic": topic, "codenames": list(peers)})
+    out("onboarding", "topic", {"topic": topic, "codenames": list(peers)})
 
     if constraints is None:
         constraints = Constraints(stage="ideation")
         if facilitator is not None and answer_fn is not None:
-            constraints = await run_intake(facilitator, "ideation", topic, answer_fn)
-    out("intake", "constraints", constraints.model_dump())
+            constraints = await run_onboarding(facilitator, "ideation", topic, answer_fn)
+    out("onboarding", "constraints", constraints.model_dump())
     constraints_text = render_constraints(constraints)
 
     order = list(peers.items())

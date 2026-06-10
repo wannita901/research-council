@@ -14,6 +14,7 @@ from research_council.store.models import (
     Contribution,
     DiscussionMessage,
     ResearchBrief,
+    ResearchQuestion,
     Score,
 )
 
@@ -39,8 +40,17 @@ class StubV2Peer:
 
     async def propose(self, brief: ResearchBrief, constraints_text: str = "") -> Candidate:
         return Candidate(id=self.codename, vendor=self.vendor, title=f"[{self.codename}] idea",
-                         gap=brief.gap, hypothesis="stub hypothesis", method="stub method",
-                         experiment_plan="toy experiment plan", refs=brief.refs)
+                         gap=brief.gap, problem_statement="stub problem statement",
+                         motivation="stub motivation", hypothesis="stub hypothesis",
+                         method="stub method", experiment_plan="1. toy step\n2. measure",
+                         research_questions=[
+                             ResearchQuestion(id="rq1", question="does the toy method work?",
+                                              plan="1. run toy\n2. measure", metrics="accuracy"),
+                             ResearchQuestion(id="rq2", question="does it beat the baseline?",
+                                              plan="1. run baseline\n2. compare", metrics="accuracy"),
+                         ],
+                         dataset_metrics="synthetic toy data · accuracy",
+                         fallback_plan="simplify to a smaller toy run", refs=brief.refs)
 
     async def deliberate(self, thread: list[DiscussionMessage], candidates: list[Candidate],
                          my_open_questions: list[str]) -> Contribution:

@@ -1,0 +1,9 @@
+name: FSE (software engineering)
+doc_class: acmart
+page_limit: 10
+rubric:
+  novelty: Does it advance SE research beyond existing tools and empirical studies?
+  soundness: Rigorous method — datasets, baselines, statistics, threats to validity?
+  significance: Real impact on software-engineering practice or research?
+  reproducibility: Artifact available, runnable, with a clear protocol?
+  clarity: Well-motivated, well-structured, readable?

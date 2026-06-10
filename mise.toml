@@ -29,6 +29,10 @@ run = "uvicorn research_council.service.app:app --host 127.0.0.1 --port 8000"
 description = "Run the test suite"
 run = "pytest -q"
 
+[tasks.build-image]
+description = "Build the Stage-B experiment sandbox image (numpy/pandas/scipy/sklearn) for real experiments"
+run = "docker build -t research-council-exp:latest -f docker/experiment.Dockerfile ."
+
 [tasks.check]
 description = "Ping each provider with a tiny prompt (diagnose live setup; ~cents)"
 run = "council check"

@@ -206,6 +206,43 @@ mise run live   -- --topic "…"                              # real providers (
       <li><strong>Wired</strong> — <code>council project approve --live</code> runs real Stage B when advancing into experimentation (Docker default; <code>--allow-local-sandbox</code> to run unsandboxed; stub fallback if no sandbox). The result flows into the handoff toward Stage C.</li>
     </ul>
     <p>Tested offline (LocalSandbox + a fake coder running controlled scripts): captures/timeout/failure, feasible-first-try, retry-then-succeed, ran-but-no-metric, refuse-unsafe-by-default. Next: Stage C (writing + scaffold-paper + venue rubric) · multi-agent code-review in B · <code>/projects</code> endpoints.</p>
+
+    <h3>Stage C · paper writing + venue rubric <span class="tag">2026-06-08 · 96 tests green</span></h3>
+    <p>The final stage — co-author + review against a target venue (#12 + venue rubric #10).</p>
+    <ul>
+      <li><strong>Venue rubrics</strong> (#10) — <code>config/venues/*.yaml</code> (generic · icse · neurips): name, doc_class, page_limit, and a criteria checklist. Council-extendable.</li>
+      <li><strong>Writer + Reviewer</strong> (<code>agents/writer.py</code> + <code>prompts/writing/*</code>) — Writer drafts title/abstract/sections from the idea + experiment result (grounded, no overclaiming); PaperReviewer scores the draft against the venue rubric (per-criterion 0..1, comments, verdict).</li>
+      <li><strong>Engine</strong> (<code>debate/writing.py</code>) — <code>run_writing</code> drafts → reviews → writes <code>projects/&lt;id&gt;/paper/</code> (<code>paper.md</code> + ordered <code>sections/</code> + <code>review.md</code>). <code>PaperDraft</code>/<code>ReviewNotes</code>/<code>WritingResult</code> contracts.</li>
+      <li><strong>Wired</strong> — <code>council project approve --live --venue icse</code> runs real Stage C when advancing into writing (stub fallback offline).</li>
+    </ul>
+    <p>Tested offline (fake writer/reviewer): venue load + fallback, paper files written with ordered sections, review scored vs rubric, agents via TestModel. <strong>The full A→B→C lifecycle now has real engines end-to-end.</strong></p>
+
+    <h3>Stage B &amp; C → council collaboration loops <span class="tag">2026-06-09 · 110 tests green</span></h3>
+    <p>Upgraded both single-shot stages to capped multi-agent <em>iterate-until-good</em> loops (designed via <code>/grill-me</code>, locked in <a href="18_stage-bc-loops.html">18</a>).</p>
+    <ul>
+      <li><strong>Venues</strong> — added FSE · ASE · EMNLP · ICLR (now <strong>7</strong> with generic · icse · neurips).</li>
+      <li><strong>Stage B loop</strong> (<code>debate/experimentation.py</code>, <code>agents/code_reviewer.py</code>) — author drafts → Docker run → 2 cross-vendor reviewers emit typed findings <code>{kind,severity,msg,fix}</code> (a reviewer may attach a sandbox <strong>verification probe</strong> as evidence) → revise. Stops at <strong>feasible + K-of-2 approve</strong>; high-sev correctness/soundness blocks. Best-so-far on cap.</li>
+      <li><strong>Stage C loop</strong> (<code>debate/writing.py</code>, extended <code>agents/writer.py</code>) — lead drafts (markdown) → 2 PC reviewers score vs rubric + file <strong>section-tagged change-requests</strong> → lead revises <em>only touched sections</em> → re-review. Accepts at <strong>mean ≥ bar, no high-sev blocker</strong>; final coherence pass.</li>
+      <li><strong>LaTeX build-verify-fix</strong> (<code>verify/latex.py</code>) — scaffold <code>.tex</code> → tectonic/latexmk compile → mechanical fix (special-char escaping, inline <code>thebibliography</code> not bibtex, doc-class→article fallback). Graceful <code>fallback_no_tex</code> if no engine. Retires the recurring LaTeX-build friction.</li>
+      <li><strong>Grounding</strong> — <code>grounded_citations()</code> cites only LLM-wiki <code>origin:external</code> pages (writer drops unknown keys → no hallucinated bib); results <strong>figure</strong> rendered host-side from the real METRIC (<code>verify/figure.py</code>, matplotlib soft-dep).</li>
+      <li><strong>Caps</strong> (<code>debate/caps.py</code>) — conservative/balanced/thorough presets (iters/K/accept-bar/USD); USD-budget guard halts the loop. <code>approve --live --profile … --venue …</code>; council-recommends-venue intake.</li>
+    </ul>
+    <p>Offline tests: K-of-N approval, blocker gating, probe execution, budget halt (B); targeted-section revision, accept bar, best-so-far, budget halt, citation grounding (C); LaTeX escaping/fallback + soft figure. Next: <code>/projects</code> backend endpoints · LLM latex-fixer · web UI.</p>
+
+    <h3>Conversational conductor — <code>council run</code> <span class="tag">2026-06-09 · 111 tests green</span></h3>
+    <p>One command drives the whole lifecycle by conversation instead of a command per stage (<a href="19_conversational-conductor.html">19</a>).</p>
+    <ul>
+      <li><strong>Flow</strong> — intake → ideation → <span class="tag">gate</span> → experimentation → <span class="tag">gate</span> → writing → <span class="tag">gate</span> → done. Each gate is a question: <em>go / redo / stop</em>. <code>go</code>=<code>approve_and_advance</code>; <code>redo</code>=re-run that stage on its <code>build_handoff</code> input; <code>stop</code>=save &amp; exit (resumable via <code>project approve</code>).</li>
+      <li><strong>Reuse</strong> — wraps the facilitator intake, <code>run_ideation</code> (+ its per-round <code>_cli_reviewer</code>), the Stage B/C loop engines, <code>_venue_intake</code>, and the <code>lifecycle</code>/<code>ProjectStore</code>. New helpers only: <code>_build_v2_peers</code>, <code>_facilitator_and_answer</code>, <code>_run_ideation_stage</code>, <code>_gate</code>, <code>_advance_into</code>.</li>
+      <li><strong>Scriptable</strong> — off a TTY the gates auto-proceed and stages stub out, so the whole pipeline runs headless (the offline test). <code>--live / --profile / --venue</code> as usual.</li>
+      <li><strong>Why a terminal REPL first</strong> — smallest path to "just talk to it"; the same conductor logic is the shared core the FastAPI backend + web UI will later sit on (gates → SSE prompts).</li>
+    </ul>
+
+    <h3>Proposal artifact + evidence rule + onboarding rename <span class="tag">2026-06-09 · 114 tests green</span></h3>
+    <p>Three refinements (<a href="20_proposal-and-evidence.html">20</a>): (1) "intake"→<strong>onboarding</strong> everywhere (symbols too; Stage-C venue step → <code>VenueChoice</code>). (2) Stage A now argues over a <strong>full research proposal</strong> — <code>Candidate</code> gained problem_statement·motivation·dataset_metrics·fallback_plan; deliberation can revise any field; judges score the whole proposal; saved as <code>proposal.md</code> and flowed into B (coder implements the plan) and C (writer drafts from proposal + results). (3) <strong>Evidence rule</strong>: every claim must cite a reference or show experiment evidence — enforced in propose/deliberate/writer prompts and made a <em>blocking</em> change-request by the Stage-C reviewer. New tests: <code>test_proposal.py</code> + proposal.md assertion in <code>test_conductor.py</code>.</p>
+
+    <h3>Artifacts under projects/&lt;id&gt;/ + RQ-driven multi-experiment Stage B <span class="tag">2026-06-09 · 118 tests green</span></h3>
+    <p>(a) <strong>All artifacts now land under <code>projects/&lt;id&gt;/</code></strong> — Stage B previously wrote nothing to disk (only embedded in project.json); added <code>write_experiment(s)</code>. (b) <strong>RQ-driven Stage B</strong> (<a href="21_rq-driven-experiments.html">21</a>): the proposal carries <strong>research questions</strong>; Stage B runs <strong>one council loop per RQ</strong> (per-RQ budget via <code>budget_base</code>); results aggregate to <code>experiment/results.csv</code> with per-RQ folders (<code>rq1/ rq2/ …</code> = experiment.py · log.txt · reviews.md · question.md). Stage C reports results per RQ and the figure plots one bar per RQ. <code>numbered_rqs()</code> falls back to a single RQ so single-experiment proposals still work. New tests: multi-RQ loop + CSV, <code>numbered_rqs</code> render/fallback.</p>
   </main>
 </body>
 </html>

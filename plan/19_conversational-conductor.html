@@ -1,0 +1,61 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Phase 7 · Conversational Conductor · research-council</title>
+  <link rel="stylesheet" href="style.css">
+  <script src="nav.js"></script>
+</head>
+<body>
+  <main class="content">
+    <header>
+      <div class="eyebrow">Phase 7 · Implementation (v2)</div>
+      <h1>Conversational Conductor — <code>council run</code></h1>
+      <div class="meta">Built 2026-06-09 · one command drives the whole lifecycle, gated by conversation · 111 tests green</div>
+    </header>
+
+    <p class="lead">Until now the lifecycle was one CLI command per stage (<code>project new</code> → <code>approve</code> → <code>approve</code>). The user asked: <em>can a facilitator run the council so I just talk to it, not type commands?</em> Answer: a <strong>conductor</strong> — <code>council run</code> — that walks onboarding → ideation → experimentation → writing and pauses at each boundary to <em>ask</em> you (go / redo / stop) instead of making you issue a command. The human gates stay; they just become questions.</p>
+
+    <h2>1 · The flow</h2>
+    <pre><code>$ council run --live
+facilitator: what's your research question?        ← onboarding (clarifying Qs, live)
+[Stage A ideation]  (its own per-round gate refines the idea when interactive)
+gate · ideation     selected: "<idea title>"
+  Run experiments on this idea?  [▶ run experiments / ↻ redo ideation / ✗ stop]
+[Stage B loop]      feasible f1=0.62 · 2/2 approved
+gate · experimentation
+  Write up the paper?  [▶ write the paper / ↻ re-run experiment / ✗ stop]
+[Stage C loop]      accepted · mean 0.74 · paper.pdf
+gate · writing
+  Finish the project?  [✓ finish / ↻ re-run writing / ✗ stop]
+project complete 🎉
+</code></pre>
+
+    <h2>2 · Design decisions</h2>
+    <table>
+      <thead><tr><th>Decision</th><th>Choice</th></tr></thead>
+      <tbody>
+        <tr><td>Surface</td><td>terminal REPL first (chosen over backend+SSE). Smallest path to "just talk to it"; <strong>the conductor logic is the shared core</strong> the FastAPI backend + web UI (<a href="17_ui-design-samples.html">17</a>) will later sit on.</td></tr>
+        <tr><td>Reuse, don't duplicate</td><td>wraps the existing pieces — facilitator onboarding, <code>run_ideation</code> + its <code>_cli_reviewer</code> round-gate, the Stage B/C loop engines (<a href="18_stage-bc-loops.html">18</a>), <code>_venue_choice</code>, and the <code>lifecycle</code> state machine / <code>ProjectStore</code>.</td></tr>
+        <tr><td>Gates preserved</td><td>the human gate between stages is kept — rendered as a question. <code>go</code> → <code>approve_and_advance</code>; <code>redo</code> → re-run that stage's engine on its input handoff (<code>build_handoff</code>); <code>stop</code> → save &amp; exit.</td></tr>
+        <tr><td>Resumable</td><td>state is persisted each step; a paused run continues with <code>council project approve &lt;id&gt;</code> (or another <code>council run</code> would start fresh). Per-stage CLI remains the power/automation path.</td></tr>
+        <tr><td>Non-TTY = scriptable</td><td>off a TTY the gates auto-proceed ('go') and stages fall back to stubs — the whole pipeline runs headless in one command (this is the offline test).</td></tr>
+        <tr><td>Live vs offline</td><td><code>--live</code> runs real engines (keys; Docker for B); offline uses stub peers + stub stages. <code>--profile</code> bounds the B/C loops; <code>--venue</code> optional (else council recommends + you confirm).</td></tr>
+      </tbody>
+    </table>
+
+    <h2>3 · Files</h2>
+    <table>
+      <thead><tr><th>Path</th><th>Action</th></tr></thead>
+      <tbody>
+        <tr><td><code>cli.py</code> <code>run_conductor</code> (<code>council run</code>)</td><td><strong>new</strong> top-level command + helpers <code>_build_v2_peers</code> / <code>_facilitator_and_answer</code> / <code>_run_ideation_stage</code> / <code>_gate</code> / <code>_advance_into</code></td></tr>
+        <tr><td><code>tests/test_conductor.py</code></td><td><strong>new</strong> — offline end-to-end: non-TTY run completes all three stages</td></tr>
+      </tbody>
+    </table>
+
+    <h2>4 · Next</h2>
+    <p>Lift the same conductor into the FastAPI backend (<code>/projects</code> new/approve/status/<strong>stream</strong>) so a web UI can drive it — the gates become SSE prompts. Then the plan/17 designs (group-chat #20 / flagship #22) plug straight in. Also: <code>council run --resume &lt;id&gt;</code> to re-enter an existing project's gate loop.</p>
+  </main>
+</body>
+</html>

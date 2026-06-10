@@ -1,0 +1,9 @@
+name: ICLR (ML / representation learning)
+doc_class: article          # ICLR uses its own style; closest scaffold class is article
+page_limit: 9
+rubric:
+  novelty: Original idea/algorithm relative to the ML literature?
+  soundness: Correct claims, adequate experiments, ablations, error bars/seeds?
+  significance: Likely to influence research or practice?
+  clarity: Clear exposition, notation, and reproducibility details?
+  limitations: Are limitations and broader impact honestly discussed?

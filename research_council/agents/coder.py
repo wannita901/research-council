@@ -20,12 +20,24 @@ class Coder:
         self._agent: Agent = Agent(model, output_type=ExperimentDraft,
                                    system_prompt=prompts.load("experiment/coder"))
 
-    async def draft(self, idea: dict, plan: str, *, error: str = "") -> ExperimentDraft:
-        prompt = (f"Idea: {idea.get('title', '')}\nHypothesis: {idea.get('hypothesis', '')}\n"
-                  f"Method: {idea.get('method', '')}\nExperiment plan: {plan}\n\n"
-                  "Write the smallest runnable script per the rules.")
+    async def draft(self, idea: dict, plan: str, *, error: str = "",
+                    prior_code: str = "", feedback: str = "") -> ExperimentDraft:
+        prompt = (f"Proposal: {idea.get('title', '')}\n"
+                  f"Problem: {idea.get('problem_statement', '') or idea.get('gap', '')}\n"
+                  f"Hypothesis: {idea.get('hypothesis', '')}\n"
+                  f"Method: {idea.get('method', '')}\n"
+                  f"Experiment plan: {plan or idea.get('experiment_plan', '')}\n"
+                  f"Dataset/metrics: {idea.get('dataset_metrics', '')}\n"
+                  f"Fallback plan: {idea.get('fallback_plan', '')}\n\n"
+                  "Implement the smallest runnable step of the plan per the rules; the METRIC you "
+                  "print should be one of the proposal's evaluation metrics (or a clear proxy).")
+        if prior_code:
+            prompt += (f"\n\nYour previous script:\n```python\n{prior_code[:2500]}\n```\n"
+                       "Revise it — keep what works, change only what the feedback requires.")
         if error:
-            prompt += f"\n\nThe previous attempt FAILED with:\n{error[:900]}\nFix the script."
+            prompt += f"\n\nThe previous run FAILED with:\n{error[:900]}\nFix the cause."
+        if feedback:
+            prompt += f"\n\nReviewer findings to address:\n{feedback[:1200]}"
         r = await self._agent.run(prompt)
         self._track(r)
         return r.output

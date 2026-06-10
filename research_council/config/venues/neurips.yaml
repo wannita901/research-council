@@ -1,0 +1,9 @@
+name: NeurIPS (ML)
+doc_class: article
+page_limit: 9
+rubric:
+  novelty: Is the idea/algorithm original relative to the ML literature?
+  soundness: Correct claims, adequate experiments, ablations, error bars?
+  significance: Likely to influence research or practice?
+  clarity: Clear exposition, notation, and reproducibility details?
+  limitations: Are limitations and broader impact honestly discussed?

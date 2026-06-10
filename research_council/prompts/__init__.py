@@ -2,7 +2,7 @@
 
     research_council/prompts/
       peer/        research · propose · judge · deliberate · finalize   (v2 AgentPeer)
-      facilitator/ intake
+      facilitator/ onboarding
       librarian/   router · audit
       peer_v1/     research · propose · critique · score                (legacy llm_peer)
 

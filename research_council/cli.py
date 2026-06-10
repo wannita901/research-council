@@ -251,9 +251,9 @@ def ideate(
     live: bool = typer.Option(False, help="use real providers (needs keys + SDKs)"),
     harvest: bool = typer.Option(False, "--harvest", help="ingest each round into the LLM-wiki so later rounds read it (live; spends librarian tokens)"),
     stream: bool = typer.Option(True, help="print each phase event live"),
-    interactive: bool = typer.Option(True, help="intake questions + review gate (TTY only)"),
+    interactive: bool = typer.Option(True, help="onboarding questions + review gate (TTY only)"),
 ):
-    """v2 agentic ideation: intake → research → propose → deliberate → judge → gate.
+    """v2 agentic ideation: onboarding → research → propose → deliberate → judge → gate.
 
     Interactively, rounds are human-driven (iterate/amend until you conclude/select, capped
     at a safety ceiling). Non-interactively, --auto-iterate sets how many rounds run unattended.
@@ -292,7 +292,7 @@ def ideate(
                                   price_model=cfg.facilitator_model)
     if interactive and tty and facilitator is not None:
         async def answer_fn(q):  # noqa: E306
-            ui.rule("③ Intake")
+            ui.rule("③ Onboarding")
             return ((await ui.ask_text_async(q.question)) or "").strip()
 
     interactive_run = interactive and tty
@@ -304,7 +304,7 @@ def ideate(
               f"{'live' if live else 'offline'}  ·  rounds: {rounds_label}")
 
     # record the full setup as the first trace event (seats, tools, caps, facilitator)
-    setup_ev = trace.emit("intake", "setup", {
+    setup_ev = trace.emit("onboarding", "setup", {
         "seats": cfg.seats, "tools": cfg.tools, "live": live, "anonymize": cfg.anonymize,
         "facilitator_model": cfg.facilitator_model if facilitator is not None else None,
         "auto_iterate": auto_iterate, "interactive": interactive_run, "max_turns": cfg.max_turns,
@@ -646,9 +646,7 @@ def project_new(
     if winner is None:
         ui.console.print("[red]ideation produced no candidate[/red]")
         raise typer.Exit(1)
-    record_result(proj, "ideation", run_id=trace.run_id, summary=winner.title,
-                  artifacts={"idea": winner.model_dump(), "experiment_plan": winner.experiment_plan})
-    store.save(proj)
+    _record_ideation(proj, store, pid, winner, trace.run_id)
     ui.console.print(f"\n[green]Stage A complete[/green] · selected: [bold]{winner.title}[/bold]")
     ui.console.print(f"  approve & advance → [cyan]council project approve {pid}[/cyan]   ·   "
                      f"status → council project status {pid}")
@@ -700,13 +698,24 @@ def project_list():
         ui.console.print(f"  [cyan]{pid}[/cyan] · stage {p.current} · {p.topic[:54]}")
 
 
-def _run_stage_b(handoff, allow_local: bool):
-    """Real Stage B: implement → run in a sandbox → verify. Falls back to the stub if no
-    isolated sandbox is available. Returns (summary, artifacts)."""
+def _reviewer_seats(cfg, lead_vendor):
+    """The other two seats are reviewers; single-seat configs review with the lead seat."""
+    others = [(v, m) for v, m in cfg.seats.items() if v != lead_vendor]
+    return others or [(lead_vendor, cfg.seats[lead_vendor])]
+
+
+def _run_stage_b(handoff, allow_local: bool, profile: str = "balanced", out_dir=None):
+    """Real Stage B council loop: author implements → sandbox runs → 2 peers review (typed
+    findings + optional probe) → revise, until feasible+approved or the cap. Falls back to the
+    stub if no isolated sandbox is available. Writes code/result/log/reviews under
+    <out_dir>/experiment/. Returns (summary, artifacts)."""
     from research_council.agents.agent_peer import agent_model_name
+    from research_council.agents.code_reviewer import CodeReviewer
     from research_council.agents.coder import Coder
-    from research_council.debate.experimentation import run_experimentation
+    from research_council.debate.caps import stage_b_caps, total_spend
+    from research_council.debate.experimentation import run_experiments, write_experiments
     from research_council.lifecycle import run_stage_stub
+    from research_council.store.models import Candidate, ResearchQuestion
     from research_council.verify.sandbox import build_sandbox
 
     sandbox, warn = build_sandbox("docker", allow_local=allow_local)
@@ -717,35 +726,349 @@ def _run_stage_b(handoff, allow_local: bool):
         ui.console.print(f"[yellow]{warn}[/yellow]")
 
     cfg = load_config("ideation")
-    cv = "anthropic" if "anthropic" in cfg.seats else next(iter(cfg.seats))
-    coder = Coder(agent_model_name(cv, cfg.seats[cv]), price_model=cfg.seats[cv])
+    author = "anthropic" if "anthropic" in cfg.seats else next(iter(cfg.seats))
+    coder = Coder(agent_model_name(author, cfg.seats[author]), price_model=cfg.seats[author])
+    reviewers = [CodeReviewer(agent_model_name(v, m), vendor=v, price_model=m)
+                 for v, m in _reviewer_seats(cfg, author)]
+    caps = stage_b_caps(profile)
+
+    try:
+        rqs = Candidate.model_validate(handoff.idea).numbered_rqs()
+    except Exception:
+        rqs = [ResearchQuestion(id="rq1", question=handoff.idea.get("hypothesis", "") or
+                                handoff.idea.get("title", ""), plan=handoff.experiment_plan,
+                                metrics=handoff.idea.get("dataset_metrics", ""))]
 
     def _emit(ph, k, pl):
-        if k == "code_drafted":
-            extra = f"attempt {pl['attempt']} · {pl['chars']} chars"
+        if k == "rq_start":
+            extra = f"[bold]{pl['rq_id']}[/bold] {pl['question'][:60]}"
+        elif k == "rq_done":
+            extra = f"{pl['rq_id']} · feasible={pl['feasible']} approved={pl['approved']} · {pl.get('metric') or '—'}"
         elif k == "sandbox_run":
-            extra = f"attempt {pl['attempt']} · ran={pl['ok']} exit={pl['exit_code']} [{pl['backend']}]"
+            extra = f"attempt {pl['attempt']} · ran={pl['ok']} feasible={pl.get('feasible')} [{pl['backend']}]"
+        elif k == "code_review":
+            nb = sum(1 for f in pl["findings"] if f["kind"] in ("correctness", "soundness") and f["severity"] == "high")
+            extra = f"{pl['vendor']} · {'approve' if pl['approve'] else 'changes'} · {len(pl['findings'])} findings ({nb} blocking)"
         else:
             extra = ""
         ui.stream_line(0, ph, k, None, extra)
 
-    ui.console.print(f"  [dim]Stage B · experimenting in the {sandbox.name} sandbox…[/dim]")
-    res = asyncio.run(run_experimentation(handoff.idea, handoff.experiment_plan, coder, sandbox, emit=_emit))
-    verdict = "[green]✓ feasible[/green]" if res.feasible else "[yellow]✗ not verified[/yellow]"
-    ui.console.print(f"  {verdict} · metric: {res.metric or '—'} · {res.attempts} attempt(s) · "
-                     f"librarian ${coder.usage.cost_usd:.4f}")
-    summary = (f"[{res.backend}] {'feasible' if res.feasible else 'not verified'} · "
-               f"metric {res.metric or '—'} · {res.attempts} attempt(s)")
-    artifacts = {"idea": handoff.idea, "experiment_plan": handoff.experiment_plan, **res.model_dump()}
+    ui.console.print(f"  [dim]Stage B · council running {len(rqs)} experiment(s) in the {sandbox.name} "
+                     f"sandbox ({profile}: ≤{caps.max_iters} iters/RQ, K={caps.k}, ${caps.usd_budget}/RQ)…[/dim]")
+    rq_results = asyncio.run(run_experiments(handoff.idea, rqs, coder, reviewers, sandbox,
+                                             caps=caps, emit=_emit))
+    cost = total_spend(coder, *reviewers)
+    feasible = sum(1 for rr in rq_results if rr.result.feasible)
+    approved = sum(1 for rr in rq_results if rr.result.approved)
+    n = len(rq_results)
+    tone = "green" if approved == n else "yellow"
+    ui.console.print(f"  [{tone}]{approved}/{n} RQ(s) approved[/{tone}] · {feasible}/{n} feasible · ${cost:.4f}")
+    artifacts = {"idea": handoff.idea, "experiment_plan": handoff.experiment_plan,
+                 "rqs": [rr.model_dump() for rr in rq_results],
+                 "feasible_count": feasible, "approved_count": approved, "rq_count": n,
+                 "usd": cost}
+    if out_dir is not None:
+        exp_dir = write_experiments(rq_results, out_dir)
+        artifacts["experiment_dir"] = str(exp_dir)
+        artifacts["results_csv"] = str(exp_dir / "results.csv")
+        ui.console.print(f"  → {exp_dir}  ·  results.csv")
+    summary = f"{approved}/{n} RQ(s) approved · {feasible}/{n} feasible"
     return summary, artifacts
+
+
+def _venue_choice(handoff, venue_flag, *, live: bool):
+    """Resolve the Stage-C target venue: --venue wins; else (interactive) the council
+    recommends a best-fit venue and the human confirms/overrides; non-interactive falls back
+    to the handoff constraint or generic. Returns a VenueChoice."""
+    from research_council.debate.writing import list_venues
+    from research_council.store.models import VenueChoice
+
+    venues = list_venues()
+    if venue_flag:
+        return VenueChoice(venue=venue_flag if venue_flag in venues else "generic")
+
+    fallback = handoff.constraints.get("venue") or "generic"
+    if not sys.stdin.isatty():
+        return VenueChoice(venue=fallback if fallback in venues else "generic")
+
+    default, rationale = fallback, ""
+    if live:
+        from research_council.agents.agent_peer import agent_model_name
+        from research_council.agents.writer import VenueRecommender
+
+        cfg = load_config("ideation")
+        seat = "anthropic" if "anthropic" in cfg.seats else next(iter(cfg.seats))
+        rec = asyncio.run(VenueRecommender(agent_model_name(seat, cfg.seats[seat]),
+                                           price_model=cfg.seats[seat])
+                          .recommend(handoff.idea, handoff.artifacts or {}, venues))
+        default, rationale = rec.venue, rec.rationale
+        if rationale:
+            ui.console.print(f"  [dim]council suggests [cyan]{default}[/cyan] — {rationale}[/dim]")
+
+    venue = ui.ask_select("Target venue", venues, default=default if default in venues else "generic")
+    emphasis = ui.ask_text("Emphasis (optional, what to foreground)")
+    db = ui.ask_select("Double-blind?", ["no", "yes"], default="no")
+    return VenueChoice(venue=venue, emphasis=emphasis, double_blind=(db == "yes"), rationale=rationale)
+
+
+def _run_stage_c(handoff, out_dir, onboarding, profile: str = "balanced"):
+    """Real Stage C council writing loop: lead drafts → 2 PC reviewers score vs the venue
+    rubric + file change-requests → lead revises targeted sections → re-review, until accept
+    or the cap; then a coherence pass + a LaTeX build. Returns (summary, artifacts)."""
+    from research_council.agents.agent_peer import agent_model_name
+    from research_council.agents.writer import PaperReviewer, Writer
+    from research_council.debate.caps import stage_c_caps, total_spend
+    from research_council.debate.writing import grounded_citations, load_venue, run_writing
+
+    cfg = load_config("ideation")
+    v = onboarding.venue
+    vname = load_venue(v).get("name", v)
+    lead = "anthropic" if "anthropic" in cfg.seats else next(iter(cfg.seats))
+    writer = Writer(agent_model_name(lead, cfg.seats[lead]), venue=vname, price_model=cfg.seats[lead])
+    reviewers = [PaperReviewer(agent_model_name(rv, m), venue=vname, vendor=rv, price_model=m)
+                 for rv, m in _reviewer_seats(cfg, lead)]
+    caps = stage_c_caps(profile)
+
+    # carry the onboarding into the writing constraints the writer/reviewers see
+    if onboarding.emphasis:
+        handoff.constraints["emphasis"] = onboarding.emphasis
+    if onboarding.double_blind:
+        handoff.constraints["double_blind"] = "yes"
+
+    def _emit(ph, k, pl):
+        if k == "draft":
+            extra = f"'{pl.get('title', '')}' · {pl.get('citations', 0)} cites"
+        elif k == "review":
+            extra = f"round {pl['round']} · mean {pl['mean']:.2f} · {pl['change_requests']} change-reqs" + (" · blocking" if pl.get("blocking") else "")
+        elif k == "revise":
+            extra = f"round {pl['round']} · sections {pl['sections']}"
+        elif k == "latex":
+            extra = f"{pl['status']}" + (" · pdf" if pl.get("pdf") else "")
+        else:
+            extra = pl.get("status", "")
+        ui.stream_line(0, ph, k, None, extra)
+
+    ui.console.print(f"  [dim]Stage C · council writing for {vname} "
+                     f"({profile}: ≤{caps.max_revisions} revisions, accept ≥{caps.accept}, ${caps.usd_budget})…[/dim]")
+
+    async def _go():
+        cites = await grounded_citations(handoff.idea)
+        return await run_writing(handoff, writer, reviewers, venue=v, out_dir=out_dir,
+                                 caps=caps, allowed_citations=cites, emit=_emit)
+
+    res = asyncio.run(_go())
+    cost = total_spend(writer, *reviewers)
+    status = "[green]accepted[/green]" if res.accepted else f"[yellow]{res.stopped_reason}[/yellow]"
+    ui.console.print(f"  {status} · '{res.title}' · mean {res.review.mean:.2f} · {res.revisions} round(s) · "
+                     f"latex: {res.latex} · ${cost:.4f}")
+    ui.console.print(f"  → {res.paper_path}" + (f"  ·  {res.pdf_path}" if res.pdf_path else ""))
+    summary = (f"'{res.title}' · {vname} · {'accepted' if res.accepted else res.stopped_reason} · "
+               f"mean {res.review.mean:.2f} · latex {res.latex}")
+    artifacts = {"idea": handoff.idea, **res.model_dump()}
+    return summary, artifacts
+
+
+def _build_v2_peers(cfg, live: bool):
+    """Construct the 3 ideation peers (AgentPeer live / StubV2Peer offline) + retrieval."""
+    from research_council.debate.orchestrator_v2 import CODENAMES
+
+    retrieval = build_retrieval(cfg.tools) if live else build_stub_retrieval(cfg.tools)
+    peers: dict = {}
+    for vendor, model in cfg.seats.items():
+        cn = CODENAMES.get(vendor, vendor)
+        if live:
+            from research_council.agents.agent_peer import AgentPeer, agent_model_name
+            peers[cn] = AgentPeer(vendor, cn, agent_model_name(vendor, model), retrieval,
+                                  max_iters=cfg.max_iters, max_tool_calls=cfg.max_tool_calls,
+                                  price_model=model)
+        else:
+            from research_council.agents.stub_agent_peer import StubV2Peer
+            peers[cn] = StubV2Peer(vendor, cn, retrieval)
+    return peers, retrieval
+
+
+def _facilitator_and_answer(cfg, live: bool, tty: bool):
+    """The onboarding facilitator (live only) + a TTY answer callback for its clarifying Qs."""
+    facilitator = answer_fn = None
+    if live:
+        from research_council.agents.agent_peer import agent_model_name
+        from research_council.agents.facilitator import Facilitator
+        facilitator = Facilitator(agent_model_name("anthropic", cfg.facilitator_model),
+                                  price_model=cfg.facilitator_model)
+        if tty:
+            async def answer_fn(q):  # noqa: E306
+                ui.rule("onboarding")
+                return ((await ui.ask_text_async(q.question)) or "").strip()
+    return facilitator, answer_fn
+
+
+def _run_ideation_stage(topic: str, cfg, *, live: bool, tty: bool):
+    """Run one Stage-A ideation (its own per-round gate handles idea refinement when TTY).
+    Returns (winner_candidate | None, run_id)."""
+    from research_council.debate.orchestrator_v2 import run_ideation
+
+    peers, _ = _build_v2_peers(cfg, live)
+    facilitator, answer_fn = _facilitator_and_answer(cfg, live, tty)
+    reviewer = _cli_reviewer if tty else None
+    trace = TraceWriter.new("ideation")
+    rec, candidates = asyncio.run(run_ideation(
+        topic, peers, trace, facilitator=facilitator, answer_fn=answer_fn, reviewer=reviewer,
+        weights=cfg.weights, auto_rounds=1, max_turns=cfg.max_turns,
+        anonymize_on=cfg.anonymize, emit=_stream))
+    by = {c.id: c for c in candidates}
+    winner = by.get(rec.ranked[0]) if rec.ranked else None
+    return winner, trace.run_id
+
+
+def _write_proposal(store, pid: str, winner) -> Path:
+    """Persist the Stage-A research proposal as projects/<id>/proposal.md."""
+    d = store.root / pid
+    d.mkdir(parents=True, exist_ok=True)
+    path = d / "proposal.md"
+    path.write_text(winner.as_proposal_md(), encoding="utf-8")
+    return path
+
+
+def _record_ideation(proj, store, pid: str, winner, run_id):
+    """Record the Stage-A proposal artifact (full proposal dict + proposal.md path)."""
+    from research_council.lifecycle import record_result
+
+    pp = _write_proposal(store, pid, winner)
+    record_result(proj, "ideation", run_id=run_id, summary=winner.title,
+                  artifacts={"idea": winner.model_dump(), "experiment_plan": winner.experiment_plan,
+                             "proposal_path": str(pp)})
+    store.save(proj)
+    ui.console.print(f"  proposal → [cyan]{pp}[/cyan]")
+    return pp
+
+
+def _gate(question: str, go_label: str, redo_label: str, *, tty: bool) -> str:
+    """Conversational gate. Non-TTY auto-proceeds ('go') so the pipeline is scriptable."""
+    if not tty:
+        return "go"
+    choice = ui.ask_select(question, [go_label, redo_label, "✗ stop here"])
+    if choice == go_label:
+        return "go"
+    return "redo" if choice == redo_label else "stop"
+
+
+def _advance_into(proj, nxt, handoff, store, *, live: bool, profile: str, venue):
+    """Run the engine for `nxt` (live) or the stub (offline). Returns (summary, artifacts)."""
+    from research_council.lifecycle import run_stage_stub
+
+    if not live:
+        return run_stage_stub(nxt, handoff)
+    if nxt == "experimentation":
+        return _run_stage_b(handoff, False, profile, out_dir=store.root / proj.id)
+    onboarding = _venue_choice(handoff, venue, live=live)
+    return _run_stage_c(handoff, store.root / proj.id, onboarding, profile)
+
+
+@app.command("run")
+def run_conductor(
+    topic: str = typer.Option(None, "--topic", "-t", help="research question (asked if omitted on a TTY)"),
+    live: bool = typer.Option(False, help="run the real engines (needs keys; Stage B needs Docker)"),
+    profile: str = typer.Option("balanced", help="cap profile for B/C loops: conservative | balanced | thorough"),
+    venue: str = typer.Option(None, help="Stage C venue (else the council recommends + you confirm)"),
+):
+    """Conversational conductor: onboarding → ideation → experimentation → writing, gated by you.
+
+    One command walks the whole lifecycle; at each stage boundary it tells you the outcome and
+    asks whether to go on, redo the stage, or stop — so you answer questions instead of typing a
+    command per stage. Resumable later via `council project approve <id>`."""
+    import datetime
+
+    from research_council.lifecycle import (
+        ProjectStore,
+        approve_and_advance,
+        build_handoff,
+        new_project,
+        record_result,
+    )
+
+    cfg = load_config("ideation")
+    tty = sys.stdin.isatty()
+    if not topic:
+        topic = (ui.ask_text("What's your research question?") if tty else "").strip()
+    if not topic:
+        ui.info("a research question is required (pass --topic on a non-TTY).")
+        raise typer.Exit(1)
+    if tty:
+        _interactive_setup(cfg, live)  # seat models (live) + retrieval tools, then confirm
+
+    stamp = datetime.datetime.now().strftime("%Y%m%d-%H%M%S")
+    pid = f"{_proj_slug(topic)}-{stamp[-6:]}"
+    store = ProjectStore()
+    proj = new_project(topic, pid, created=stamp)
+    store.save(proj)
+    ui.banner(f"Council · {pid}", f"{topic}  ·  {'live' if live else 'offline'}  ·  profile {profile}")
+
+    winner, run_id = _run_ideation_stage(topic, cfg, live=live, tty=tty)
+    if winner is None:
+        ui.console.print("[red]ideation produced no candidate[/red]")
+        raise typer.Exit(1)
+    _record_ideation(proj, store, pid, winner, run_id)
+
+    _PROMPTS = {
+        "ideation": ("Run experiments on this idea?", "▶ run experiments", "↻ redo ideation"),
+        "experimentation": ("Write up the paper?", "▶ write the paper", "↻ re-run experiment"),
+        "writing": ("Finish the project?", "✓ finish", "↻ re-run writing"),
+    }
+    _PRIOR = {"experimentation": "ideation", "writing": "experimentation"}
+
+    try:
+        while True:
+            cur = proj.current
+            ui.rule(f"gate · {cur}")
+            ui.console.print(f"  [bold]{proj.stages[cur].summary}[/bold]")
+            q, go_label, redo_label = _PROMPTS[cur]
+            action = _gate(q, go_label, redo_label, tty=tty)
+
+            if action == "stop":
+                ui.console.print(f"[yellow]paused at {cur}[/yellow] · resume → "
+                                 f"[cyan]council project approve {pid}[/cyan]")
+                break
+
+            if action == "redo":
+                if cur == "ideation":
+                    w, rid = _run_ideation_stage(proj.topic, cfg, live=live, tty=tty)
+                    if w is not None:
+                        _record_ideation(proj, store, pid, w, rid)
+                else:
+                    handoff = build_handoff(proj, _PRIOR[cur])
+                    # reuse the venue already chosen for this project — don't re-ask on a redo
+                    redo_venue = venue or proj.stages[cur].artifacts.get("venue")
+                    summary, artifacts = _advance_into(proj, cur, handoff, store,
+                                                       live=live, profile=profile, venue=redo_venue)
+                    record_result(proj, cur, summary=summary, artifacts=artifacts)
+                store.save(proj)
+                continue
+
+            # go → approve current stage and advance
+            proj, handoff = approve_and_advance(proj)
+            if handoff is None:
+                store.save(proj)
+                ui.console.print("[bold green]project complete 🎉[/bold green]")
+                ui.console.print(f"  artifacts under [cyan]{store.root / pid}[/cyan]")
+                break
+            nxt = proj.current
+            summary, artifacts = _advance_into(proj, nxt, handoff, store,
+                                               live=live, profile=profile, venue=venue)
+            record_result(proj, nxt, summary=summary, artifacts=artifacts)
+            store.save(proj)
+    except KeyboardInterrupt:
+        ui.console.print(f"\n[yellow]paused[/yellow] · resume → council project approve {pid}")
+        raise typer.Abort()
 
 
 @project_app.command("approve")
 def project_approve(
     pid: str = typer.Argument(..., help="project id"),
-    live: bool = typer.Option(False, help="run the real Stage B engine (needs keys + a sandbox)"),
+    live: bool = typer.Option(False, help="run the real next-stage engine (needs keys; B needs a sandbox)"),
     allow_local_sandbox: bool = typer.Option(False, "--allow-local-sandbox",
                                              help="if Docker is absent, run generated code UNISOLATED (unsafe)"),
+    venue: str = typer.Option(None, help="Stage C target venue (icse/fse/ase/neurips/emnlp/iclr/generic)"),
+    profile: str = typer.Option("balanced", help="cap profile for B/C loops: conservative | balanced | thorough"),
 ):
     """Approve the current stage and advance (running the next stage's engine)."""
     from research_council.lifecycle import (
@@ -768,9 +1091,13 @@ def project_approve(
     if handoff is not None:  # advanced to a next stage → run it
         nxt = p.current
         if nxt == "experimentation" and live:
-            summary, artifacts = _run_stage_b(handoff, allow_local_sandbox)  # real Stage B
+            summary, artifacts = _run_stage_b(handoff, allow_local_sandbox, profile,
+                                              out_dir=store.root / pid)  # real Stage B
+        elif nxt == "writing" and live:
+            onboarding = _venue_choice(handoff, venue, live=live)
+            summary, artifacts = _run_stage_c(handoff, store.root / pid, onboarding, profile)  # real Stage C
         else:
-            summary, artifacts = run_stage_stub(nxt, handoff)               # B (offline) / C still stub
+            summary, artifacts = run_stage_stub(nxt, handoff)               # offline → stub
         record_result(p, nxt, summary=summary, artifacts=artifacts)
         ui.console.print(f"[green]approved {cur}[/green] → ▶ [cyan]{nxt}[/cyan]\n  {summary}")
         ui.console.print(f"  next: [cyan]council project approve {pid}[/cyan]")

@@ -34,18 +34,18 @@ C · PAPER WRITING ──────  council CO-AUTHORS from scaffold-paper te
    ▼
 SUBMISSION-READY PAPER</code></pre>
 
-    <h2>Cross-cutting: intake, gates, memory</h2>
+    <h2>Cross-cutting: onboarding, gates, memory</h2>
     <ul>
-      <li><strong>Clarifying-question intake</strong> opens the project <em>and</em> each stage — a dedicated <strong>facilitator agent</strong> (separate from the council, cheap model) asks the human to set constraints <em>before</em> working (e.g. before Ideation: area, success criteria, compute/data limits; before Writing: <strong>target venue</strong> → drives <code>scaffold-paper --class/--venue</code>). <em>(Council-generated questions are a documented alternative — plan/15 #5.)</em></li>
+      <li><strong>Clarifying-question onboarding</strong> opens the project <em>and</em> each stage — a dedicated <strong>facilitator agent</strong> (separate from the council, cheap model) asks the human to set constraints <em>before</em> working (e.g. before Ideation: area, success criteria, compute/data limits; before Writing: <strong>target venue</strong> → drives <code>scaffold-paper --class/--venue</code>). <em>(Council-generated questions are a documented alternative — plan/15 #5.)</em></li>
       <li><strong>Human approval gates</strong> between stages (A→B→C). Plus the within-loop review gate (iterate/amend/conclude/select) from the council loop.</li>
       <li><strong>Memory carries across stages</strong>: Ideation's plan feeds Experimentation; results feed Writing. Two tiers — within-project (trace/notes) + the long-term <a href="8_knowledge-layer.html">LLM-Wiki</a>.</li>
     </ul>
 
     <h2>The stages at a glance</h2>
     <table>
-      <thead><tr><th>Stage</th><th>Council mode</th><th>Key tools</th><th>Artifact out</th><th>Sample intake Qs</th></tr></thead>
+      <thead><tr><th>Stage</th><th>Council mode</th><th>Key tools</th><th>Artifact out</th><th>Sample onboarding Qs</th></tr></thead>
       <tbody>
-        <tr><td><strong>A · Ideation</strong></td><td><strong>Debate</strong> (divergent → best idea; the <a href="12_product-regrounding.html">research→propose→deliberate→judge</a> loop)</td><td>retrieval + wiki (lit review); grounding-verify</td><td>research plan: gap · motivation · hypothesis · experiment plan · lit-review notes</td><td>area? success criteria? known prior work? rough venue/timeline? constraints?</td></tr>
+        <tr><td><strong>A · Ideation</strong></td><td><strong>Debate</strong> (divergent → best idea; the <a href="12_product-regrounding.html">research→propose→deliberate→judge</a> loop)</td><td>retrieval + wiki (lit review); grounding-verify</td><td><strong>research proposal</strong> (<code>proposal.md</code>): title · problem statement · motivation · hypothesis · proposed method · step-by-step experiment plan · dataset/metrics · fallback plan — every claim cited/evidenced (<a href="20_proposal-and-evidence.html">20</a>)</td><td>area? success criteria? known prior work? rough venue/timeline? constraints?</td></tr>
         <tr><td><strong>B · Experimentation</strong></td><td><strong>Collaborate + verify</strong> (cooperate to a goal; critique → <em>code review</em>, judge → <em>does it run &amp; is it sound</em>)</td><td>sandbox / code-exec · repo · test runner · data tools</td><td>code repo · datasets · results · figures · logs</td><td>compute/budget? datasets? language/stack? baselines? metrics? fallback tolerance?</td></tr>
         <tr><td><strong>C · Writing</strong></td><td><strong>Co-author + reviewer-critique</strong> (cooperate to draft; critique vs the <em>venue rubric</em>)</td><td><code>scaffold-paper</code> · figure plotting · references/citations · venue rubric</td><td>LaTeX paper project (submittable)</td><td><strong>target venue?</strong> page limit? deadline? authors? emphasis/story?</td></tr>
       </tbody>
@@ -61,7 +61,7 @@ SUBMISSION-READY PAPER</code></pre>
     <p>Starts by asking the <strong>target venue</strong>, then runs <code>scaffold-paper.sh --class &lt;acmart|ieeetran|elsarticle|article&gt; --venue …</code> to lay down the LaTeX project. Peers co-author the sections (incl. figure plots from Stage B results), then switch to <strong>reviewer mode</strong>: critique the draft against that venue's acceptance criteria (novelty/soundness/evaluation/clarity/threats) and iterate until submission-ready.</p>
 
     <h2>The generalization (why one engine fits all three)</h2>
-    <p>A <strong>stage</strong> = <code>{ intake questions, council-mode, tools, target artifact, approval gate }</code>. The council primitives — research · propose · deliberate · judge — are <strong>re-skinned per mode</strong>:</p>
+    <p>A <strong>stage</strong> = <code>{ onboarding questions, council-mode, tools, target artifact, approval gate }</code>. The council primitives — research · propose · deliberate · judge — are <strong>re-skinned per mode</strong>:</p>
     <table>
       <thead><tr><th>Primitive</th><th>Ideation</th><th>Experimentation</th><th>Writing</th></tr></thead>
       <tbody>

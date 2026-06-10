@@ -1,11 +1,11 @@
-"""Intake — answer collection (scripted, deterministic) + facilitator smoke (TestModel)."""
+"""Onboarding — answer collection (scripted, deterministic) + facilitator smoke (TestModel)."""
 
 from __future__ import annotations
 
 import pytest
 
-from research_council.agents.facilitator import render_constraints, run_intake
-from research_council.store.models import Constraints, IntakeQuestion
+from research_council.agents.facilitator import render_constraints, run_onboarding
+from research_council.store.models import Constraints, OnboardingQuestion
 
 
 class _FakeFacilitator:
@@ -16,17 +16,17 @@ class _FakeFacilitator:
         return list(self._questions)
 
 
-async def test_run_intake_collects_answers():
+async def test_run_onboarding_collects_answers():
     fac = _FakeFacilitator([
-        IntakeQuestion(question="What is the research area?"),
-        IntakeQuestion(question="What counts as success?"),
-        IntakeQuestion(question="(skip me)"),
+        OnboardingQuestion(question="What is the research area?"),
+        OnboardingQuestion(question="What counts as success?"),
+        OnboardingQuestion(question="(skip me)"),
     ])
 
-    async def answer_fn(q: IntakeQuestion) -> str:
+    async def answer_fn(q: OnboardingQuestion) -> str:
         return "" if q.question.startswith("(skip") else f"answer to {q.question}"
 
-    c = await run_intake(fac, "ideation", "LLM code review", answer_fn)
+    c = await run_onboarding(fac, "ideation", "LLM code review", answer_fn)
     assert isinstance(c, Constraints) and c.stage == "ideation"
     assert len(c.answers) == 2  # the skipped one is dropped
     assert c.answers["What is the research area?"] == "answer to What is the research area?"
