@@ -4,7 +4,7 @@
 
 <p align="center">
   <img src="https://img.shields.io/badge/Python-3.14-3776AB?style=flat&logo=python&logoColor=white" alt="Python 3.14">
-  <a href="https://github.com/wannita901/research-council/actions/workflows/tests.yml"><img src="https://img.shields.io/github/actions/workflow/status/wannita901/research-council/tests.yml?style=flat&logo=github&label=tests" alt="tests"></a>
+  <a href="https://github.com/wannita901/research-council/actions/workflows/tests.yml"><img src="https://github.com/wannita901/research-council/actions/workflows/tests.yml/badge.svg" alt="tests"></a>
   <img src="https://img.shields.io/badge/agents-PydanticAI-E92063?style=flat&logo=pydantic&logoColor=white" alt="PydanticAI">
   <img src="https://img.shields.io/badge/CLI-Typer-009485?style=flat&logo=typer&logoColor=white" alt="Typer">
   <img src="https://img.shields.io/badge/sandbox-Docker-2496ED?style=flat&logo=docker&logoColor=white" alt="Docker">
