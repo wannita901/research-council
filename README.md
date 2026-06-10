@@ -1,94 +1,135 @@
-# research-council
+<p align="center">
+  <img src="assets/banner.svg" alt="research-council — From question to paper, an autonomous multi-agent research council for AI4SE research" width="100%">
+</p>
 
-Heterogeneous **cross-vendor** multi-agent system for the **AI4SE research lifecycle**, grounded in **executable verification**. Three peer agents (one per vendor: OpenAI · Claude · Gemini) carry a project through three human-gated stages — **ideation → experimentation → writing** — debating a full research proposal, then running & reviewing the experiment in a sandbox, then co-authoring and reviewing the paper. You confirm at every gate.
+<p align="center">
+  <img src="https://img.shields.io/badge/Python-3.14-3b6ea5?style=flat-square&logo=python&logoColor=white" alt="Python 3.14">
+  <img src="https://img.shields.io/badge/tests-123%20passing-3b6ea5?style=flat-square" alt="tests: 123 passing">
+  <img src="https://img.shields.io/badge/agents-PydanticAI-3b6ea5?style=flat-square" alt="PydanticAI">
+  <img src="https://img.shields.io/badge/CLI-Typer%20%2B%20rich-3b6ea5?style=flat-square" alt="Typer + rich">
+  <img src="https://img.shields.io/badge/sandbox-Docker-3b6ea5?style=flat-square&logo=docker&logoColor=white" alt="Docker sandbox">
+  <img src="https://img.shields.io/badge/toolchain-mise-3b6ea5?style=flat-square" alt="mise">
+</p>
 
-Full design lives in [`plan/`](plan/1_sota-gap-analysis.html) (open in a browser). This repo is the implementation.
+**research-council** runs three rival frontier models — **OpenAI · Anthropic · Google** — as a single council that carries a research idea **from question to paper**. Work flows through three human-gated stages, each a real engine, not a prompt:
 
-## Status — full A→B→C lifecycle with real engines (offline-runnable)
+**① Ideation** — the council debates a full research proposal · **② Experimentation** — it implements & runs the experiments in a sandbox · **③ Writing** — it drafts, peer-reviews against a venue rubric, and compiles the paper.
 
-All three stages have real engines and also run **fully offline** via deterministic stubs (no API keys):
+It runs **fully offline** with deterministic stubs (no API keys) for a lifecycle dry-run, or **live** with your own keys for real results.
 
-- **A · Ideation** — onboarding → research → propose → deliberate → judge → human gate, with per-round memory. The council argues over a **full research proposal** (problem · motivation · hypothesis · method · step-by-step plan · **research questions** · dataset/metrics · fallback) and every claim must cite a reference or evidence.
-- **B · Experimentation** — **one council loop per research question**: a peer implements, two cross-vendor peers review the code *and* the result (with sandbox verification probes); iterate until **feasible (ran + emitted a METRIC) and approved**, in a Docker sandbox. Results aggregate to a `results.csv`.
-- **C · Writing** — a council loop: a lead drafts, two PC reviewers score against a **venue rubric** and file change-requests; revise until accepted; then a **LaTeX build-verify-fix** export.
-
-Cross-vendor live providers, real retrieval (OpenAlex / arXiv / Semantic Scholar / GitHub), the LLM-wiki librarian, and a FastAPI backend are all built. Designs in [`plan/`](plan/1_sota-gap-analysis.html) (newest: [18](plan/18_stage-bc-loops.html) loops · [19](plan/19_conversational-conductor.html) conductor · [20](plan/20_proposal-and-evidence.html) proposal + evidence).
-
-## Setup (once)
-
-[mise](https://mise.jdx.dev/) manages the toolchain, the `.venv`, env vars, and tasks — no `.env`.
-
-```bash
-cp mise.local.toml.example mise.local.toml   # fill in API keys (only needed for --live)
-mise trust && mise install                   # install python 3.14 + auto-create .venv
-mise run deps                                # install the package + dev/providers/service deps
-mise run test                                # 114 tests, fully offline
-```
-
-Put `council` on your PATH so you don't prefix every command (otherwise use `mise exec -- council …`):
+## Quick Start (Dry-run)
 
 ```bash
-eval "$(mise activate zsh)"                  # add to ~/.zshrc; then `council …` works in this repo
+# 1 · install the toolchain, venv, and deps (once)
+mise trust && mise install && mise run deps
+
+# 2 · dry-run the whole lifecycle OFFLINE — no API keys, no Docker (stub council)
+mise exec -- council run --topic "Do LLM agents catch security bugs better than SAST?"
+#   → walks ideation → experimentation → writing, pausing at each gate for your go/redo/stop
 ```
 
-## Run it — the whole lifecycle in one conversation
+That exercises the full state machine with stub agents so you can see the flow end-to-end. For real proposals, experiments, and papers, **go live** (next section).
 
-`council run` is the conductor: it walks onboarding → ideation → experimentation → writing and **pauses at each stage to ask you** (go / redo / stop) — you answer questions instead of typing a command per stage.
+> Tip: `eval "$(mise activate zsh)"` once (e.g. in `~/.zshrc`) and you can drop the `mise exec --` prefix — just `council …`.
+
+## Install & Setup
+
+[mise](https://mise.jdx.dev/) manages the Python toolchain, the `.venv`, env vars, and tasks.
 
 ```bash
-council run                                  # offline: stub council + stub B/C, walks A→B→C end to end
-council run --live --profile balanced        # real engines (see prerequisites below)
+mise trust && mise install     # Python 3.14 + auto-created .venv
+mise run deps                  # install the package + dev/providers/service extras
+mise run test                  # 123 offline tests
 ```
 
-At each gate it shows the outcome and asks what to do next; `stop` saves and you can resume later (below).
+**To run live** (`--live`), you need:
 
-### Prerequisites for `--live`
+| Requirement | Why | Check |
+| --- | --- | --- |
+| API keys (OpenAI · Anthropic · Google) | the three council seats | `cp mise.local.toml.example mise.local.toml`, add keys, then `council check` |
+| **Docker** running | Stage B runs generated code in an isolated sandbox (`--network none`) | `docker info` |
+| `tectonic` or `latexmk` *(optional)* | Stage C compiles `paper.pdf` (else it emits `paper.tex`) | `tectonic --version` |
 
-1. **API keys** in `mise.local.toml` — verify with `council check` (pings each vendor, ~cents).
-2. **Docker** running — Stage B runs generated code in an isolated sandbox (`--network none`). Without it, pass `--allow-local-sandbox` to run **unisolated** (unsafe; opt-in only).
-3. **tectonic** or **latexmk** (optional) — Stage C compiles `paper.pdf`; without a TeX engine it still emits `paper.tex`.
+Optional: `mise run build-image` builds a sandbox image with the scientific stack (numpy/pandas/scipy/scikit-learn) so experiments aren't limited to the standard library.
 
-`--profile conservative|balanced|thorough` bounds the B/C loops (iterations · approval bar · USD budget). `--venue icse|fse|ase|neurips|emnlp|iclr|generic` sets the paper's target (omit and the council recommends one for you to confirm).
+## How to run
 
-## Run it — stage by stage (scriptable / resumable)
-
-The conductor sits on these; use them directly to script, resume, or re-run a single stage:
+**One conversation (recommended)** — the conductor walks all three stages and asks you at each gate:
 
 ```bash
-council project new --topic "Do LLM code-review agents catch security bugs better than SAST?" --live
-council project status <id>                          # where it is + the selected proposal
-council project approve <id> --live --profile balanced          # → runs Stage B
-council project approve <id> --live --venue icse --profile balanced   # → runs Stage C
-council project approve <id>                         # → marks the project complete
+council run                              # offline dry-run
+council run --live --profile balanced    # real engines
 ```
 
-Drop `--live` anywhere to walk the lifecycle with stubs (no keys/Docker needed).
+**Or drive it stage by stage** (scriptable / resumable — re-running a stage *improves* its existing artifacts rather than rebuilding):
 
-### Outputs
-
-```
-projects/<id>/project.json         # lifecycle state + every stage's artifacts
-projects/<id>/proposal.md          # Stage A — research proposal (incl. research questions)
-projects/<id>/experiment/          # Stage B — one council loop per RQ
-  ├── results.csv                  #   aggregated: rq_id, question, metric, value, feasible, approved, …
-  └── rq1/, rq2/, …                #   per RQ: experiment.py · log.txt · reviews.md · question.md
-projects/<id>/paper/paper.md       # Stage C — paper (+ sections/, review.md, assets/, paper.tex/pdf)
-runs/<id>/trace.jsonl              # full event trace for every run
+```bash
+council project new    --topic "…" --live           # → Stage A (ideation)
+council project status <id>                          # where it is + the proposal
+council project approve <id> --live                  # → runs Stage B
+council project approve <id> --live --venue icse     # → runs Stage C
+council project approve <id>                          # → marks the project complete
 ```
 
-So everything for a project — proposal, code, results, reviews, and paper — lives under `projects/<id>/`.
+| Flag | Meaning |
+| --- | --- |
+| `--live` | use real models (omit for offline stubs — no keys/Docker) |
+| `--profile` | `conservative` \| `balanced` \| `thorough` (caps for all stages) |
+| `--venue` | `icse` · `fse` · `ase` · `neurips` · `emnlp` · `iclr` · `generic` (else the council recommends one) |
+| `--allow-local-sandbox` | run generated code **unsandboxed** if Docker is absent (unsafe; opt-in) |
 
-The CLI binary is **`council`** (`council run`, `council ideate`, `council debate`, `council check`); `mise run <task>` invokes it inside the managed env. Secrets come from `mise.local.toml` (gitignored), so run via `mise run`/`mise exec` or after `mise activate` — bare `council check` outside mise reports "key not set".
+## How it works
 
-## Layout
+A project moves through three stages; **you approve each transition**. The same council (codenamed Aiden·Cathy·Julien, one per vendor) plays a different role per stage.
 
 ```
-research_council/   providers/ retrieval/ librarian/ agents/ debate/ verify/ obs/ store/ config/ cli.py
-  config/venues/     icse · fse · ase · neurips · emnlp · iclr · generic (rubrics)
-knowledge/          raw/external/ raw/internal/ wiki/ CLAUDE.md    # the LLM-wiki data
-projects/           per-project lifecycle state + artifacts (proposal.md, paper/) (gitignored)
-runs/               per-run JSONL traces (gitignored)
-plan/               design docs (HTML; open in a browser)
+question ─▶ ① IDEATION ──▶ ② EXPERIMENTATION ──▶ ③ WRITING ─▶ paper
+            debate a          one sandboxed loop      draft · PC-review
+            proposal          per research question   vs venue rubric · revise
+              │ gate              │ gate                  │ gate
+              ▼                   ▼                        ▼
+         proposal.md       experiment/results.csv      paper/paper.pdf
 ```
 
-Canonical references: lifecycle → `plan/13`; Stage B/C loops → `plan/18`; conductor → `plan/19`; proposal + evidence rule → `plan/20`; repo layout → `plan/2`; data contracts → `plan/6`; knowledge/librarian → `plan/8`,`plan/9`.
+| Stage | The council… | Output |
+| --- | --- | --- |
+| **① Ideation** | research independently → propose a full proposal (problem · hypothesis · method · plan · RQs · metrics) → debate & critique → score anonymously | `proposal.md` |
+| **② Experimentation** | one loop **per research question**: a peer implements, two cross-vendor peers review the code *and* result (with sandbox probes) → revise until **feasible + approved** | `experiment/results.csv` + per-RQ code/logs/reviews |
+| **③ Writing** | a lead drafts → two reviewers score against the **venue rubric** + file change-requests → revise → coherence pass → **LaTeX build-verify-fix** | `paper/paper.md` (+ `paper.pdf`) |
+
+Every claim must cite a reference or show experiment evidence. Offline runs use stub peers; `--live` uses real agentic peers with retrieval (OpenAlex / arXiv / Semantic Scholar / GitHub) and a grounded LLM-wiki.
+
+## Configuration
+
+Everything is tuned in **`mise.toml`**. Set the models per seat (`RC_OPENAI_MODEL`, `RC_ANTHROPIC_MODEL`, `RC_GEMINI_MODEL`, `RC_FACILITATOR_MODEL`) and pick a cap profile with **`RC_PROFILE`**, which scales all three stages:
+
+| `RC_PROFILE` | Ideation (rounds · msgs/peer) | Stage B (iters · K · $/RQ) | Stage C (revisions · accept · $) |
+| --- | --- | --- | --- |
+| `conservative` | 2 · 2 | 2 · 1 · $0.60 | 2 · 0.65 · $0.60 |
+| **`balanced`** (default) | 4 · 3 | 3 · 2 · $1.50 | 3 · 0.70 · $1.50 |
+| `thorough` | 6 · 4 | 5 · 2 · $4.00 | 5 · 0.78 · $4.00 |
+
+Any individual cap is overridable — uncomment a `RC_MAX_*` / `RC_STAGEB_*` / `RC_STAGEC_*` line in `mise.toml`. Precedence: **per-field env > profile > default**.
+
+## Outputs
+
+Everything for a project lives under `projects/<id>/`:
+
+```
+projects/<id>/
+├── project.json        # lifecycle state + every stage's artifacts
+├── proposal.md         # ① the research proposal (problem · hypothesis · RQs · …)
+├── experiment/         # ② one council loop per RQ
+│   ├── results.csv     #    aggregated: rq · metric · value · feasible · approved · …
+│   └── rq1/ rq2/ …     #    per RQ: experiment.py · log.txt · reviews.md
+└── paper/              # ③ paper.md · sections/ · review.md · paper.tex/pdf
+runs/<id>/trace.jsonl   # full event trace for every run
+```
+
+## Design & status
+
+The full A→B→C lifecycle has **real engines** end-to-end and also runs offline via stubs. A FastAPI backend exists for Stage A; the conductor logic is the shared core a web UI will sit on. Live providers, real retrieval, the LLM-wiki librarian, and Docker-sandboxed experiments are all built.
+
+Design docs live in [`plan/`](plan/1_sota-gap-analysis.html) (HTML — open in a browser). Recent: [13](plan/13_research-lifecycle.html) lifecycle · [18](plan/18_stage-bc-loops.html) Stage B/C loops · [19](plan/19_conversational-conductor.html) conductor · [20](plan/20_proposal-and-evidence.html) proposal + evidence · [21](plan/21_rq-driven-experiments.html) RQ-driven experiments · [23](plan/23_deliberation-balance.html) deliberation balance + caps.
+
+*Not yet published to PyPI; no CI. Local development via `mise`.*
