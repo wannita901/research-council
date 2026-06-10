@@ -7,6 +7,7 @@ gate at each round when stdin is a TTY: proceed / accept <id> / comment → re-r
 from __future__ import annotations
 
 import asyncio
+import os
 import re
 import sys
 from pathlib import Path
@@ -106,6 +107,23 @@ def _select_models(cfg: RunConfig, vendors: list[str], choices_map: dict[str, li
         i += 1
 
 
+# Retrieval providers that need an API key/token; flagged in the picker so you don't enable a
+# silently-dead source (HybridRetrieval isolates failures, so a keyless provider just returns
+# nothing). wiki/openalex/arxiv work with no key.
+_TOOL_KEY_HINT = {
+    "github": ("GITHUB_TOKEN", "needs GITHUB_TOKEN"),
+    "semanticscholar": (
+        "SEMANTIC_SCHOLAR_API_KEY",
+        "rate-limited without SEMANTIC_SCHOLAR_API_KEY",
+    ),
+}
+
+
+def _tool_label(t: str) -> str:
+    env, hint = _TOOL_KEY_HINT.get(t, ("", ""))
+    return f"{t}  ⚠ {hint}" if env and not os.getenv(env) else t
+
+
 def _select_tools(cfg: RunConfig) -> None:
     import questionary
 
@@ -114,7 +132,10 @@ def _select_tools(cfg: RunConfig) -> None:
     ui.rule("② Retrieval tools")
     picks = ui.ask_checkbox(
         "tools the council may use",
-        choices=[questionary.Choice(t, checked=(t in cfg.tools)) for t in real_tools()],
+        choices=[
+            questionary.Choice(_tool_label(t), value=t, checked=(t in cfg.tools))
+            for t in real_tools()
+        ],
     )
     if picks is None:
         raise typer.Abort()
@@ -1123,16 +1144,27 @@ def _facilitator_and_answer(cfg, live: bool, tty: bool):
     return facilitator, answer_fn
 
 
-def _run_ideation_stage(topic: str, cfg, *, live: bool, tty: bool, prior_context: str = ""):
+def _run_ideation_stage(
+    topic: str, cfg, *, live: bool, tty: bool, prior_context: str = "", harvest: bool = True
+):
     """Run one Stage-A ideation (its own per-round gate handles idea refinement when TTY).
     `prior_context` seeds a 'redo' with the previous proposal so the council IMPROVES it.
-    Returns (winner_candidate | None, run_id)."""
+    When `harvest` (live only), each round's findings + cited papers are ingested into the
+    LLM-wiki at round end, so the NEXT round's research can read them. Returns (winner, run_id)."""
     from research_council.debate.orchestrator_v2 import run_ideation
 
-    peers, _ = _build_v2_peers(cfg, live)
+    peers, retrieval = _build_v2_peers(cfg, live)
     facilitator, answer_fn = _facilitator_and_answer(cfg, live, tty)
     reviewer = _cli_reviewer if tty else None
     trace = TraceWriter.new("ideation")
+
+    on_round_end = None
+    if live and harvest:
+        from research_council.librarian.ingest import Ingestor
+
+        librarian, _ = _build_librarian()
+        on_round_end = _round_harvester(trace, retrieval, topic, librarian, Ingestor(librarian))
+
     rec, candidates = asyncio.run(
         run_ideation(
             topic,
@@ -1146,6 +1178,7 @@ def _run_ideation_stage(topic: str, cfg, *, live: bool, tty: bool, prior_context
             max_turns=cfg.max_turns,
             max_msgs_per_peer=cfg.max_msgs_per_peer,
             prior_context=prior_context,
+            on_round_end=on_round_end,
             anonymize_on=cfg.anonymize,
             emit=_stream,
         )
@@ -1245,6 +1278,9 @@ def run_conductor(
     resume: str = typer.Option(
         None, "--resume", help="resume an existing project's gate loop by id (skip new ideation)"
     ),
+    harvest: bool = typer.Option(
+        True, help="(live) ingest each ideation round's findings into the LLM-wiki at round end"
+    ),
 ):
     """Conversational conductor: onboarding → ideation → experimentation → writing, gated by you.
 
@@ -1304,7 +1340,7 @@ def run_conductor(
             f"Council · {pid}", f"{topic}  ·  {'live' if live else 'offline'}  ·  profile {profile}"
         )
 
-        winner, run_id = _run_ideation_stage(topic, cfg, live=live, tty=tty)
+        winner, run_id = _run_ideation_stage(topic, cfg, live=live, tty=tty, harvest=harvest)
         if winner is None:
             ui.console.print("[red]ideation produced no candidate[/red]")
             raise typer.Exit(1)
@@ -1336,7 +1372,12 @@ def run_conductor(
                 if cur == "ideation":
                     prior_ctx = _ideation_redo_context(proj, tty=tty)
                     w, rid = _run_ideation_stage(
-                        proj.topic, cfg, live=live, tty=tty, prior_context=prior_ctx
+                        proj.topic,
+                        cfg,
+                        live=live,
+                        tty=tty,
+                        prior_context=prior_ctx,
+                        harvest=harvest,
                     )
                     if w is not None:
                         _record_ideation(proj, store, pid, w, rid)
