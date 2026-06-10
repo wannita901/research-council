@@ -53,7 +53,9 @@ def _stream(ev: Event) -> None:
         tag = f"→@{addr}" if addr else ""
         extra = f"{p.get('from_codename')} [{p.get('kind')}{tag}] {p.get('content', '')[:60]}"
     elif ev.kind == "tool_call":
-        extra = f"{p.get('codename')} ⟶ {p.get('tool')}({p.get('args', '')[:60]})"
+        rc = p.get("result_chars")
+        size = "" if rc is None else (" → ∅ empty" if p.get("empty") else f" → {rc}c")
+        extra = f"{p.get('codename')} ⟶ {p.get('tool')}({p.get('args', '')[:60]}){size}"
     elif ev.kind == "setup":
         extra = f"seats={p.get('seats')} tools={p.get('tools')} facilitator={p.get('facilitator_model')}"
     elif ev.kind == "recommendation":
@@ -1048,6 +1050,13 @@ def _run_stage_c(handoff, out_dir, onboarding, profile: str = "balanced"):
     def _emit(ph, k, pl):
         if k == "draft":
             extra = f"'{pl.get('title', '')}' · {pl.get('citations', 0)} cites"
+        elif k == "reviewer":
+            crs = pl.get("change_requests", [])
+            top = f" · “{crs[0]['msg'][:54]}”" if crs else ""
+            extra = (
+                f"  ↳ {pl['vendor']} · mean {pl['mean']:.2f} · {pl.get('verdict', '')} · "
+                f"{len(crs)} change-req(s){top}"
+            )
         elif k == "review":
             extra = (
                 f"round {pl['round']} · mean {pl['mean']:.2f} · {pl['change_requests']} change-reqs"

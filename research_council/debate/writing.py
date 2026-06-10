@@ -311,6 +311,21 @@ async def run_writing(
         merged, mean, blocking = _merge_reviews(reviews, caps.block_severities)
         score_history.append(mean)
         if emit:
+            for rv in reviews:  # per-reviewer detail: who scored what + what they demand
+                emit(
+                    "writing",
+                    "reviewer",
+                    {
+                        "round": rnd,
+                        "vendor": rv.reviewer_vendor,
+                        "mean": rv.mean,
+                        "verdict": rv.verdict,
+                        "change_requests": [
+                            {"section": c.section, "severity": c.severity, "msg": c.msg}
+                            for c in rv.change_requests
+                        ],
+                    },
+                )
             emit(
                 "writing",
                 "review",

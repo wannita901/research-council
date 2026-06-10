@@ -10,8 +10,15 @@ Libraries:
 
 Hard rules:
 - Tiny/synthetic or sub-sampled data is fine and EXPECTED — this is the smallest runnable step
-  that demonstrates feasibility, not the full study. Do NOT fabricate the result you want:
-  never hard-code the answer into synthetic data; measure it honestly.
+  that demonstrates feasibility, not the full study.
+- SOUNDNESS (critical — reviewers block on this): do NOT bake the hypothesis into the data and
+  then "discover" it. Never generate synthetic data from the very pattern you claim to find
+  (e.g. hard-coding an inverted-U and then fitting one). Instead do ONE of:
+  (a) label the run honestly as a *pipeline sanity check* — it validates the analysis/plumbing,
+      not the scientific claim — and print a metric that reflects only that; or
+  (b) generate NEUTRAL data plus counterexample regimes (monotone, flat, noisy) and show your
+      method DISTINGUISHES them, so a positive result is informative.
+  Match the printed METRIC to what the step actually tests; don't overclaim.
 - Be robust: the script must exit 0.
 - The LAST thing the script prints must be exactly one line: `METRIC <name>=<value>`
   (e.g. `METRIC f1=0.62`) — this is how feasibility is verified.

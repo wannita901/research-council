@@ -11,7 +11,7 @@ from dataclasses import dataclass
 
 from pydantic_ai import Agent, RunContext
 from pydantic_ai.exceptions import UsageLimitExceeded
-from pydantic_ai.messages import ModelResponse, ToolCallPart
+from pydantic_ai.messages import ModelResponse, ToolCallPart, ToolReturnPart
 from pydantic_ai.usage import UsageLimits
 
 from research_council import prompts
@@ -35,7 +35,14 @@ from research_council.tools.verify import VerifyTool
 
 def _extract_tool_calls(msgs: list) -> list[dict]:
     """Pull every tool call the agent made out of its message history, as
-    {tool, args} records — so the trace shows what each peer actually searched/verified."""
+    {tool, args, result_chars, empty} records — so the trace shows what each peer searched/
+    verified AND whether the call returned anything (result size + an empty flag)."""
+    returns: dict[str, str] = {}  # tool_call_id -> result text
+    for m in msgs:
+        for part in getattr(m, "parts", []):
+            if isinstance(part, ToolReturnPart):
+                c = part.content
+                returns[getattr(part, "tool_call_id", "")] = c if isinstance(c, str) else str(c)
     out: list[dict] = []
     for m in msgs:
         for part in getattr(m, "parts", []):
@@ -45,7 +52,16 @@ def _extract_tool_calls(msgs: list) -> list[dict]:
                     arg = d.get("query") or d.get("claim") or (str(d) if d else "")
                 except Exception:
                     arg = str(getattr(part, "args", ""))
-                out.append({"tool": getattr(part, "tool_name", "?"), "args": str(arg)[:200]})
+                res = returns.get(getattr(part, "tool_call_id", ""), "")
+                empty = (not res.strip()) or "(no results)" in res or "grounded=False" in res
+                out.append(
+                    {
+                        "tool": getattr(part, "tool_name", "?"),
+                        "args": str(arg)[:200],
+                        "result_chars": len(res),
+                        "empty": empty,
+                    }
+                )
     return out
 
 
