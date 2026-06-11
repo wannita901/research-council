@@ -64,6 +64,31 @@ def test_run_resume_unknown_id_errors(tmp_path, monkeypatch):
     assert result.exit_code != 0 and "no project" in result.output
 
 
+def test_run_resume_from_stage_rewinds_and_continues(tmp_path, monkeypatch):
+    monkeypatch.setenv("RC_PROJECTS_DIR", str(tmp_path))
+    monkeypatch.chdir(tmp_path)
+    from research_council.lifecycle import approve_and_advance, new_project, record_result
+    from research_council.store.models import STAGES
+
+    store = ProjectStore()
+    p = new_project("toy topic", "proj-z", created="t")
+    for s in STAGES:  # drive it to complete
+        record_result(p, s, summary=f"{s} done", artifacts={"idea": {"title": "X"}})
+        approve_and_advance(p)
+    store.save(p)
+
+    # rewind to experimentation and continue forward (offline → stubs → completes again)
+    result = CliRunner().invoke(app, ["run", "--resume", "proj-z", "--from", "experimentation"])
+    assert result.exit_code == 0, result.output
+    assert "from experimentation" in result.output and is_complete(store.load("proj-z"))
+
+
+def test_run_from_without_resume_errors(tmp_path, monkeypatch):
+    monkeypatch.setenv("RC_PROJECTS_DIR", str(tmp_path))
+    result = CliRunner().invoke(app, ["run", "--topic", "x", "--from", "experimentation"])
+    assert result.exit_code != 0 and "--from requires --resume" in result.output
+
+
 def test_ideation_redo_context_seeds_prior_proposal(tmp_path, monkeypatch):
     monkeypatch.setenv("RC_PROJECTS_DIR", str(tmp_path))
     from research_council.cli import _ideation_redo_context

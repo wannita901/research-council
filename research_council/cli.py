@@ -1287,6 +1287,12 @@ def run_conductor(
     resume: str = typer.Option(
         None, "--resume", help="resume an existing project's gate loop by id (skip new ideation)"
     ),
+    from_stage: str = typer.Option(
+        None,
+        "--from",
+        help="with --resume: rewind to an earlier stage (ideation|experimentation|writing) and "
+        "continue from its existing artifacts",
+    ),
     harvest: bool = typer.Option(
         True, help="(live) ingest each ideation round's findings into the LLM-wiki at round end"
     ),
@@ -1306,6 +1312,7 @@ def run_conductor(
         is_complete,
         new_project,
         record_result,
+        rewind_to,
     )
 
     profile = resolve_profile(profile)
@@ -1313,14 +1320,25 @@ def run_conductor(
     tty = sys.stdin.isatty()
     store = ProjectStore()
 
+    if from_stage and not resume:
+        ui.info("--from requires --resume <id> (it rewinds an existing project).")
+        raise typer.Exit(1)
+
     if resume:
         # re-enter the gate loop on an existing project — no new ideation
         if not store.exists(resume):
             ui.info(f"no project {resume!r} to resume.")
             raise typer.Exit(1)
         proj, pid = store.load(resume), resume
+        if from_stage:  # rewind to an earlier stage; its artifacts become the continue-point
+            try:
+                rewind_to(proj, from_stage)
+            except ValueError as e:
+                ui.info(str(e))
+                raise typer.Exit(1) from None
+            store.save(proj)
         ui.banner(
-            f"Council · {pid} (resume)",
+            f"Council · {pid} (resume{' · from ' + from_stage if from_stage else ''})",
             f"{proj.topic}  ·  {'live' if live else 'offline'}  ·  profile {profile}",
         )
         if is_complete(proj):

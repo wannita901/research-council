@@ -98,6 +98,28 @@ def is_complete(project: Project) -> bool:
     return all(s.status == "approved" for s in project.stages.values())
 
 
+def rewind_to(project: Project, stage: str) -> Project:
+    """Rewind a project to an earlier stage to re-run/improve it (e.g. `--from experimentation`).
+    The target re-enters its gate (awaiting_approval, keeping its on-disk artifacts so the engine
+    CONTINUES rather than rebuilds); later stages reset to pending so the project re-runs forward.
+    Earlier stages stay approved (their artifacts are the input). Raises if the rewind is invalid."""
+    if stage not in STAGES:
+        raise ValueError(f"unknown stage {stage!r}; choose from {STAGES}")
+    i = STAGES.index(stage)
+    if i > 0 and project.stages[STAGES[i - 1]].status != "approved":
+        raise ValueError(f"cannot rewind to {stage!r}: {STAGES[i - 1]!r} has not been approved yet")
+    if not project.stages[stage].artifacts and project.stages[stage].status == "pending":
+        raise ValueError(f"cannot rewind to {stage!r}: it has not run yet (nothing to continue)")
+    project.current = stage
+    for j, name in enumerate(STAGES):
+        if j == i:
+            project.stages[name].status = "awaiting_approval"  # re-enter this gate
+        elif j > i:
+            project.stages[name].status = "pending"  # re-run forward (artifacts stay on disk)
+    project.log.append(f"rewound to {stage}")
+    return project
+
+
 def run_stage_stub(stage: str, handoff: StageHandoff) -> tuple[str, dict]:
     """Stages B and C are not implemented yet (Tier 3). Carry the handoff forward and
     report what each WOULD do, so the lifecycle is walkable. Returns (summary, artifacts)."""

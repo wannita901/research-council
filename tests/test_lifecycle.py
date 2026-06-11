@@ -12,9 +12,40 @@ from research_council.lifecycle import (
     new_project,
     next_stage,
     record_result,
+    rewind_to,
     run_stage_stub,
 )
 from research_council.store.models import STAGES
+
+
+def _completed_project():
+    p = new_project("t", "p")
+    for s in STAGES:
+        record_result(p, s, summary=f"{s} done", artifacts={"idea": {"title": "X"}})
+        approve_and_advance(p)
+    return p
+
+
+def test_rewind_to_resets_target_and_later_stages():
+    p = _completed_project()
+    assert is_complete(p)
+    rewind_to(p, "experimentation")
+    assert p.current == "experimentation"
+    assert p.stages["ideation"].status == "approved"  # earlier stage kept
+    assert p.stages["experimentation"].status == "awaiting_approval"  # re-enter its gate
+    assert p.stages["writing"].status == "pending"  # later stage reset
+    assert p.stages["experimentation"].artifacts  # artifacts kept (continue, not rebuild)
+
+
+def test_rewind_rejects_unreached_or_unapproved_prior():
+    p = new_project("t", "p")
+    record_result(
+        p, "ideation", summary="i", artifacts={"idea": {}}
+    )  # ideation awaiting, not approved
+    with pytest.raises(ValueError):  # experimentation's prior (ideation) not approved yet
+        rewind_to(p, "experimentation")
+    with pytest.raises(ValueError):  # unknown stage
+        rewind_to(p, "nope")
 
 
 def test_new_project_initial_state():
