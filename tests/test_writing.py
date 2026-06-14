@@ -231,6 +231,36 @@ async def test_embeds_real_experiment_figures(tmp_path):
     assert "## Figures" in paper and "rq1_plot.png" in paper
 
 
+async def test_skips_figures_from_non_feasible_experiments(tmp_path):
+    # rq1 ran fine (feasible=True), rq2 errored (feasible=False) but still left a plot on disk.
+    # Only rq1's figure is correct evidence → rq2's must NOT enter the paper.
+    for rq in ("rq1", "rq2"):
+        figdir = tmp_path / "experiment" / rq / "figures"
+        figdir.mkdir(parents=True)
+        (figdir / "plot.png").write_bytes(b"PNG")
+    (tmp_path / "experiment" / "results.csv").write_text(
+        "rq_id,question,metric,value,feasible,approved,approvals,iterations,stopped_reason,backend\n"
+        "rq1,q1,f1,0.62,True,True,2,1,approved,docker\n"
+        "rq2,q2,f1,,False,False,0,3,iters_exhausted,docker\n",
+        encoding="utf-8",
+    )
+    reviewers = [_Reviewer([0.85], vendor="a"), _Reviewer([0.85], vendor="b")]
+    await run_writing(
+        _handoff(),
+        _FakeWriter(),
+        reviewers,
+        venue="generic",
+        out_dir=tmp_path,
+        caps=_C2,
+        latex=False,
+    )
+    assets = tmp_path / "paper" / "assets"
+    assert (assets / "rq1_plot.png").exists()
+    assert not (assets / "rq2_plot.png").exists()
+    paper = (tmp_path / "paper" / "paper.md").read_text()
+    assert "rq1_plot.png" in paper and "rq2_plot.png" not in paper
+
+
 _RESULTS_CSV = (
     "rq_id,question,metric,value,feasible,approved,approvals,iterations,stopped_reason,backend\n"
     'rq1,"Does it, with commas, work?",interaction_F,5.0812,True,True,2,3,approved,docker\n'

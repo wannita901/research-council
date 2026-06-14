@@ -178,13 +178,25 @@ def _write_paper(
 
 def _collect_experiment_figures(out_dir: Path) -> list[str]:
     """Copy the real figures Stage B saved (experiment/<rq>/figures/*) into paper/assets/,
-    prefixed by RQ to avoid collisions. Returns their paths relative to the paper dir."""
+    prefixed by RQ to avoid collisions. Returns their paths relative to the paper dir.
+
+    Figures from a NON-feasible RQ are skipped: a non-feasible run errored or never emitted a
+    valid METRIC, so any plot it left on disk is from a broken experiment and must not enter the
+    paper as evidence (the prose honesty-gate frames unapproved *text*, but a chart is a stronger
+    visual claim). Filtering is conservative — a figure is dropped only when results.csv positively
+    marks its RQ feasible=False; with no results.csv (no signal) or an unlisted RQ, the figure is
+    kept so pre-producer projects are unaffected."""
+    from research_council.verify.approval import feasibility_by_rq
+
     exp = Path(out_dir) / "experiment"
     assets = Path(out_dir) / "paper" / "assets"
     rels: list[str] = []
     if not exp.is_dir():
         return rels
+    feasible = feasibility_by_rq(out_dir)
     for sub in sorted(p for p in exp.iterdir() if p.is_dir()):
+        if feasible.get(sub.name) is False:
+            continue  # broken/non-feasible experiment → its figure is not valid evidence
         figdir = sub / "figures"
         if not figdir.is_dir():
             continue

@@ -16,6 +16,7 @@ from research_council.debate.writing import run_writing
 from research_council.verify.approval import (
     approval_status,
     approval_to_change_request,
+    feasibility_by_rq,
     honesty_constraint,
 )
 
@@ -30,6 +31,21 @@ _HEADER = (
 def _write_results(out_dir: Path, rows: str) -> None:
     (out_dir / "experiment").mkdir(parents=True, exist_ok=True)
     (out_dir / "experiment" / "results.csv").write_text(_HEADER + rows, encoding="utf-8")
+
+
+# --- feasibility_by_rq --------------------------------------------------------
+def test_feasibility_by_rq_maps_each_rq(tmp_path):
+    _write_results(
+        tmp_path,
+        'rq1,"q",m,0.5,True,True,2,3,approved,docker\n'
+        'rq2,"q2",m,,False,False,0,2,iters_exhausted,docker\n',
+    )
+    feas = feasibility_by_rq(tmp_path)
+    assert feas == {"rq1": True, "rq2": False}
+
+
+def test_feasibility_by_rq_empty_without_results(tmp_path):
+    assert feasibility_by_rq(tmp_path) == {}
 
 
 # --- approval_status ----------------------------------------------------------
