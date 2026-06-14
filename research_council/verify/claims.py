@@ -14,9 +14,9 @@ then be routed back into the writing loop as change-requests (``claims_to_change
 Design decisions (resolving the open questions in plan/25 §5):
   * Matching is ROUNDING-AWARE: ``F=5.08`` backs against ``5.0812`` because round(5.0812, 2)
     == 5.08. We also accept a small relative tolerance and unit-aware percent matching.
-  * We audit only the sections where the paper reports its OWN results (Results + Abstract by
-    default). Numbers in Related Work legitimately come from cited papers, not ``results.csv``,
-    so checking them would produce false positives.
+  * We audit only the sections where the paper reports its OWN results (Abstract, Results,
+    Conclusion, Discussion by default). Numbers in Related Work / Introduction legitimately come
+    from cited papers, not ``results.csv``, so checking them would produce false positives.
   * v1 is FLAG, not BLOCK: unbacked claims become *medium*-severity change-requests, so they
     surface in review.md / claims.json without destabilising the revision loop. Promote to
     blocking once writer compliance is observed.
@@ -31,7 +31,13 @@ from pathlib import Path
 
 # Sections that state the paper's own empirical findings. Related Work / Introduction numbers
 # usually come from cited prior work and must NOT be required to appear in results.csv.
-DEFAULT_AUDITED_SECTIONS = ("Abstract", "Results")
+# Conclusion/Discussion are included because they RESTATE the paper's own results (the same
+# fabrication surface as the Abstract): a made-up headline placed only in the Conclusion would
+# otherwise escape the gate entirely. Verified offline that adding Conclusion introduces zero new
+# false positives on both live projects (its numbers are either backed by results.csv or
+# suppressed significance/dispersion conventions). Discussion is listed for venues that use it;
+# absent sections are simply skipped.
+DEFAULT_AUDITED_SECTIONS = ("Abstract", "Results", "Conclusion", "Discussion")
 
 # A reported number backs an evidence value if EITHER holds:
 #   * the evidence value rounded to the claim's displayed precision equals the claim, or

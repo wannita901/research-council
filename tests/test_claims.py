@@ -137,6 +137,27 @@ def test_related_work_numbers_are_not_audited():
     assert "0.50" in flagged  # Results is audited, and there is no evidence
 
 
+def test_conclusion_findings_are_audited():
+    # The Conclusion restates the paper's OWN headline result, so a fabricated number placed
+    # ONLY in the Conclusion must be flagged (it used to escape the Abstract+Results-only audit).
+    paper = (
+        "## Abstract\nWe study X.\n"
+        "## Results\nWe report 0.50.\n"
+        "## Conclusion\nOur method reaches 0.91 accuracy.\n"
+    )
+    report = check_paper(paper, evidence=[Evidence(metric="acc", value=0.50)])
+    flagged = {(c.section, c.text) for c in report.unbacked}
+    assert ("Conclusion", "0.91") in flagged  # fabricated headline, now caught
+    assert ("Results", "0.50") not in flagged  # 0.50 is backed by the acc evidence
+
+
+def test_discussion_findings_are_audited():
+    # Discussion is the other own-findings section some venues use; same rule as Conclusion.
+    paper = "## Results\nWe report 0.50.\n## Discussion\nThe effect size of 0.88 is large.\n"
+    report = check_paper(paper, evidence=[Evidence(metric="acc", value=0.50)])
+    assert ("Discussion", "0.88") in {(c.section, c.text) for c in report.unbacked}
+
+
 def test_split_sections_ignores_title_and_byline():
     paper = "# My Title\n*by council*\n## Abstract\nwe did X\n## Results\nF=5.08\n"
     secs = split_sections(paper)
@@ -180,7 +201,7 @@ def test_change_requests_target_the_right_section():
     report = check_paper(paper_md, evidence)
     crs = claims_to_change_requests(report)
     assert crs, "expected change-requests for the unbacked claims"
-    assert all(c.section in ("Abstract", "Results") for c in crs)
+    assert all(c.section in ("Abstract", "Results", "Conclusion", "Discussion") for c in crs)
     assert all(c.severity == "medium" for c in crs)  # v1: flag, not block
     assert any("0.81" in c.msg or "0.57" in c.msg for c in crs)
 
