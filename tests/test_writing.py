@@ -13,6 +13,10 @@ from research_council.store.models import (
     StageHandoff,
 )
 
+# An 8-byte PNG signature: enough for is_valid_figure's header sniff to accept the bytes as a
+# real image (the empty/garbage cases it must reject lack this).
+_PNG = b"\x89PNG\r\n\x1a\n"
+
 
 def test_load_venue_and_fallback():
     icse = load_venue("icse")
@@ -215,7 +219,7 @@ async def test_embeds_real_experiment_figures(tmp_path):
     # Stage B left a figure on disk → Stage C copies it into paper/assets and references it
     figdir = tmp_path / "experiment" / "rq1" / "figures"
     figdir.mkdir(parents=True)
-    (figdir / "plot.png").write_bytes(b"PNG")
+    (figdir / "plot.png").write_bytes(_PNG)
     reviewers = [_Reviewer([0.85], vendor="a"), _Reviewer([0.85], vendor="b")]
     await run_writing(
         _handoff(),
@@ -226,7 +230,7 @@ async def test_embeds_real_experiment_figures(tmp_path):
         caps=_C2,
         latex=False,
     )
-    assert (tmp_path / "paper" / "assets" / "rq1_plot.png").read_bytes() == b"PNG"
+    assert (tmp_path / "paper" / "assets" / "rq1_plot.png").read_bytes() == _PNG
     paper = (tmp_path / "paper" / "paper.md").read_text()
     assert "## Figures" in paper and "rq1_plot.png" in paper
 
@@ -237,7 +241,7 @@ async def test_skips_figures_from_non_feasible_experiments(tmp_path):
     for rq in ("rq1", "rq2"):
         figdir = tmp_path / "experiment" / rq / "figures"
         figdir.mkdir(parents=True)
-        (figdir / "plot.png").write_bytes(b"PNG")
+        (figdir / "plot.png").write_bytes(_PNG)
     (tmp_path / "experiment" / "results.csv").write_text(
         "rq_id,question,metric,value,feasible,approved,approvals,iterations,stopped_reason,backend\n"
         "rq1,q1,f1,0.62,True,True,2,1,approved,docker\n"
@@ -259,6 +263,37 @@ async def test_skips_figures_from_non_feasible_experiments(tmp_path):
     assert not (assets / "rq2_plot.png").exists()
     paper = (tmp_path / "paper" / "paper.md").read_text()
     assert "rq1_plot.png" in paper and "rq2_plot.png" not in paper
+
+
+async def test_skips_corrupt_experiment_figures(tmp_path):
+    # rq1 saved a real image; rq2 left an empty 0-byte plot and rq3 wrote a non-image (a stack
+    # trace into plot.png). Only rq1's valid figure is correct evidence → the broken ones must
+    # not be copied into the paper or referenced (they'd break \includegraphics).
+    rq1 = tmp_path / "experiment" / "rq1" / "figures"
+    rq2 = tmp_path / "experiment" / "rq2" / "figures"
+    rq3 = tmp_path / "experiment" / "rq3" / "figures"
+    for d in (rq1, rq2, rq3):
+        d.mkdir(parents=True)
+    (rq1 / "plot.png").write_bytes(_PNG)
+    (rq2 / "plot.png").write_bytes(b"")  # touched but never written
+    (rq3 / "plot.png").write_bytes(b"Traceback (most recent call last):\n")  # not an image
+    reviewers = [_Reviewer([0.85], vendor="a"), _Reviewer([0.85], vendor="b")]
+    await run_writing(
+        _handoff(),
+        _FakeWriter(),
+        reviewers,
+        venue="generic",
+        out_dir=tmp_path,
+        caps=_C2,
+        latex=False,
+    )
+    assets = tmp_path / "paper" / "assets"
+    assert (assets / "rq1_plot.png").exists()
+    assert not (assets / "rq2_plot.png").exists()
+    assert not (assets / "rq3_plot.png").exists()
+    paper = (tmp_path / "paper" / "paper.md").read_text()
+    assert "rq1_plot.png" in paper
+    assert "rq2_plot.png" not in paper and "rq3_plot.png" not in paper
 
 
 _RESULTS_CSV = (

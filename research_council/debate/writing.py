@@ -185,8 +185,13 @@ def _collect_experiment_figures(out_dir: Path) -> list[str]:
     paper as evidence (the prose honesty-gate frames unapproved *text*, but a chart is a stronger
     visual claim). Filtering is conservative — a figure is dropped only when results.csv positively
     marks its RQ feasible=False; with no results.csv (no signal) or an unlisted RQ, the figure is
-    kept so pre-producer projects are unaffected."""
+    kept so pre-producer projects are unaffected.
+
+    A figure that is not a structurally-valid, non-empty image (0-byte/truncated/garbage left by a
+    half-failed savefig, or a non-image file) is also skipped: a broken image is not correct
+    evidence and would break the LaTeX \\includegraphics it ends up in."""
     from research_council.verify.approval import feasibility_by_rq
+    from research_council.verify.figure import is_valid_figure
 
     exp = Path(out_dir) / "experiment"
     assets = Path(out_dir) / "paper" / "assets"
@@ -202,6 +207,8 @@ def _collect_experiment_figures(out_dir: Path) -> list[str]:
             continue
         for p in sorted(figdir.glob("*")):
             if p.is_file() and p.suffix.lower() in (".png", ".pdf", ".svg"):
+                if not is_valid_figure(p):
+                    continue  # empty/corrupt/non-image plot → not valid evidence
                 assets.mkdir(parents=True, exist_ok=True)
                 dest = f"{sub.name}_{p.name}"
                 (assets / dest).write_bytes(p.read_bytes())

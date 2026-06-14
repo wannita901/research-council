@@ -219,7 +219,9 @@ def test_tampered_experiment_code_flips_reproducible_to_fail(tmp_path):
     rq = RQResult(
         rq_id="rq1",
         question="does it, work?",
-        result=ExperimentResult(ran=True, feasible=True, approved=True, metric="f1=0.873", code=code),
+        result=ExperimentResult(
+            ran=True, feasible=True, approved=True, metric="f1=0.873", code=code
+        ),
     )
     exp = write_repro([rq], out)  # repro.json now carries the real sha256 of `code`
     (exp / "rq1" / "experiment.py").write_text(code + "\n# tampered\n", encoding="utf-8")
@@ -262,6 +264,49 @@ def test_dangling_figure_reference_is_fail(tmp_path):
     assert fig.status == FAIL
     assert fig.details["missing"] == ["assets/result.png"]
     assert report.verdict == "unverified"
+
+
+def test_corrupt_figure_reference_is_fail(tmp_path):
+    """A referenced figure that EXISTS but is a 0-byte/garbage file (not a real image) resolves
+    the link yet breaks \\includegraphics — existence alone is not correctness, so it FAILs."""
+    out = _clean_project(tmp_path)
+    (out / "paper" / "assets").mkdir()
+    (out / "paper" / "assets" / "result.png").write_bytes(b"")  # touched, never written
+    (out / "paper" / "paper.md").write_text(
+        "## Abstract\nWe report an F1 of 0.873.\n## Results\nThe model reaches 0.873 F1.\n"
+        "## Figures\n![figure 1](assets/result.png)\n",
+        encoding="utf-8",
+    )
+    report = verify_project(out)
+    fig = _by_name(report)["figures"]
+    assert fig.status == FAIL
+    assert fig.details["corrupt"] == ["assets/result.png"]
+    assert fig.details["missing"] == []
+    assert report.verdict == "unverified"
+
+
+def test_is_valid_figure_header_sniff(tmp_path):
+    """is_valid_figure accepts real headers, rejects empty/garbage/missing, per suffix."""
+    from research_council.verify.figure import is_valid_figure
+
+    png = tmp_path / "a.png"
+    png.write_bytes(b"\x89PNG\r\n\x1a\n....")
+    pdf = tmp_path / "a.pdf"
+    pdf.write_bytes(b"%PDF-1.4\n....")
+    svg = tmp_path / "a.svg"
+    svg.write_bytes(b'<?xml version="1.0"?>\n<svg xmlns="...">')
+    empty = tmp_path / "e.png"
+    empty.write_bytes(b"")
+    garbage = tmp_path / "g.png"
+    garbage.write_bytes(b"Traceback (most recent call last):")
+    unknown = tmp_path / "x.dat"
+    unknown.write_bytes(b"whatever")  # unknown suffix, non-empty → accepted, not over-rejected
+
+    assert is_valid_figure(png) and is_valid_figure(pdf) and is_valid_figure(svg)
+    assert is_valid_figure(unknown)
+    assert not is_valid_figure(empty)
+    assert not is_valid_figure(garbage)
+    assert not is_valid_figure(tmp_path / "does-not-exist.png")
 
 
 def test_no_figures_referenced_skips(tmp_path):
