@@ -848,6 +848,53 @@ def project_status(pid: str = typer.Argument(..., help="project id")):
         ui.console.print(f"next: [cyan]council project approve {pid}[/cyan]")
 
 
+_VERIFY_ICON = {
+    "pass": "[green]✓ pass[/green]",
+    "warn": "[yellow]◐ warn[/yellow]",
+    "fail": "[red]✗ fail[/red]",
+    "skip": "[dim]– skip[/dim]",
+}
+_VERDICT_STYLE = {
+    "verified": "[green]✓ VERIFIED[/green]",
+    "verified-with-warnings": "[yellow]◐ VERIFIED (with warnings)[/yellow]",
+    "unverified": "[red]✗ UNVERIFIED[/red]",
+}
+
+
+@project_app.command("verify")
+def project_verify(pid: str = typer.Argument(..., help="project id")):
+    """Audit a finished project's artifacts and print a verifiability scorecard.
+
+    Re-runs every verify check (claims↔results.csv, council approval, reproduce.sh,
+    references.bib, paper.pdf) against the on-disk artifacts and writes
+    paper/verification.json. Exits non-zero when the verdict is UNVERIFIED, so it
+    doubles as a CI gate (plan/25 Gap 6)."""
+    from rich import box
+    from rich.table import Table
+
+    from research_council.lifecycle import ProjectStore
+    from research_council.verify.report import write_report
+
+    store = ProjectStore()
+    if not store.exists(pid):
+        ui.info(f"no project {pid!r}")
+        raise typer.Exit(1)
+    out_dir = store.root / pid
+    report = write_report(out_dir, project=pid)
+    ui.banner(f"Verify · {pid}", "verifiability scorecard")
+    t = Table(box=box.SIMPLE_HEAVY)
+    t.add_column("check", style="cyan")
+    t.add_column("status")
+    t.add_column("detail")
+    for c in report.checks:
+        t.add_row(c.name, _VERIFY_ICON.get(c.status, c.status), c.summary)
+    ui.console.print(t)
+    ui.console.print(f"verdict: {_VERDICT_STYLE.get(report.verdict, report.verdict)}")
+    ui.console.print(f"[dim]→ {out_dir / 'paper' / 'verification.json'}[/dim]")
+    if report.n_fail:
+        raise typer.Exit(1)
+
+
 @project_app.command("list")
 def project_list():
     """List all projects."""
