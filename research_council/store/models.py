@@ -339,7 +339,11 @@ class CodeReview(BaseModel):
 class ExperimentResult(BaseModel):
     ran: bool = False  # the script executed without error (exit 0, no timeout)
     feasible: bool = False  # ran AND emitted a METRIC line — the "run-it" verification
-    metric: str | None = None
+    metric: str | None = None  # HEADLINE metric (first METRIC line) — drives feasibility/repro
+    # ALL `METRIC name=value` lines the run printed, first-seen order (metric == metrics[0]).
+    # Secondary metrics (baselines, per-cell/group values, ablations) are recorded so a paper's
+    # non-headline numbers have a verifiable source in metrics.csv, not just the single point.
+    metrics: list[str] = Field(default_factory=list)
     attempts: int = 0
     code: str = ""
     log: str = ""

@@ -108,30 +108,38 @@ class ClaimReport:
 
 # --- evidence loading ---------------------------------------------------------
 def load_evidence(out_dir: Path | str) -> list[Evidence]:
-    """Read the (metric, value) pairs from <out_dir>/experiment/results.csv.
+    """Read the (metric, value) pairs the experiment recorded.
+
+    Two sources are merged: ``results.csv`` (one HEADLINE metric per RQ — the contract the
+    approval/repro readers rely on) and ``metrics.csv`` (EVERY ``METRIC`` line the run printed:
+    headline + secondaries like baselines, per-cell/group values, ablations). Merging both lets
+    the claims checker back a paper's non-headline numbers, not just the single point estimate.
+    Duplicate (rq_id, metric, value) rows are collapsed so the headline metric isn't double-listed.
 
     Uses csv (NOT cut -d,) because RQ ``question`` text contains commas inside quotes —
     a footgun called out in plan/25. Non-numeric / blank values are skipped."""
     import csv
 
-    path = Path(out_dir) / "experiment" / "results.csv"
-    if not path.exists():
-        return []
+    exp = Path(out_dir) / "experiment"
     out: list[Evidence] = []
-    with path.open(encoding="utf-8", newline="") as f:
-        for row in csv.DictReader(f):
-            raw = (row.get("value") or "").strip()
-            val = _parse_number(raw)
-            if val is None:
-                continue
-            out.append(
-                Evidence(
-                    metric=(row.get("metric") or "").strip(),
-                    value=val,
-                    rq_id=(row.get("rq_id") or "").strip(),
-                    raw=raw,
-                )
-            )
+    seen: set[tuple[str, str, float]] = set()
+    for fname in ("results.csv", "metrics.csv"):
+        path = exp / fname
+        if not path.exists():
+            continue
+        with path.open(encoding="utf-8", newline="") as f:
+            for row in csv.DictReader(f):
+                raw = (row.get("value") or "").strip()
+                val = _parse_number(raw)
+                if val is None:
+                    continue
+                metric = (row.get("metric") or "").strip()
+                rq_id = (row.get("rq_id") or "").strip()
+                key = (rq_id, metric, val)
+                if key in seen:
+                    continue
+                seen.add(key)
+                out.append(Evidence(metric=metric, value=val, rq_id=rq_id, raw=raw))
     return out
 
 

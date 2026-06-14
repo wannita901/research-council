@@ -28,6 +28,21 @@ def _metric_of(stdout: str) -> str | None:
     return f"{m.group(1)}={m.group(2)}" if m else None
 
 
+def _metrics_of(stdout: str) -> list[str]:
+    """Every `METRIC name=value` line the run printed, in first-seen order, deduped.
+
+    Stage B's headline metric is the first line (drives feasibility/repro/approval), but an
+    experiment may also print secondary metrics (baselines, per-cell/group values, ablations).
+    Capturing them all gives a paper's non-headline numbers a verifiable source in metrics.csv
+    instead of being silently dropped by the single-`.search()` headline read."""
+    seen: list[str] = []
+    for m in _METRIC.finditer(stdout or ""):
+        pair = f"{m.group(1)}={m.group(2)}"
+        if pair not in seen:
+            seen.append(pair)
+    return seen
+
+
 def write_experiment(result: ExperimentResult, out_dir: Path | str) -> Path:
     """Materialize the Stage-B artifacts under <out_dir>/experiment/ — the code the council
     actually ran, the result summary, the run log, and the code reviews. Returns the dir."""
@@ -140,6 +155,7 @@ async def run_experimentation(
         res = sandbox.run(code, timeout=caps.timeout, requirements=draft.requirements)
         last_ran = res.ok
         metric = _metric_of(res.stdout)
+        metrics = _metrics_of(res.stdout)
         feasible = bool(res.ok and metric)
         if emit:
             emit(
@@ -180,6 +196,7 @@ async def run_experimentation(
             ran=last_ran,
             feasible=feasible,
             metric=metric,
+            metrics=metrics,
             attempts=attempt,
             iterations=attempt,
             code=code,
@@ -347,6 +364,21 @@ def write_experiments(rq_results: list[RQResult], out_dir: Path | str) -> Path:
         )
         w.writeheader()
         w.writerows(rows)
+
+    # plan/25 (iter-14): the FULL metric record. results.csv keeps one headline row per RQ (the
+    # contract approval.py/repro.py rely on); metrics.csv records EVERY `METRIC name=value` the
+    # run printed (headline + secondaries) so a paper's non-headline numbers — baselines,
+    # per-cell/group values, ablations — have a verifiable source instead of being dropped.
+    # claims.load_evidence merges this with results.csv when checking the prose.
+    metric_rows = []
+    for rr in rq_results:
+        for pair in rr.result.metrics or ([rr.result.metric] if rr.result.metric else []):
+            mname, mval = _metric_parts(pair)
+            metric_rows.append({"rq_id": rr.rq_id, "metric": mname, "value": mval})
+    with (exp / "metrics.csv").open("w", newline="", encoding="utf-8") as f:
+        w = csv.DictWriter(f, fieldnames=["rq_id", "metric", "value"])
+        w.writeheader()
+        w.writerows(metric_rows)
 
     # plan/25 Gap 3: per-RQ reproduction manifest (repro.json) + a top-level reproduce.sh that
     # re-runs each experiment and diffs its metric against the recorded value, so the data half
