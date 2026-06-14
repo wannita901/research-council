@@ -126,12 +126,13 @@ Everything a project produces lives under `projects/<id>/`:
 projects/<id>/
 ├── proposal.md          # ①  the research proposal
 ├── experiment/          # ②  one loop per research question
-│   ├── results.csv      #     rq · metric · value · feasible · approved · …
+│   ├── results.csv      #     rq · metric · value · feasible · approved · …  (one headline row/RQ)
+│   ├── metrics.csv      #     rq · metric · value — every METRIC line (headline + secondaries)
 │   ├── reproduce.sh     #     re-runs every RQ and diffs each metric vs the council-time value
 │   └── rq1/ rq2/ …      #     experiment.py · log.txt · reviews.md · repro.json
 └── paper/               # ③  paper.md · sections/ · review.md · paper.tex/pdf · build.log
     ├── references.bib   #     citations resolved to real DOIs/arXiv records (+ references.json)
-    ├── claims.json      #     numeric claims audited against results.csv
+    ├── claims.json      #     numeric claims audited against results.csv + metrics.csv
     └── verification.json #    VERIFIED/UNVERIFIED scorecard (also via `council project verify`)
 runs/<id>/trace.jsonl    # full event trace of the run
 ```
