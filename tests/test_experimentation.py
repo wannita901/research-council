@@ -297,6 +297,58 @@ def test_write_experiment_materializes_artifacts(tmp_path):
     assert (d / "log.txt").exists()
 
 
+def test_is_nonfinite_metric():
+    from research_council.debate.experimentation import _is_nonfinite_metric
+
+    assert _is_nonfinite_metric("loss=nan") is True
+    assert _is_nonfinite_metric("loss=inf") is True
+    assert _is_nonfinite_metric("loss=-inf") is True
+    assert _is_nonfinite_metric("acc=0.9") is False  # finite number
+    assert _is_nonfinite_metric("label=converged") is False  # categorical, not our concern
+    assert _is_nonfinite_metric(None) is False
+    assert _is_nonfinite_metric("") is False
+
+
+class _StubSandbox:
+    """Returns a fixed stdout/exit — lets the council loop be driven without a python binary."""
+
+    name = "stub"
+
+    def __init__(self, stdout, *, ok=True):
+        self._stdout, self._ok = stdout, ok
+
+    def run(self, code, *, timeout=30, requirements=None):
+        from research_council.verify.sandbox import SandboxResult
+
+        return SandboxResult(self._ok, 0 if self._ok else 1, self._stdout, "", 0.0, False, "stub")
+
+
+async def test_nonfinite_metric_is_not_feasible():
+    # exit 0 + a METRIC line, but the value is NaN → numerically degenerate, NOT feasible.
+    res = await run_experimentation(
+        {"title": "X"},
+        "p",
+        _FakeCoder(["print('METRIC loss=nan')"]),
+        _approvers(2),
+        _StubSandbox("METRIC loss=nan\n"),
+        caps=_ONE,
+    )
+    assert res.ran and not res.feasible and not res.approved
+    assert res.metric == "loss=nan"  # metric kept for transparency, just not counted feasible
+
+
+async def test_finite_metric_still_feasible_via_stub():
+    res = await run_experimentation(
+        {"title": "X"},
+        "p",
+        _FakeCoder(["print('METRIC acc=0.9')"]),
+        _approvers(2),
+        _StubSandbox("METRIC acc=0.9\n"),
+        caps=_ONE,
+    )
+    assert res.feasible and res.approved
+
+
 def test_metrics_of_captures_all_lines_deduped_first_seen():
     from research_council.debate.experimentation import _metric_of, _metrics_of
 

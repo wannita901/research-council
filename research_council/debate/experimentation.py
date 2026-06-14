@@ -12,6 +12,7 @@ the best-so-far result is returned with an honest `feasible`/`approved` flag.
 
 from __future__ import annotations
 
+import math
 import re
 from collections.abc import Callable
 from pathlib import Path
@@ -26,6 +27,25 @@ Emit = Callable[[str, str, dict], None] | None
 def _metric_of(stdout: str) -> str | None:
     m = _METRIC.search(stdout or "")
     return f"{m.group(1)}={m.group(2)}" if m else None
+
+
+def _is_nonfinite_metric(metric: str | None) -> bool:
+    """True iff the headline metric's value is a number that is NaN or ±inf.
+
+    A non-finite headline metric means the experiment *ran* and printed a METRIC line but the
+    computation was numerically degenerate — division by zero, overflow, or aggregating over an
+    empty/all-NaN array. Such a run satisfies the bare `ran + emitted a METRIC` test yet carries
+    no usable evidence: it would plot a broken NaN bar in the paper, can never reproduce (its
+    re-run diff is never within tolerance), and serializes to invalid JSON (`NaN`) in repro.json.
+    So it must NOT count as feasible. A non-numeric (categorical) value is *not* non-finite and
+    stays feasible — this rule only rejects the numerically-broken case, not string metrics."""
+    if not metric or "=" not in metric:
+        return False
+    _, _, raw = metric.partition("=")
+    try:
+        return not math.isfinite(float(raw.strip()))
+    except ValueError:
+        return False  # non-numeric (categorical) metric — not our concern here
 
 
 def _metrics_of(stdout: str) -> list[str]:
@@ -156,7 +176,8 @@ async def run_experimentation(
         last_ran = res.ok
         metric = _metric_of(res.stdout)
         metrics = _metrics_of(res.stdout)
-        feasible = bool(res.ok and metric)
+        nonfinite = _is_nonfinite_metric(metric)
+        feasible = bool(res.ok and metric and not nonfinite)
         if emit:
             emit(
                 "experiment",
@@ -229,6 +250,16 @@ async def run_experimentation(
             return best
 
         err, notes = _feedback(res.stderr or "", reviews)
+        if nonfinite:
+            # The run exited 0 but its metric is NaN/inf → tell the coder why it isn't feasible,
+            # since the reason is in the value, not stderr, and a blind retry would repeat it.
+            err = (
+                f"The experiment emitted a non-finite headline metric ({metric}). A NaN/inf "
+                "result is numerically degenerate (division by zero, overflow, log of a "
+                "non-positive number, or aggregating over empty/all-NaN data) and is not a "
+                "valid result. Fix the computation so the headline METRIC is a finite number.\n"
+                + err
+            )
 
     assert best is not None
     best.stopped_reason = "iters_exhausted"

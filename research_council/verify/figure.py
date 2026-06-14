@@ -8,6 +8,7 @@ isn't one). This keeps the dependency soft and the loop honest.
 
 from __future__ import annotations
 
+import math
 import re
 from pathlib import Path
 
@@ -44,10 +45,15 @@ def is_valid_figure(path: Path) -> bool:
 
 
 def _num(s: str) -> float | None:
+    """Parse a metric value to a *finite* float, or None. NaN/±inf parse as floats but are
+    rejected: a non-finite value can't be drawn as a bar height (NaN renders as a missing/blank
+    bar, inf blows up the axis), so it has no place on a results chart — it is dropped here so a
+    numerically-broken metric never becomes a misleading figure."""
     try:
-        return float(s)
+        v = float(s)
     except (ValueError, TypeError):
         return None
+    return v if math.isfinite(v) else None
 
 
 def _metrics(experiment: dict) -> list[tuple[str, float]]:
