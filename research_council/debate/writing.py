@@ -387,6 +387,22 @@ async def run_writing(
     paper_md = _write_paper(out_dir, draft, merged, venue_name, result)
     result.paper_path = str(paper_md)
 
+    # Claims-to-evidence check (plan/25 Gap 1): diff the prose's numeric claims against
+    # experiment/results.csv and emit paper/claims.json. Surfaces fabricated figures that the
+    # writer was *told* not to invent but nothing previously checked.
+    from research_council.verify.claims import write_claims_report
+
+    claims = write_claims_report(out_dir)
+    if claims is not None:
+        result.claims_total = claims.n_claims
+        result.claims_unbacked = claims.n_unbacked
+        if emit:
+            emit(
+                "writing",
+                "claims",
+                {"total": claims.n_claims, "unbacked": claims.n_unbacked},
+            )
+
     if latex:
         from research_council.verify.latex import build_paper_latex, compile_existing
 

@@ -442,6 +442,8 @@ class WritingResult(BaseModel):
     usd: float = 0.0
     stopped_reason: str = ""  # accepted | revisions_exhausted | budget_exhausted
     latex: str = ""  # built | fallback_no_tex | build_failed | skipped
+    claims_total: int = 0  # numeric claims audited against results.csv (plan/25 Gap 1)
+    claims_unbacked: int = 0  # of those, how many had no matching evidence value
 
 
 # --- run config & trace envelope ------------------------------------------
