@@ -38,6 +38,47 @@ def test_scaffold_escapes_specials_and_avoids_bibtex():
     assert r"\includegraphics" in tex
 
 
+def test_scaffold_embeds_resolved_doi_url_in_bibitem():
+    """The compiled PDF's references must carry the resolved DOI/URL (plan/25 Gap 2 follow-up):
+    scaffold_tex consumes the bib resolutions so each \\bibitem resolves to a real record, not
+    just the standalone references.bib."""
+    from research_council.verify.bib import Resolution
+
+    draft = PaperDraft(
+        title="T",
+        abstract="a",
+        sections={"Introduction": "x [doi24] [url24] [bad24]."},
+        citations=[
+            Citation(key="doi24", text="A DOI paper"),
+            Citation(key="url24", text="An arXiv paper"),
+            Citation(key="bad24", text="An invented paper"),
+        ],
+    )
+    resolutions = [
+        Resolution(key="doi24", query_title="A DOI paper", resolved=True, doi="10.1145/1234.5678"),
+        Resolution(key="url24", query_title="An arXiv paper", resolved=True,
+                   url="https://arxiv.org/abs/2401.00001"),
+        Resolution(key="bad24", query_title="An invented paper", resolved=False),
+    ]
+    tex = scaffold_tex(draft, {"doc_class": "article"}, resolutions=resolutions)
+    # resolved DOI → a resolvable doi.org link typeset verbatim with \url (no escaping needed)
+    assert r"\url{https://doi.org/10.1145/1234.5678}" in tex
+    # resolved url-only (arXiv has no DOI) → the record URL
+    assert r"\url{https://arxiv.org/abs/2401.00001}" in tex
+    # unresolved → a visible [unverified] marker, not a silent bare title
+    assert r"\textit{[unverified]}" in tex
+    # the bibtex-avoidance invariant still holds — no stray @ from the resolution fields
+    assert "@" not in tex
+
+
+def test_scaffold_without_resolutions_is_unchanged():
+    """Backwards-compat: omitting resolutions leaves the bibliography bare (no anchors, no
+    [unverified] markers) so existing callers/output are untouched."""
+    tex = scaffold_tex(_draft(), {"doc_class": "article"})
+    assert r"\bibitem{smith24}" in tex
+    assert r"\url{" not in tex and "[unverified]" not in tex
+
+
 def test_build_falls_back_gracefully_without_engine(tmp_path, monkeypatch):
     import research_council.verify.latex as lx
 

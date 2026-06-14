@@ -484,7 +484,12 @@ async def run_writing(
 
         paper_dir = out_dir / "paper"
         lx = build_paper_latex(
-            draft, paper_dir, venue_cfg, attempts=caps.latex_fix_attempts, emit=emit
+            draft,
+            paper_dir,
+            venue_cfg,
+            attempts=caps.latex_fix_attempts,
+            emit=emit,
+            resolutions=bib.resolutions,
         )
         # build-verify-FIX: if the mechanical pass can't compile it, hand the .tex + error log to
         # the council's LaTeX fixer and recompile (bounded) — the fail log IS the feedback.

@@ -89,9 +89,31 @@ def _docclass(doc_class: str) -> str:
     }.get(doc_class, r"\documentclass{article}")
 
 
-def scaffold_tex(draft: PaperDraft, venue_cfg: dict, *, doc_class: str | None = None) -> str:
+def _bibitem_anchor(res) -> str:
+    """The verifiable anchor appended to a \\bibitem, drawn from its bib.Resolution.
+
+    A resolved citation carries a DOI or URL (from verify/bib.resolve_citation); we typeset it
+    with ``\\url`` — verbatim, so a DOI's `_`/`%`/`~` need no escaping — so the *compiled PDF*
+    references resolve to a real record, not just the standalone references.bib. An unresolved
+    citation gets a visible ``[unverified]`` marker rather than a silent bare title, keeping the
+    gap honest in the rendered output (mirrors references.bib's UNVERIFIED tag)."""
+    if res is None:
+        return ""
+    if getattr(res, "resolved", False):
+        if getattr(res, "doi", ""):
+            return rf" \url{{https://doi.org/{res.doi}}}"
+        if getattr(res, "url", ""):
+            return rf" \url{{{res.url}}}"
+        return ""
+    return r" \textit{[unverified]}"
+
+
+def scaffold_tex(
+    draft: PaperDraft, venue_cfg: dict, *, doc_class: str | None = None, resolutions=None
+) -> str:
     dc = doc_class or venue_cfg.get("doc_class", "article")
     keys = {c.key for c in draft.citations}
+    by_key = {getattr(r, "key", ""): r for r in (resolutions or [])}
     parts = [
         _docclass(dc),
         r"\usepackage{graphicx}",
@@ -122,7 +144,8 @@ def scaffold_tex(draft: PaperDraft, venue_cfg: dict, *, doc_class: str | None = 
     if draft.citations:
         parts.append(rf"\begin{{thebibliography}}{{{len(draft.citations)}}}")
         for c in draft.citations:
-            parts.append(rf"\bibitem{{{c.key}}} {_esc(c.text)}")
+            anchor = _bibitem_anchor(by_key.get(c.key))
+            parts.append(rf"\bibitem{{{c.key}}} {_esc(c.text)}{anchor}")
         parts.append(r"\end{thebibliography}")
     parts.append(r"\end{document}")
     return "\n".join(parts) + "\n"
@@ -149,9 +172,19 @@ def _compile(engine: str, kind: str, tex_path: Path, timeout: int = 180) -> tupl
 
 
 def build_paper_latex(
-    draft: PaperDraft, paper_dir: Path, venue_cfg: dict, *, attempts: int = 3, emit: Emit = None
+    draft: PaperDraft,
+    paper_dir: Path,
+    venue_cfg: dict,
+    *,
+    attempts: int = 3,
+    emit: Emit = None,
+    resolutions=None,
 ) -> dict:
-    """Scaffold → compile → mechanical fix/fallback. Returns {status, pdf, log, tex}."""
+    """Scaffold → compile → mechanical fix/fallback. Returns {status, pdf, log, tex}.
+
+    ``resolutions`` (a list of verify/bib.Resolution) is threaded into the inline bibliography so
+    each \\bibitem in the compiled PDF carries its resolved DOI/URL — i.e. the references in the
+    headline artifact resolve to real records, not just the standalone references.bib."""
     paper_dir = Path(paper_dir)
     paper_dir.mkdir(parents=True, exist_ok=True)
     tex_path = paper_dir / "paper.tex"
@@ -164,7 +197,7 @@ def build_paper_latex(
 
     last_log = ""
     for dc in classes[: max(1, attempts)]:
-        tex = scaffold_tex(draft, venue_cfg, doc_class=dc)
+        tex = scaffold_tex(draft, venue_cfg, doc_class=dc, resolutions=resolutions)
         tex_path.write_text(tex, encoding="utf-8")
         if engine is None:
             (paper_dir / "build.log").write_text("no tectonic/latexmk on PATH\n", encoding="utf-8")
