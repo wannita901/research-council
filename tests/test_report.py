@@ -97,6 +97,7 @@ def test_clean_project_is_verified(tmp_path):
         "approval": PASS,
         "reproducible": PASS,
         "references": PASS,
+        "figures": SKIP,  # the clean fixture references no figures → un-audited, not blocked
         "pdf": PASS,
     }
 
@@ -150,6 +151,69 @@ def test_partial_repro_artifacts_warn(tmp_path):
     assert _by_name(report)["reproducible"].status == WARN
 
 
+# --- figures ------------------------------------------------------------------
+def test_present_figure_passes(tmp_path):
+    """A paper that references a figure which exists on disk → figures PASS."""
+    out = _clean_project(tmp_path)
+    (out / "paper" / "assets").mkdir()
+    (out / "paper" / "assets" / "result.png").write_bytes(b"\x89PNG fake")
+    (out / "paper" / "paper.md").write_text(
+        "## Abstract\nWe report an F1 of 0.873.\n## Results\nThe model reaches 0.873 F1.\n"
+        "## Figures\n**Figure 1.**\n![figure 1](assets/result.png)\n",
+        encoding="utf-8",
+    )
+    report = verify_project(out)
+    fig = _by_name(report)["figures"]
+    assert fig.status == PASS
+    assert fig.details["n_refs"] == 1 and fig.details["n_missing"] == 0
+    assert report.verdict == "verified"
+
+
+def test_dangling_figure_reference_is_fail(tmp_path):
+    """A paper that points to assets/result.png with no such file → broken evidence link → FAIL,
+    flipping an otherwise-clean project to unverified."""
+    out = _clean_project(tmp_path)
+    (out / "paper" / "paper.md").write_text(
+        "## Abstract\nWe report an F1 of 0.873.\n## Results\nThe model reaches 0.873 F1.\n"
+        "## Figures\n![figure 1](assets/result.png)\n",
+        encoding="utf-8",
+    )
+    report = verify_project(out)
+    fig = _by_name(report)["figures"]
+    assert fig.status == FAIL
+    assert fig.details["missing"] == ["assets/result.png"]
+    assert report.verdict == "unverified"
+
+
+def test_no_figures_referenced_skips(tmp_path):
+    """The clean fixture references no figures → SKIP (not a falsehood, just un-audited)."""
+    out = _clean_project(tmp_path)
+    assert _by_name(verify_project(out))["figures"].status == SKIP
+
+
+def test_external_image_url_is_not_treated_as_a_local_asset(tmp_path):
+    """An http(s) image link is a citation, not a shipped asset, so it never FAILs as missing."""
+    out = _clean_project(tmp_path)
+    (out / "paper" / "paper.md").write_text(
+        "## Abstract\nWe report an F1 of 0.873.\n## Results\nSee 0.873.\n"
+        "![remote](https://example.com/chart.png)\n",
+        encoding="utf-8",
+    )
+    assert _by_name(verify_project(out))["figures"].status == SKIP
+
+
+def test_latex_includegraphics_reference_is_audited(tmp_path):
+    """A missing figure declared only via \\includegraphics in paper.tex is also caught."""
+    out = _clean_project(tmp_path)
+    (out / "paper" / "paper.tex").write_text(
+        "\\documentclass{article}\\begin{document}"
+        "\\includegraphics[width=.7\\linewidth]{assets/result.png}\\end{document}",
+        encoding="utf-8",
+    )
+    fig = _by_name(verify_project(out))["figures"]
+    assert fig.status == FAIL and fig.details["missing"] == ["assets/result.png"]
+
+
 # --- artifact + persistence ---------------------------------------------------
 def test_write_report_persists_verification_json(tmp_path):
     out = _clean_project(tmp_path)
@@ -164,6 +228,7 @@ def test_write_report_persists_verification_json(tmp_path):
         "approval",
         "reproducible",
         "references",
+        "figures",
         "pdf",
     }
 

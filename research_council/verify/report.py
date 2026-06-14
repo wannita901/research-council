@@ -14,10 +14,17 @@ Powers ``council project verify <pid>`` and writes paper/verification.json.
 from __future__ import annotations
 
 import json
+import re
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
 
 from research_council.verify import approval, claims
+
+# Figure references the paper points the reader to: markdown ![alt](path) and LaTeX
+# \includegraphics[..]{path}. A reference that resolves to no file on disk is a broken
+# evidence link (and breaks the \includegraphics compile) — exactly what _check_figures audits.
+_MD_FIG_RE = re.compile(r"!\[[^\]]*\]\(([^)]+)\)")
+_TEX_FIG_RE = re.compile(r"\\includegraphics(?:\[[^\]]*\])?\{([^}]+)\}")
 
 # Per-check status vocabulary. PASS = verifiable; FAIL = a verifiability defect that a
 # reader could catch (fabricated number, paper on unapproved experiments, no PDF);
@@ -193,6 +200,51 @@ def _check_references(out_dir: Path) -> CheckResult:
     return CheckResult("references", PASS, "references.bib present", details)
 
 
+def _gather_figure_refs(out_dir: Path) -> list[str]:
+    """Collect every local figure path the paper references, from paper.md (markdown image
+    syntax) and paper.tex (\\includegraphics). External http(s) URLs are not local assets and
+    are excluded — this check is about the figures the paper ships, not links it cites."""
+    paper_dir = out_dir / "paper"
+    refs: list[str] = []
+    for fname, pattern in (("paper.md", _MD_FIG_RE), ("paper.tex", _TEX_FIG_RE)):
+        f = paper_dir / fname
+        if f.exists():
+            for m in pattern.findall(f.read_text(encoding="utf-8")):
+                ref = m.strip()
+                if ref and not ref.lower().startswith(("http://", "https://")):
+                    refs.append(ref)
+    return refs
+
+
+def _check_figures(out_dir: Path) -> CheckResult:
+    """Every figure the paper points the reader to must resolve to a file on disk. A
+    dangling reference is a broken evidence link — the reader is sent to evidence that
+    isn't there, and the LaTeX \\includegraphics would fail to compile — so it FAILs."""
+    paper_dir = out_dir / "paper"
+    if not (paper_dir / "paper.md").exists() and not (paper_dir / "paper.tex").exists():
+        return CheckResult("figures", SKIP, "no paper.md/paper.tex to audit")
+    refs = _gather_figure_refs(out_dir)
+    # Dedup while preserving order; figures embedded in both .md and .tex would double-count.
+    seen: dict[str, None] = {}
+    for r in refs:
+        seen.setdefault(r, None)
+    refs = list(seen)
+    if not refs:
+        return CheckResult("figures", SKIP, "paper references no figures", {"n_refs": 0})
+    missing = [r for r in refs if not (paper_dir / r).exists()]
+    details = {"n_refs": len(refs), "n_missing": len(missing), "missing": missing}
+    if missing:
+        return CheckResult(
+            "figures",
+            FAIL,
+            f"{len(missing)}/{len(refs)} referenced figure(s) missing from disk — broken evidence link",
+            details,
+        )
+    return CheckResult(
+        "figures", PASS, f"all {len(refs)} referenced figure(s) present on disk", details
+    )
+
+
 def _check_pdf(out_dir: Path) -> CheckResult:
     """The headline artifact. A paper.tex with no paper.pdf is a build failure, not 'no
     paper' — surfaced as FAIL so a broken Stage-C compile can't pass as verified."""
@@ -219,6 +271,7 @@ def verify_project(out_dir: Path | str, *, project: str = "") -> VerifiabilityRe
         _check_approval(out),
         _check_reproducible(out),
         _check_references(out),
+        _check_figures(out),
         _check_pdf(out),
     ]
     return report
