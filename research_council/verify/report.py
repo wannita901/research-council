@@ -26,6 +26,20 @@ from research_council.verify import approval, bib, claims, repro
 _MD_FIG_RE = re.compile(r"!\[[^\]]*\]\(([^)]+)\)")
 _TEX_FIG_RE = re.compile(r"\\includegraphics(?:\[[^\]]*\])?\{([^}]+)\}")
 
+# Inline citation tokens in the prose. The writer emits ``[key]`` (and comma-joined
+# ``[k1, k2]``) which latex.py::_cite rewrites to ``\cite{key}``; a key absent from the
+# bibliography compiles to a dangling "[?]"/raw-key in the PDF — a broken evidence link.
+# A citation key is bibtex-style: starts with a letter, then word/:/.-/ chars, no spaces — so
+# this skips pure-numeric list markers ``[1]`` and (via the negative lookahead/strip below)
+# markdown links ``[text](url)``.
+_CITE_BRACKET_RE = re.compile(r"\[([A-Za-z][^\]\n]*?)\](?!\()")
+_CITE_KEY_RE = re.compile(r"^[A-Za-z][A-Za-z0-9:_.\-]*$")
+# Lines that DEFINE a reference key in paper.md's References section: "- [key] free text".
+_REF_DEF_RE = re.compile(r"^\s*[-*]\s*\[([^\]]+)\]")
+# The headings (## Section) whose bodies define/host references or figures rather than cite
+# them — excluded from the inline-citation scan so a definition isn't mistaken for a citation.
+_NON_PROSE_SECTIONS = {"references", "figures"}
+
 # Per-check status vocabulary. PASS = verifiable; FAIL = a verifiability defect that a
 # reader could catch (fabricated number, paper on unapproved experiments, no PDF);
 # WARN = degraded but not a falsehood; SKIP = the input for this check is absent.
@@ -284,6 +298,98 @@ def _check_figures(out_dir: Path) -> CheckResult:
     )
 
 
+def _prose_without_ref_sections(paper_md: str) -> str:
+    """The paper body with the ``## References`` / ``## Figures`` sections stripped — those
+    DEFINE keys (``- [key] text``) and image paths, they don't CITE, so scanning them for
+    inline citations would mistake a definition for a use."""
+    lines = paper_md.splitlines()
+    kept: list[str] = []
+    skipping = False
+    for line in lines:
+        if line.startswith("## "):
+            skipping = line[3:].strip().lower() in _NON_PROSE_SECTIONS
+        if not skipping:
+            kept.append(line)
+    return "\n".join(kept)
+
+
+def _defined_citation_keys(out_dir: Path) -> set[str]:
+    """The keys the paper actually provides a reference for: every entry in references.bib
+    (the verifiable artifact, preferred) UNION the ``- [key]`` lines of paper.md's References
+    section (so a paper that lists references inline but predates the bib producer still has a
+    valid key set to check against)."""
+    paper_dir = out_dir / "paper"
+    keys: set[str] = set()
+    bib_path = paper_dir / "references.bib"
+    if bib_path.exists():
+        keys |= {e["key"] for e in bib.parse_bib_entries(bib_path.read_text(encoding="utf-8"))}
+    paper_md = paper_dir / "paper.md"
+    if paper_md.exists():
+        in_refs = False
+        for line in paper_md.read_text(encoding="utf-8").splitlines():
+            if line.startswith("## "):
+                in_refs = line[3:].strip().lower() == "references"
+            elif in_refs:
+                m = _REF_DEF_RE.match(line)
+                if m:
+                    keys.add(m.group(1).strip())
+    return keys
+
+
+def _cited_keys(out_dir: Path) -> list[str]:
+    """Every inline citation key the paper's PROSE points the reader to (order-preserving,
+    deduped). Handles comma-joined ``[k1, k2]`` brackets and ignores bracketed text that isn't
+    a bibtex-style key (so list markers / glossed phrases aren't treated as citations)."""
+    paper_md = out_dir / "paper" / "paper.md"
+    if not paper_md.exists():
+        return []
+    prose = _prose_without_ref_sections(paper_md.read_text(encoding="utf-8"))
+    seen: dict[str, None] = {}
+    for body in _CITE_BRACKET_RE.findall(prose):
+        for tok in body.split(","):
+            key = tok.strip()
+            if _CITE_KEY_RE.match(key):
+                seen.setdefault(key, None)
+    return list(seen)
+
+
+def _check_citations(out_dir: Path) -> CheckResult:
+    """Every inline ``[key]`` citation in the prose must have a matching reference entry. A key
+    with no entry is a dangling citation — the reader is sent to a source that isn't in the
+    bibliography, and it compiles to a dangling ``\\cite`` — so it FAILs, mirroring _check_figures.
+
+    Closed-world by construction: a citation key the writer can't back can't silently appear in
+    a verified paper. SKIP when there's no paper or the prose cites nothing."""
+    paper_md = out_dir / "paper" / "paper.md"
+    if not paper_md.exists():
+        return CheckResult("citations", SKIP, "no paper.md to audit")
+    cited = _cited_keys(out_dir)
+    if not cited:
+        return CheckResult("citations", SKIP, "paper cites no references inline", {"n_cited": 0})
+    defined = _defined_citation_keys(out_dir)
+    dangling = [k for k in cited if k not in defined]
+    details = {
+        "n_cited": len(cited),
+        "n_defined": len(defined),
+        "n_dangling": len(dangling),
+        "dangling": dangling,
+    }
+    if dangling:
+        return CheckResult(
+            "citations",
+            FAIL,
+            f"{len(dangling)}/{len(cited)} inline citation(s) have no reference entry "
+            f"({', '.join(dangling)}) — dangling citation / broken evidence link",
+            details,
+        )
+    return CheckResult(
+        "citations",
+        PASS,
+        f"all {len(cited)} inline citation(s) resolve to a reference entry",
+        details,
+    )
+
+
 _NO_ENGINE_MARKER = "no tectonic/latexmk on PATH"
 
 
@@ -332,6 +438,7 @@ def verify_project(out_dir: Path | str, *, project: str = "") -> VerifiabilityRe
         _check_approval(out),
         _check_reproducible(out),
         _check_references(out),
+        _check_citations(out),
         _check_figures(out),
         _check_pdf(out),
     ]

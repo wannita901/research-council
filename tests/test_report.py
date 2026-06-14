@@ -96,6 +96,7 @@ def test_clean_project_is_verified(tmp_path):
         "approval": PASS,
         "reproducible": PASS,
         "references": PASS,
+        "citations": SKIP,  # the clean fixture cites nothing inline → un-audited, not blocked
         "figures": SKIP,  # the clean fixture references no figures → un-audited, not blocked
         "pdf": PASS,
     }
@@ -292,6 +293,74 @@ def test_latex_includegraphics_reference_is_audited(tmp_path):
     assert fig.status == FAIL and fig.details["missing"] == ["assets/result.png"]
 
 
+# --- inline-citation integrity (dangling \cite / broken evidence link) --------
+def _cite(out: Path, prose: str, refs: str = "") -> None:
+    """Overwrite paper.md with a Related Work prose body + an optional References section."""
+    body = f"## Abstract\nWe report an F1 of 0.873.\n## Related Work\n{prose}\n"
+    if refs:
+        body += f"## References\n{refs}\n"
+    (out / "paper" / "paper.md").write_text(body, encoding="utf-8")
+
+
+def test_dangling_inline_citation_is_fail(tmp_path):
+    """A [key] cited in prose with no reference entry → FAIL (the reader is sent to a source
+    that isn't in the bibliography). Reproduces the live …192231 gap inline."""
+    out = _clean_project(tmp_path)
+    (out / "paper" / "references.bib").unlink()  # no bib at all, like …192231
+    _cite(out, "Tools help [wei2022chain, yao2023react]. Depth matters [shinn2023reflexion].")
+    report = verify_project(out)
+    cit = _by_name(report)["citations"]
+    assert cit.status == FAIL
+    assert set(cit.details["dangling"]) == {"wei2022chain", "yao2023react", "shinn2023reflexion"}
+    assert report.verdict == "unverified"  # the dangling cite flips the whole verdict
+
+
+def test_inline_citation_backed_by_bib_passes(tmp_path):
+    """Same prose, but the keys now have entries in references.bib → PASS."""
+    out = _clean_project(tmp_path)
+    (out / "paper" / "references.bib").write_text(
+        "@article{wei2022chain, title={Chain}, doi={10.1/x}}\n"
+        "@misc{yao2023react, title={ReAct}, note={UNVERIFIED}}\n",
+        encoding="utf-8",
+    )
+    _cite(out, "Tools help [wei2022chain] and acting [yao2023react].")
+    cit = _by_name(verify_project(out))["citations"]
+    assert cit.status == PASS and cit.details["n_cited"] == 2
+
+
+def test_inline_citation_backed_by_md_reference_list_passes(tmp_path):
+    """No bib, but the paper lists the key in its ## References section → PASS (pre-bib papers)."""
+    out = _clean_project(tmp_path)
+    (out / "paper" / "references.bib").unlink()
+    _cite(out, "Breadth matters [motivation].", refs="- [motivation] Some grounded wiki source\n")
+    cit = _by_name(verify_project(out))["citations"]
+    assert cit.status == PASS
+
+
+def test_reference_definition_is_not_counted_as_a_citation(tmp_path):
+    """The ``- [key]`` lines in the References section DEFINE keys; they must not themselves be
+    scanned as inline citations (else every defined key would be its own dangling use)."""
+    out = _clean_project(tmp_path)
+    (out / "paper" / "references.bib").unlink()
+    # Prose cites nothing; only the References section mentions [orphan].
+    _cite(out, "No citations in this prose.", refs="- [orphan] An uncited reference\n")
+    assert _by_name(verify_project(out))["citations"].status == SKIP
+
+
+def test_markdown_link_and_numeric_bracket_are_not_citations(tmp_path):
+    """``[text](url)`` markdown links and pure-numeric ``[1]`` list markers are not bibtex
+    keys — they must not be flagged as dangling citations."""
+    out = _clean_project(tmp_path)
+    (out / "paper" / "references.bib").unlink()
+    _cite(out, "See [our repo](http://x) and item [1] and [2].")
+    assert _by_name(verify_project(out))["citations"].status == SKIP
+
+
+# NB: the committed …192231 fixture ships only paper.pdf (paper.md is gitignored/sanitised), so
+# the live dangling-citation gap it exhibits is reproduced inline above (test_dangling_inline…)
+# rather than asserted against the fixture, which would SKIP for lack of a paper.md.
+
+
 # --- artifact + persistence ---------------------------------------------------
 def test_write_report_persists_verification_json(tmp_path):
     out = _clean_project(tmp_path)
@@ -306,6 +375,7 @@ def test_write_report_persists_verification_json(tmp_path):
         "approval",
         "reproducible",
         "references",
+        "citations",
         "figures",
         "pdf",
     }
