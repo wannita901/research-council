@@ -26,6 +26,11 @@ class StageCCaps:
     usd_budget: float
     block_severities: tuple[str, ...] = ("high",)  # change-request severities that block accept
     latex_fix_attempts: int = 3
+    # plan/25 Gap 1: when True, an unbacked numeric claim (no matching value in results.csv)
+    # blocks acceptance, forcing the writer to cite/back/remove it within the revision cap.
+    # Default False = flag-not-block (claims still drive revision when the loop runs for other
+    # reasons, and always land in claims.json). `thorough` turns the teeth on.
+    claims_unbacked_block: bool = False
 
 
 STAGE_B_PROFILES = {
@@ -75,7 +80,11 @@ STAGE_C_PROFILES = {
     "conservative": StageCCaps(max_revisions=2, accept=0.65, usd_budget=0.60),
     "balanced": StageCCaps(max_revisions=3, accept=0.70, usd_budget=1.50),
     "thorough": StageCCaps(
-        max_revisions=5, accept=0.78, usd_budget=4.00, block_severities=("high", "medium")
+        max_revisions=5,
+        accept=0.78,
+        usd_budget=4.00,
+        block_severities=("high", "medium"),
+        claims_unbacked_block=True,
     ),
 }
 
@@ -101,6 +110,13 @@ def _f(name: str, cur: float) -> float:
         return float(v) if v not in (None, "") else cur
     except ValueError:
         return cur
+
+
+def _b(name: str, cur: bool) -> bool:
+    v = os.getenv(name)
+    if v in (None, ""):
+        return cur
+    return v.strip().lower() in ("1", "true", "yes", "on")
 
 
 def stage_a_caps(profile: str | None = None) -> dict:
@@ -135,6 +151,7 @@ def stage_c_caps(profile: str | None = None) -> StageCCaps:
         accept=_f("RC_STAGEC_ACCEPT", c.accept),
         usd_budget=_f("RC_STAGEC_USD", c.usd_budget),
         latex_fix_attempts=_i("RC_STAGEC_LATEX_FIX_ATTEMPTS", c.latex_fix_attempts),
+        claims_unbacked_block=_b("RC_STAGEC_BLOCK_CLAIMS", c.claims_unbacked_block),
     )
 
 

@@ -231,6 +231,92 @@ async def test_embeds_real_experiment_figures(tmp_path):
     assert "## Figures" in paper and "rq1_plot.png" in paper
 
 
+_RESULTS_CSV = (
+    "rq_id,question,metric,value,feasible,approved,approvals,iterations,stopped_reason,backend\n"
+    'rq1,"Does it, with commas, work?",interaction_F,5.0812,True,True,2,3,approved,docker\n'
+)
+
+
+class _FabricatingWriter(_FakeWriter):
+    """Drafts a Results section with one backed number (5.08) and one fabricated one (0.99).
+    On revise, falls back to _FakeWriter (replaces the section with 'REVISED <s>', dropping
+    the number) — modelling a writer that removes the unbacked claim when asked."""
+
+    async def draft(self, *a, **k):
+        d = await super().draft(*a, **k)
+        d.sections["Results"] = "The interaction is significant (F=5.08); efficiency hits 0.99."
+        return d
+
+
+async def test_unbacked_claim_does_not_block_accept_by_default(tmp_path):
+    # v1 flag-not-block: a fabricated 0.99 surfaces as a change-request but still accepts.
+    (tmp_path / "experiment").mkdir()
+    (tmp_path / "experiment" / "results.csv").write_text(_RESULTS_CSV, encoding="utf-8")
+    reviewers = [_Reviewer([0.95], vendor="a"), _Reviewer([0.95], vendor="b")]
+    res = await run_writing(
+        _handoff(),
+        _FabricatingWriter(),
+        reviewers,
+        venue="generic",
+        out_dir=tmp_path,
+        caps=_C2,  # claims_unbacked_block defaults False
+        latex=False,
+    )
+    assert res.accepted and res.revisions == 1
+    # The post-hoc artifact still records the unbacked claim.
+    assert res.claims_unbacked >= 1
+    import json
+
+    data = json.loads((tmp_path / "paper" / "claims.json").read_text())
+    assert "0.99" in {c["text"] for c in data["unbacked"]}
+
+
+async def test_unbacked_claim_blocks_accept_and_forces_revision_when_enabled(tmp_path):
+    # claims_unbacked_block=True: the fabricated 0.99 blocks acceptance on round 1, forcing a
+    # revision; the writer drops the number, and round 2 (no unbacked claims) accepts.
+    (tmp_path / "experiment").mkdir()
+    (tmp_path / "experiment" / "results.csv").write_text(_RESULTS_CSV, encoding="utf-8")
+    caps = StageCCaps(max_revisions=2, accept=0.70, usd_budget=0.0, claims_unbacked_block=True)
+    reviewers = [_Reviewer([0.95], vendor="a"), _Reviewer([0.95], vendor="b")]
+    res = await run_writing(
+        _handoff(),
+        _FabricatingWriter(),
+        reviewers,
+        venue="generic",
+        out_dir=tmp_path,
+        caps=caps,
+        latex=False,
+    )
+    assert res.accepted and res.revisions == 2  # blocked round 1, accepted after the fix
+    assert "REVISED Results" in (tmp_path / "paper" / "paper.md").read_text()
+    assert res.claims_unbacked == 0  # the fabricated number is gone from the final paper
+
+
+async def test_unbacked_claim_blocking_exhausts_when_writer_wont_fix(tmp_path):
+    # If the writer keeps the unbacked number, blocking holds and the loop exhausts revisions
+    # rather than shipping a fabricated figure as 'accepted'.
+    (tmp_path / "experiment").mkdir()
+    (tmp_path / "experiment" / "results.csv").write_text(_RESULTS_CSV, encoding="utf-8")
+
+    class _StubbornWriter(_FabricatingWriter):
+        async def revise(self, draft, change_requests, sections):
+            return draft.model_copy(deep=True)  # never removes the 0.99
+
+    caps = StageCCaps(max_revisions=2, accept=0.70, usd_budget=0.0, claims_unbacked_block=True)
+    reviewers = [_Reviewer([0.95], vendor="a"), _Reviewer([0.95], vendor="b")]
+    res = await run_writing(
+        _handoff(),
+        _StubbornWriter(),
+        reviewers,
+        venue="generic",
+        out_dir=tmp_path,
+        caps=caps,
+        latex=False,
+    )
+    assert not res.accepted and res.stopped_reason == "revisions_exhausted"
+    assert res.claims_unbacked >= 1
+
+
 async def test_grounding_filters_unknown_citations_via_testmodel():
     import pytest
 

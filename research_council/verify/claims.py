@@ -245,6 +245,33 @@ def match_claim(claim: NumericClaim, evidence: list[Evidence]) -> Evidence | Non
     return None
 
 
+def draft_to_audit_md(draft, audited_sections: tuple[str, ...] = DEFAULT_AUDITED_SECTIONS) -> str:
+    """Render the audited sections of an in-memory PaperDraft into the same ``## Section``
+    markdown that ``check_paper`` consumes. The draft keeps the abstract on its own field and
+    the rest in ``.sections``; this stitches them back so the loop can check a draft BEFORE it
+    is written to disk (paper.md only exists after the writing loop finishes)."""
+    parts: list[str] = []
+    for name in audited_sections:
+        body = (draft.abstract if name == "Abstract" else draft.sections.get(name, "")) or ""
+        if body.strip():
+            parts.append(f"## {name}\n{body}")
+    return "\n\n".join(parts)
+
+
+def check_draft(
+    draft,
+    evidence: list[Evidence],
+    *,
+    audited_sections: tuple[str, ...] = DEFAULT_AUDITED_SECTIONS,
+) -> ClaimReport:
+    """Run the claims-to-evidence check against a live PaperDraft (not a file). Used inside the
+    writing loop so unbacked numeric claims can be folded into the round's change-requests and
+    actually drive a revision, instead of only being reported after the fact."""
+    return check_paper(
+        draft_to_audit_md(draft, audited_sections), evidence, audited_sections=audited_sections
+    )
+
+
 def check_paper(
     paper_md: str,
     evidence: list[Evidence],
@@ -305,7 +332,7 @@ def claims_to_change_requests(report: ClaimReport, *, severity: str = "medium"):
                 severity=severity,
                 msg=(
                     f"Unbacked numeric claim '{c.text}' in {c.section} has no matching value "
-                    f"in results.csv (context: \"{c.context}\"). Cite a source for it, back it "
+                    f'in results.csv (context: "{c.context}"). Cite a source for it, back it '
                     f"with a recorded metric, or remove it."
                 ),
             )

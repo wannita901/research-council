@@ -9,10 +9,13 @@ from __future__ import annotations
 
 from pathlib import Path
 
+from research_council.store.models import PaperDraft
 from research_council.verify.claims import (
     Evidence,
+    check_draft,
     check_paper,
     claims_to_change_requests,
+    draft_to_audit_md,
     extract_claims,
     load_evidence,
     split_sections,
@@ -155,3 +158,31 @@ def test_write_claims_report_emits_json(tmp_path: Path):
 
 def test_write_claims_report_none_without_paper(tmp_path: Path):
     assert write_claims_report(tmp_path) is None
+
+
+# --- in-memory draft checking (wired into the writing loop) --------------------
+def test_draft_to_audit_md_stitches_abstract_and_results_only():
+    draft = PaperDraft(
+        title="T",
+        abstract="we report 0.62",
+        sections={"Introduction": "ignore 0.11", "Results": "F=5.08", "Method": "skip 0.22"},
+    )
+    md = draft_to_audit_md(draft)
+    # Only the audited sections (Abstract + Results) are stitched in.
+    assert "## Abstract" in md and "0.62" in md
+    assert "## Results" in md and "5.08" in md
+    assert "Introduction" not in md and "Method" not in md
+
+
+def test_check_draft_flags_fabricated_number_in_draft():
+    evidence = [Evidence(metric="interaction_F", value=5.0812)]
+    draft = PaperDraft(
+        title="T",
+        abstract="we summarise the study",
+        sections={"Results": "The test gives F=5.08 but efficiency falls to 0.99."},
+    )
+    report = check_draft(draft, evidence)
+    assert "5.08" in {c.text for c in report.backed}
+    assert "0.99" in {c.text for c in report.unbacked}
+    crs = claims_to_change_requests(report)
+    assert any("0.99" in c.msg and c.section == "Results" for c in crs)

@@ -300,6 +300,13 @@ async def run_writing(
                 },
             )
 
+    # plan/25 Gap 1: the evidence the paper's numbers must match (experiment/results.csv).
+    # Loaded once; each review round folds any UNBACKED numeric claim into the change-requests
+    # so the writer must cite/back/remove it — turning the post-hoc flag into a feedback loop.
+    from research_council.verify.claims import check_draft, claims_to_change_requests, load_evidence
+
+    evidence = load_evidence(out_dir)
+
     score_history: list[float] = []
     best = None  # (mean, draft, merged_review)
     accepted = False
@@ -309,6 +316,17 @@ async def run_writing(
     for rnd in range(1, caps.max_revisions + 1):
         reviews = [await rv.review(draft, rubric) for rv in reviewers]
         merged, mean, blocking = _merge_reviews(reviews, caps.block_severities)
+
+        # Fold unbacked numeric claims into THIS round's change-requests. They drive the
+        # writer's revision (sections_to_revise) and, when caps.claims_unbacked_block is on,
+        # block acceptance until resolved or the revision cap binds.
+        claim_report = check_draft(draft, evidence)
+        claim_crs = claims_to_change_requests(claim_report)
+        if claim_crs:
+            merged.change_requests.extend(claim_crs)
+            if caps.claims_unbacked_block:
+                blocking = True
+
         score_history.append(mean)
         if emit:
             for rv in reviews:  # per-reviewer detail: who scored what + what they demand
@@ -337,6 +355,16 @@ async def run_writing(
                     "change_requests": len(merged.change_requests),
                 },
             )
+            if claim_crs:
+                emit(
+                    "writing",
+                    "claims_round",
+                    {
+                        "round": rnd,
+                        "unbacked": len(claim_crs),
+                        "blocking": caps.claims_unbacked_block,
+                    },
+                )
         if best is None or mean > best[0]:
             best = (mean, draft.model_copy(deep=True), merged)
 
