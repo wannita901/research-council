@@ -2,9 +2,16 @@
 
 from __future__ import annotations
 
+import os
+
 from research_council.store.models import Citation, PaperDraft
 from research_council.verify.figure import render_result_figure
-from research_council.verify.latex import build_paper_latex, latex_engine, scaffold_tex
+from research_council.verify.latex import (
+    _compile,
+    build_paper_latex,
+    latex_engine,
+    scaffold_tex,
+)
 
 
 def _draft():
@@ -50,6 +57,45 @@ def test_build_compiles_if_engine_present(tmp_path):
     assert out["status"] in ("built", "build_failed")
     if out["status"] == "built":
         assert out["pdf"].endswith(".pdf")
+
+
+def test_compile_invocation_uses_bare_name_in_resolved_cwd(tmp_path, monkeypatch):
+    """Regression guard for the path bug seen in project …103845's build.log
+    ("Could not find file 'projects/.../paper/paper.tex'"): the engine must be
+    invoked with cwd=the .tex's resolved parent and the BARE filename — never a
+    relative/foreign path — so it resolves regardless of the process's cwd.
+    Offline: subprocess.run is stubbed, so this runs with or without a TeX engine."""
+    import research_council.verify.latex as lx
+
+    tex = tmp_path / "sub" / "paper.tex"
+    tex.parent.mkdir(parents=True)
+    tex.write_text(r"\documentclass{article}\begin{document}x\end{document}", encoding="utf-8")
+
+    seen = {}
+
+    class _P:
+        returncode = 0
+        stdout = "ok"
+        stderr = ""
+
+    def _fake_run(cmd, cwd, capture_output, text, timeout):
+        seen["cmd"], seen["cwd"] = cmd, cwd
+        # mimic a successful build so _compile reports ok
+        tex.with_suffix(".pdf").write_text("%PDF-1.5\n", encoding="utf-8")
+        return _P()
+
+    monkeypatch.setattr(lx.subprocess, "run", _fake_run)
+    # run from a DIFFERENT cwd than the .tex lives in — this is what broke before
+    monkeypatch.chdir(tmp_path)
+    engine, kind = "latexmk", "latexmk"
+    # pass a RELATIVE path to prove _compile resolves it before splitting cwd/name
+    ok, _log = _compile(engine, kind, tex.relative_to(tmp_path))
+
+    assert ok
+    # the filename argument must be the bare name, with no directory separator
+    assert "paper.tex" in seen["cmd"] and not any("/" in str(a) for a in seen["cmd"][1:])
+    # ...and cwd must be the resolved parent of the .tex, not the process cwd
+    assert os.path.realpath(seen["cwd"]) == os.path.realpath(tex.parent)
 
 
 def test_figure_render_is_soft(tmp_path):

@@ -831,6 +831,17 @@ def project_status(pid: str = typer.Argument(..., help="project id")):
         s = p.stages[n]
         t.add_row("①②③"[i], n, _STAGE_ICON.get(s.status, s.status), s.summary[:64])
     ui.console.print(t)
+    # Surface the headline artifact: a paper.tex with no paper.pdf is a LaTeX build
+    # failure, not "no paper" — make it visible instead of a silent skip (plan/25 Gap 5).
+    paper_dir = store.root / pid / "paper"
+    pdf, tex = paper_dir / "paper.pdf", paper_dir / "paper.tex"
+    if pdf.exists():
+        kb = pdf.stat().st_size / 1024
+        ui.console.print(f"[green]paper: ✓ {pdf} ({kb:.0f} KB)[/green]")
+    elif tex.exists():
+        ui.console.print(
+            f"[yellow]paper: ✗ no PDF — LaTeX build failed (see {paper_dir / 'build.log'})[/yellow]"
+        )
     if is_complete(p):
         ui.console.print("[green]✓ project complete[/green]")
     elif p.stages[p.current].status == "awaiting_approval":
