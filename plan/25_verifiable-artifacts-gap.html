@@ -1,0 +1,150 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Phase 7 · Verifiable-Artifacts Gap Analysis · research-council</title>
+  <link rel="stylesheet" href="style.css">
+  <script src="nav.js"></script>
+</head>
+<body>
+  <main class="content">
+    <header>
+      <div class="eyebrow">Phase 7 · Implementation (v2)</div>
+      <h1>Can it actually generate a paper with <em>verifiable</em> artifacts?</h1>
+      <div class="meta">Audit 2026-06-14 · grounded in the 3 live projects on disk + a code read of <code>debate/writing.py</code>, <code>debate/experimentation.py</code>, <code>verify/*</code>, <code>agents/writer.py</code></div>
+    </header>
+
+    <p class="lead">The pipeline runs end-to-end and <strong>emits</strong> the right files (proposal → results.csv + per-RQ code/figures → paper.md/.tex/.pdf). But "verifiable" means a reader can <em>check that the paper's claims follow from the artifacts</em>, and that the artifacts can be <em>re-run</em>. On both counts the chain is currently <strong>open</strong>: numbers in the prose are never checked against the data, experiments carry no reproduction manifest, citations are filtered but not resolved, and the council's own approval signal is ignored at the Stage B→C boundary.</p>
+
+    <div class="callout warn">
+      <div class="label">Headline promise vs. reality</div>
+      The README states two principles: <em>"every claim must cite a source or show experiment evidence"</em> and <em>"nothing advances without your approval."</em> The first is enforced for <strong>citations</strong> (keys not in the wiki allow-list are dropped) but <strong>not for numeric claims</strong>. The second holds for <strong>human</strong> gates but not for the <strong>council's</strong> approval — see Gap&nbsp;4.
+    </div>
+
+    <h2>1 · What I observed in the 3 projects on disk</h2>
+    <p>Evidence, not speculation — these are facts from <code>projects/*/</code>:</p>
+    <table>
+      <thead><tr><th>Project</th><th>Experiments approved?</th><th><code>paper.pdf</code>?</th><th>Paper status</th><th>Prose numbers backed by <code>results.csv</code>?</th></tr></thead>
+      <tbody>
+        <tr><td>…103845</td><td><span class="no">✗</span> all RQs <code>approved=False, approvals=0</code></td><td><span class="no">✗</span> none (build.log: <em>"Could not find file paper.tex"</em>)</td><td>best-so-far (revisions_exhausted)</td><td><span class="part">~</span> primary 3 match; "secondary metrics" paragraph unbacked</td></tr>
+        <tr><td>…163822</td><td><span class="no">✗</span> empty <code>results.csv</code></td><td><span class="no">✗</span> none</td><td>—</td><td>n/a</td></tr>
+        <tr><td>…192231</td><td><span class="part">~</span> 1 of 3 approved</td><td><span class="yes">✓</span> compiled</td><td>best-so-far (revisions_exhausted)</td><td><span class="part">~</span> not audited row-by-row</td></tr>
+      </tbody>
+    </table>
+    <p>So today: a full, venue-scored paper is written even when <strong>zero experiments were approved</strong>, the headline artifact (<code>paper.pdf</code>) compiles in only <strong>1 of 3</strong> runs, and the prose contains quantitative claims with <strong>no corresponding row</strong> in the data file.</p>
+
+    <details>
+      <summary>The smoking gun — an unbacked numeric claim (project …103845)</summary>
+      <div class="body">
+        <p><code>experiment/results.csv</code> contains exactly three metrics: <code>signed_NxT_interaction=0.000137</code>, <code>interaction_effect_size=0.3900</code>, <code>interaction_F=5.0812</code>. The Results section correctly cites all three (F=5.08, η²=0.39, 1.37×10⁻⁴). But it then adds:</p>
+        <blockquote>"Tool-call efficiency decreases monotonically with N, falling from a mean of <strong>0.81 at N=2 to 0.57 at N=16</strong> … First-error step index decreases as N increases…"</blockquote>
+        <p>Neither <code>0.81</code>, <code>0.57</code>, "first-error step index", nor "post-error recovery rate" appears anywhere in <code>results.csv</code> or the RQ logs. They are plausible, on-topic, and <strong>unverifiable</strong> — exactly the failure mode the product claims to prevent.</p>
+      </div>
+    </details>
+
+    <h2>2 · Where the verification chain breaks</h2>
+    <div class="flow">
+      <div class="node">
+        <div class="rail"><div class="dot">B</div><div class="line"></div></div>
+        <div class="nodebody">
+          <div class="nodehead">Experiment runs in sandbox <span class="tag">verify/sandbox.py</span></div>
+          <div class="detail">Produces a scalar <code>METRIC name=value</code> + figures. <strong>Break:</strong> no seed, no pinned package versions, no hash of <code>experiment.py</code>, no re-run recipe is recorded → the result is not reproducible. (Gap 3)</div>
+        </div>
+      </div>
+      <div class="node">
+        <div class="rail"><div class="dot">→</div><div class="line"></div></div>
+        <div class="nodebody">
+          <div class="nodehead">Stage B → Stage C handoff</div>
+          <div class="detail"><strong>Break:</strong> the council's <code>approved</code> flag is recorded in <code>results.csv</code> but never gates the transition — writing proceeds on unapproved/empty results. (Gap 4)</div>
+        </div>
+      </div>
+      <div class="node">
+        <div class="rail"><div class="dot">C</div><div class="line"></div></div>
+        <div class="nodebody">
+          <div class="nodehead">Writer drafts prose <span class="tag">agents/writer.py</span></div>
+          <div class="detail"><strong>Break:</strong> the writer is *told* to "only claim what each experiment showed" but its output numbers are never diffed against <code>results.csv</code>. (Gap 1) Citations are filtered to the wiki allow-list but never resolved to a real DOI/arXiv id. (Gap 2)</div>
+        </div>
+      </div>
+      <div class="node">
+        <div class="rail"><div class="dot">✓</div></div>
+        <div class="nodebody">
+          <div class="nodehead">Final artifact</div>
+          <div class="detail"><strong>Break:</strong> no <code>MANIFEST</code> tying each paper claim/figure back to its evidence row; <code>paper.pdf</code> compile is unreliable. (Gaps 1, 5)</div>
+        </div>
+      </div>
+    </div>
+
+    <h2>3 · Prioritised gaps &amp; recommended fixes</h2>
+    <table>
+      <thead><tr><th>#</th><th>Gap</th><th>Recommended fix</th><th>Effort</th><th>Impact</th></tr></thead>
+      <tbody>
+        <tr>
+          <td><strong>1</strong></td>
+          <td><strong>Numeric claims are never checked against the data.</strong> Prose can state any number; nothing fails.</td>
+          <td>Add a <code>verify/claims.py</code> claim-checker: extract numeric tokens + their metric labels from the draft, fuzzy-match against <code>results.csv</code> (+ RQ logs) within tolerance, and emit a <code>paper/claims.json</code> evidence map (<code>claim → row / UNBACKED</code>). Feed every UNBACKED claim back into the PC review loop as a <strong>blocking</strong> change-request so the writer must cite or delete it.</td>
+          <td>M</td>
+          <td><span class="yes">High</span></td>
+        </tr>
+        <tr>
+          <td><strong>2</strong></td>
+          <td><strong>Citations filtered, not verified.</strong> Wiki-only allow-list; ungrounded refs merely tagged <em>"needs verification"</em>; no resolvable bibliography.</td>
+          <td>Resolve each allowed citation to a real identifier via the <em>already-present</em> <code>retrieval/{semanticscholar,openalex,arxiv}.py</code> providers; emit <code>paper/references.bib</code> with DOIs/arXiv ids; drop or hard-flag anything unresolvable. Closes the "cite a source" half of the promise with a checkable artifact.</td>
+          <td>M</td>
+          <td><span class="yes">High</span></td>
+        </tr>
+        <tr>
+          <td><strong>3</strong></td>
+          <td><strong>Experiments aren't reproducible.</strong> No seed, no pinned versions, no code hash, no re-run command.</td>
+          <td>Per RQ, write a <code>repro.json</code> (random seed, resolved <code>pip freeze</code>, sha256 of <code>experiment.py</code>, sandbox image digest, the exact run command, captured <code>METRIC</code> value) + a top-level <code>reproduce.sh</code> that re-runs all RQs and diffs metrics against the recorded values.</td>
+          <td>M</td>
+          <td><span class="yes">High</span></td>
+        </tr>
+        <tr>
+          <td><strong>4</strong></td>
+          <td><strong>Writing proceeds on unapproved experiments.</strong> All RQs <code>approved=False</code> → full paper still drafted as if it were a result.</td>
+          <td>Gate the B→C handoff on the council's own signal: if no RQ is approved, either block writing (require human override) or force the paper into an explicit <em>"negative/feasibility result"</em> template so it can't overclaim. Surface approved-RQ count in <code>project status</code>.</td>
+          <td>S</td>
+          <td><span class="yes">High</span></td>
+        </tr>
+        <tr>
+          <td><strong>5</strong></td>
+          <td><strong>PDF compile is unreliable</strong> (0–1 of 3 runs). build.log shows a path-resolution failure invoking latexmk.</td>
+          <td>Run the TeX engine with an absolute <code>--cd</code> into <code>paper/</code>; treat a missing PDF as a Stage-C failure surfaced in <code>project status</code> (not a silent skip). Add an offline smoke test that compiles a fixture <code>.tex</code> so the path bug can't regress.</td>
+          <td>S</td>
+          <td><span class="part">Med</span></td>
+        </tr>
+        <tr>
+          <td><strong>6</strong></td>
+          <td><strong>Single-observation statistics.</strong> n=1 per cell; an F-test reported with df=0. The paper itself admits the stats are descriptive.</td>
+          <td>Have the coder emit replicate runs (seeds) and report mean ± CI; the claim-checker (Gap 1) then verifies the reported CI exists in the data. Lower priority — correctness of the science, not of the artifact chain.</td>
+          <td>L</td>
+          <td><span class="part">Med</span></td>
+        </tr>
+      </tbody>
+    </table>
+
+    <div class="callout good">
+      <div class="label">Recommended first slice (next iteration)</div>
+      <strong>Gap 1 — the claims-to-evidence checker.</strong> It is the single change that turns "a paper that mentions numbers" into "a paper whose numbers are verifiable", it directly delivers the named artifact (<code>claims.json</code>), it is offline-testable with the existing <code>results.csv</code> fixtures (no API keys, per the dev-verification preference), and it composes with the existing PC-review loop rather than adding new machinery. Gap 4 (the approval gate) is a tiny, high-value companion.
+    </div>
+
+    <h2>4 · What already works (don't rebuild)</h2>
+    <ul>
+      <li>Real experiment <strong>code</strong> is saved and re-runnable in principle (<code>experiment/&lt;rq&gt;/experiment.py</code> + <code>requirements.txt</code>).</li>
+      <li>Figures are <strong>real plots of computed data</strong>, collected from the sandbox and embedded in the paper (plan/24).</li>
+      <li>Citation <strong>invention is already blocked</strong> by the allow-list filter — we only need to add *resolution* on top.</li>
+      <li>The <code>METRIC name=value</code> convention + <code>results.csv</code> give the claim-checker (Gap 1) a clean target to match against — the data half of the contract exists; only the *check* is missing.</li>
+    </ul>
+
+    <h2>5 · Decided vs open</h2>
+    <div class="callout good"><div class="label">Decided (this audit)</div>
+      The gap is <em>verification</em>, not generation. Sequence the fixes claims-checker → approval-gate → repro-manifest → bib-resolution → latex-robustness. <em>Why:</em> claims-checking is the highest impact, offline-testable, and reuses the existing review loop.</div>
+    <div class="callout warn"><div class="label">Open</div>
+      Tolerance + label-matching strategy for the claim-checker (exact vs. rounded vs. unit-aware), and whether an UNBACKED claim is <em>blocking</em> or merely <em>flagged</em> in v1. Resolve when building Gap 1.</div>
+
+    <h2>6 · Files this would touch</h2>
+    <p>New: <code>verify/claims.py</code> (claim extraction + evidence match), <code>verify/repro.py</code> (manifest writer). Edited: <code>debate/writing.py</code> (run the checker, route UNBACKED claims into <code>change_requests</code>, write <code>claims.json</code>), <code>debate/experimentation.py</code> (write <code>repro.json</code> per RQ; B→C approval gate), <code>verify/latex.py</code> (absolute-cwd compile + surface failure), <code>agents/writer.py</code> (emit <code>references.bib</code> from resolved citations). Tests: offline fixtures using the existing <code>projects/*/experiment/results.csv</code>.</p>
+  </main>
+</body>
+</html>

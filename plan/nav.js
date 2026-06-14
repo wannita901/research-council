@@ -44,6 +44,7 @@ const PAGES = [
   { file: "22_live-run-fixes.html",         n: 22, phase: 7, title: "Live-Run Fixes + Incremental Iteration" },
   { file: "23_deliberation-balance.html",   n: 23, phase: 7, title: "Deliberation Balance + Caps in mise" },
   { file: "24_libraries-and-figures.html",  n: 24, phase: 7, title: "Stage-B Libraries + Figures" },
+  { file: "25_verifiable-artifacts-gap.html", n: 25, phase: 7, title: "Verifiable-Artifacts Gap Analysis" },
 ];
 
 const STATUS_ICON = { done: "✓", wip: "◐", next: "▸", todo: "○" };
