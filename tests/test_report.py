@@ -62,8 +62,7 @@ def _clean_project(root: Path) -> Path:
     (out / "experiment" / "rq1").mkdir(parents=True)
     (out / "paper").mkdir(parents=True)
     (out / "experiment" / "results.csv").write_text(
-        "rq_id,question,metric,value,approved\n"
-        'rq1,"does it, work?",f1,0.873,true\n',
+        'rq_id,question,metric,value,approved\nrq1,"does it, work?",f1,0.873,true\n',
         encoding="utf-8",
     )
     (out / "paper" / "paper.md").write_text(

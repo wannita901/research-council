@@ -143,12 +143,12 @@ def reproduce_sh(rq_results: list[RQResult], *, rel_tol: float = REL_TOL) -> str
             "  && { [ -f requirements.txt ] && pip install -q -r requirements.txt || true; } \\",
             "  && out=$(python experiment.py 2>&1) \\",
             '  && echo "$out" \\',
-            "  && got=$(echo \"$out\" | sed -n 's/.*METRIC[[:space:]]\\{1,\\}"
+            '  && got=$(echo "$out" | sed -n \'s/.*METRIC[[:space:]]\\{1,\\}'
             + _re_sed(name)
             + "[[:space:]]*=[[:space:]]*\\([^[:space:]]*\\).*/\\1/p' | tail -n1) \\",
-            f"  && GOT=\"$got\" python3 -c \"import os, sys; got=float(os.environ['GOT']); "
+            f'  && GOT="$got" python3 -c "import os, sys; got=float(os.environ[\'GOT\']); '
             f"exp={value!r}; rel={rel_tol!r}; "
-            "sys.exit(0 if abs(got-exp) <= rel*abs(exp) or (got==0 and exp==0) else 1)\" \\",
+            'sys.exit(0 if abs(got-exp) <= rel*abs(exp) or (got==0 and exp==0) else 1)" \\',
             f"  && echo 'PASS {rq}: '\"$got\"' ~= {value}' \\",
             f"  || {{ echo 'FAIL {rq}: expected {value}, got '\"${{got:-<none>}}\"; exit 1; }} ) "
             "|| fail=1",
@@ -167,7 +167,7 @@ def _re_sed(metric_name: str | None) -> str:
     if not metric_name:
         return "[^[:space:]=]\\{1,\\}"
     # Escape BRE specials so a metric like 'acc.1' or 'f[x]' is matched literally.
-    return re.sub(r'([.[\]*^$\\/])', r'\\\1', metric_name)
+    return re.sub(r"([.[\]*^$\\/])", r"\\\1", metric_name)
 
 
 def write_repro(

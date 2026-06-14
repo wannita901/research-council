@@ -56,8 +56,12 @@ def test_scaffold_embeds_resolved_doi_url_in_bibitem():
     )
     resolutions = [
         Resolution(key="doi24", query_title="A DOI paper", resolved=True, doi="10.1145/1234.5678"),
-        Resolution(key="url24", query_title="An arXiv paper", resolved=True,
-                   url="https://arxiv.org/abs/2401.00001"),
+        Resolution(
+            key="url24",
+            query_title="An arXiv paper",
+            resolved=True,
+            url="https://arxiv.org/abs/2401.00001",
+        ),
         Resolution(key="bad24", query_title="An invented paper", resolved=False),
     ]
     tex = scaffold_tex(draft, {"doc_class": "article"}, resolutions=resolutions)

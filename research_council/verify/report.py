@@ -88,9 +88,7 @@ def _check_claims(out_dir: Path) -> CheckResult:
         return CheckResult("claims", SKIP, "no paper.md to audit")
     evidence = claims.load_evidence(out_dir)
     if not evidence:
-        return CheckResult(
-            "claims", SKIP, "no results.csv evidence to check claims against"
-        )
+        return CheckResult("claims", SKIP, "no results.csv evidence to check claims against")
     report = claims.check_paper(paper_md.read_text(encoding="utf-8"), evidence)
     details = {
         "n_claims": report.n_claims,
@@ -153,7 +151,10 @@ def _check_reproducible(out_dir: Path) -> CheckResult:
     }
     if not script.exists() and not manifests:
         return CheckResult(
-            "reproducible", FAIL, "no reproduce.sh or repro.json — runs are not re-runnable", details
+            "reproducible",
+            FAIL,
+            "no reproduce.sh or repro.json — runs are not re-runnable",
+            details,
         )
     if script.exists() and manifests:
         return CheckResult(
@@ -192,10 +193,16 @@ def _check_references(out_dir: Path) -> CheckResult:
     if n_resolved is not None and n_total:
         if n_resolved == 0:
             return CheckResult(
-                "references", WARN, f"references.bib present but 0/{n_total} resolved to a DOI", details
+                "references",
+                WARN,
+                f"references.bib present but 0/{n_total} resolved to a DOI",
+                details,
             )
         return CheckResult(
-            "references", PASS, f"{n_resolved}/{n_total} citation(s) resolved to a DOI/record", details
+            "references",
+            PASS,
+            f"{n_resolved}/{n_total} citation(s) resolved to a DOI/record",
+            details,
         )
     return CheckResult("references", PASS, "references.bib present", details)
 
@@ -266,7 +273,9 @@ def _check_pdf(out_dir: Path) -> CheckResult:
         from research_council.verify.latex import latex_engine
 
         build_log = paper_dir / "build.log"
-        log_text = build_log.read_text(encoding="utf-8", errors="replace") if build_log.exists() else ""
+        log_text = (
+            build_log.read_text(encoding="utf-8", errors="replace") if build_log.exists() else ""
+        )
         # build.log is the run-time record of WHY there's no PDF. The no-engine marker (or, for
         # pre-producer projects with no log, no engine on PATH now) means the compile never ran —
         # not that it ran and failed.

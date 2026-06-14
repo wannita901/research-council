@@ -33,7 +33,9 @@ FIXTURE = (
 )
 
 
-def _rq(rq_id, question, code, metric, *, feasible=True, approved=False, reqs=None, backend="docker"):
+def _rq(
+    rq_id, question, code, metric, *, feasible=True, approved=False, reqs=None, backend="docker"
+):
     return RQResult(
         rq_id=rq_id,
         question=question,

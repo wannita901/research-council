@@ -22,7 +22,9 @@ from research_council.verify.approval import (
 PROJECTS = Path(__file__).resolve().parents[1] / "projects"
 SMOKING_GUN = PROJECTS / "how-does-accuracy-scale-with-103845"
 
-_HEADER = "rq_id,question,metric,value,feasible,approved,approvals,iterations,stopped_reason,backend\n"
+_HEADER = (
+    "rq_id,question,metric,value,feasible,approved,approvals,iterations,stopped_reason,backend\n"
+)
 
 
 def _write_results(out_dir: Path, rows: str) -> None:
@@ -51,7 +53,9 @@ def test_tallies_approved_and_unapproved(tmp_path):
 
 def test_commas_inside_question_do_not_break_the_count(tmp_path):
     # the csv module (not cut -d,) must keep total==1 despite commas in the quoted question
-    _write_results(tmp_path, 'rq1,"Does it, with many, commas, work?",m,0.5,True,False,0,2,x,docker\n')
+    _write_results(
+        tmp_path, 'rq1,"Does it, with many, commas, work?",m,0.5,True,False,0,2,x,docker\n'
+    )
     st = approval_status(tmp_path)
     assert st.total == 1 and st.approved == 0 and st.unapproved_rqs == ["rq1"]
 
@@ -82,8 +86,7 @@ def test_zero_approved_yields_negative_result_framing(tmp_path):
 def test_partial_approval_scopes_claims(tmp_path):
     _write_results(
         tmp_path,
-        'rq1,"q",m,0.5,True,True,2,3,approved,docker\n'
-        'rq2,"q2",m,0.6,True,False,0,2,x,docker\n',
+        'rq1,"q",m,0.5,True,True,2,3,approved,docker\nrq2,"q2",m,0.6,True,False,0,2,x,docker\n',
     )
     c = honesty_constraint(approval_status(tmp_path))
     assert c and "rq2" in c and "approved" in c.lower()
@@ -141,8 +144,7 @@ async def test_some_approved_can_still_accept_when_block_enabled(tmp_path):
     # blocking only bites when ZERO are approved; one approval lets a strong paper through.
     _write_results(
         tmp_path,
-        'rq1,"q",m,0.5,True,True,2,3,approved,docker\n'
-        'rq2,"q2",m,0.6,True,False,0,2,x,docker\n',
+        'rq1,"q",m,0.5,True,True,2,3,approved,docker\nrq2,"q2",m,0.6,True,False,0,2,x,docker\n',
     )
     caps = StageCCaps(max_revisions=2, accept=0.70, usd_budget=0.0, unapproved_block=True)
     reviewers = [_Reviewer([0.85], vendor="a"), _Reviewer([0.85], vendor="b")]

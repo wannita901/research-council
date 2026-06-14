@@ -154,9 +154,17 @@ async def resolve_citations(citations, providers, *, k: int = SEARCH_K) -> list[
 # --- BibTeX emission (pure) ---------------------------------------------------
 def _bib_escape(text: str) -> str:
     """Escape the BibTeX-significant characters in a free-text field value."""
-    return (text or "").replace("\\", r"\\").replace("{", r"\{").replace("}", r"\}").replace(
-        "&", r"\&"
-    ).replace("%", r"\%").replace("$", r"\$").replace("#", r"\#").replace("_", r"\_")
+    return (
+        (text or "")
+        .replace("\\", r"\\")
+        .replace("{", r"\{")
+        .replace("}", r"\}")
+        .replace("&", r"\&")
+        .replace("%", r"\%")
+        .replace("$", r"\$")
+        .replace("#", r"\#")
+        .replace("_", r"\_")
+    )
 
 
 def _entry(citation, res: Resolution | None) -> str:

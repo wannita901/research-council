@@ -126,8 +126,14 @@ async def test_arxiv_url_without_doi_still_resolves_with_url():
 def test_bibtex_resolved_entry_has_doi_year_and_is_article():
     cit = Citation(key="repair", text="Neural Program Repair")
     res = Resolution(
-        key="repair", query_title="Neural Program Repair", resolved=True, doi="10.1145/1.2",
-        url="https://doi.org/10.1145/1.2", year=2021, source="openalex", score=1.0,
+        key="repair",
+        query_title="Neural Program Repair",
+        resolved=True,
+        doi="10.1145/1.2",
+        url="https://doi.org/10.1145/1.2",
+        year=2021,
+        source="openalex",
+        score=1.0,
     )
     bib = to_bibtex([cit], [res])
     assert "@article{repair," in bib and "doi = {10.1145/1.2}" in bib and "year = {2021}" in bib

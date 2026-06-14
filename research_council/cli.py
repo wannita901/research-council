@@ -840,7 +840,9 @@ def project_status(pid: str = typer.Argument(..., help="project id")):
         ui.console.print(f"[green]paper: ✓ {pdf} ({kb:.0f} KB)[/green]")
     elif tex.exists():
         build_log = paper_dir / "build.log"
-        log_text = build_log.read_text(encoding="utf-8", errors="replace") if build_log.exists() else ""
+        log_text = (
+            build_log.read_text(encoding="utf-8", errors="replace") if build_log.exists() else ""
+        )
         if "no tectonic/latexmk on PATH" in log_text:
             ui.console.print(
                 f"[yellow]paper: ◐ paper.tex written; no TeX engine on PATH to compile it "
@@ -1131,7 +1133,9 @@ def _run_stage_c(handoff, out_dir, onboarding, profile: str = "balanced"):
         elif k == "revise":
             extra = f"round {pl['round']} · sections {pl['sections']}"
         elif k == "references":
-            extra = f"{pl.get('resolved', 0)}/{pl.get('total', 0)} citation(s) resolved to a DOI/record"
+            extra = (
+                f"{pl.get('resolved', 0)}/{pl.get('total', 0)} citation(s) resolved to a DOI/record"
+            )
         elif k == "latex":
             extra = f"{pl['status']}" + (" · pdf" if pl.get("pdf") else "")
         else:
