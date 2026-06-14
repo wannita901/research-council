@@ -24,8 +24,13 @@ from research_council.verify.repro import (
     write_repro,
 )
 
-ROOT = Path(__file__).resolve().parent.parent
-FIXTURE = ROOT / "projects" / "how-does-accuracy-scale-with-103845" / "experiment"
+FIXTURE = (
+    Path(__file__).resolve().parent
+    / "fixtures"
+    / "verify"
+    / "how-does-accuracy-scale-with-103845"
+    / "experiment"
+)
 
 
 def _rq(rq_id, question, code, metric, *, feasible=True, approved=False, reqs=None, backend="docker"):

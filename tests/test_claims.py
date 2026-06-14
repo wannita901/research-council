@@ -22,7 +22,7 @@ from research_council.verify.claims import (
     write_claims_report,
 )
 
-PROJECTS = Path(__file__).resolve().parents[1] / "projects"
+PROJECTS = Path(__file__).resolve().parent / "fixtures" / "verify"
 SMOKING_GUN = PROJECTS / "how-does-accuracy-scale-with-103845"
 
 
