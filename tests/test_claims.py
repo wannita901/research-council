@@ -17,6 +17,7 @@ from research_council.verify.claims import (
     claims_to_change_requests,
     draft_to_audit_md,
     extract_claims,
+    extract_suppressed,
     load_evidence,
     split_sections,
     write_claims_report,
@@ -102,6 +103,59 @@ def test_192231_prose_drops_dispersion_noise_but_keeps_real_gap():
     rep = check_paper(paper_md, evidence)
     assert {c.text for c in rep.unbacked} == {"0.43"}
     assert "0.35" in {c.text for c in rep.backed}  # the grand mean still matches the data
+
+
+# --- suppressed numbers are recorded, not silently dropped ---------------------
+def test_extract_suppressed_returns_conventions_with_reasons():
+    # The numbers extract_claims skips are now retrievable, each tagged with WHY they were skipped.
+    text = "The grand mean is 0.35 (SD = 0.08); the effect was significant (p<0.05)."
+    sup = extract_suppressed(text, "Results")
+    by_text = {c.text: c.suppress_reason for c in sup}
+    assert by_text == {"0.08": "dispersion", "0.05": "significance"}
+    # The point estimate is NOT in the suppressed set — it's a real claim extract_claims keeps.
+    assert "0.35" not in by_text
+    assert {c.text for c in extract_claims(text, "Results")} == {"0.35"}
+
+
+def test_suppressed_numbers_surface_in_report_without_changing_verdict():
+    # A fabricated SD that no metric backs no longer vanishes: it's recorded in report.suppressed
+    # (backed=False) so a reviewer can SEE it, but it does NOT count as unbacked (verdict unchanged).
+    evidence = [Evidence(metric="grand_mean", value=0.35)]
+    rep = check_paper("## Results\nGrand mean 0.35 (SD = 0.08, p<0.05).", evidence)
+    assert rep.n_unbacked == 0  # the gate still passes — suppressed numbers don't fail it
+    sup = {c.text: c for c in rep.suppressed}
+    assert set(sup) == {"0.08", "0.05"}
+    assert sup["0.08"].suppress_reason == "dispersion"
+    assert sup["0.08"].backed is False  # no recorded metric backs the made-up SD
+
+
+def test_suppressed_dispersion_is_marked_backed_when_a_metric_verifies_it():
+    # Since iter-14, metrics.csv can record secondary metrics like an SD. A suppressed dispersion
+    # number that MATCHES a recorded value is positively verified (backed=True) instead of being
+    # blindly trusted — turning "we didn't check this" into "this checks out".
+    evidence = [Evidence(metric="acc_mean", value=0.35), Evidence(metric="acc_sd", value=0.08)]
+    rep = check_paper("## Results\nAccuracy 0.35 (SD = 0.08).", evidence)
+    sd = next(c for c in rep.suppressed if c.text == "0.08")
+    assert sd.backed is True
+    assert sd.matched_metric == "acc_sd"
+
+
+def test_suppressed_list_persists_in_claims_json(tmp_path):
+    paper = tmp_path / "paper"
+    paper.mkdir(parents=True)
+    (paper / "paper.md").write_text(
+        "## Results\nGrand mean 0.35 (SD = 0.08, p<0.05).\n", encoding="utf-8"
+    )
+    exp = tmp_path / "experiment"
+    exp.mkdir()
+    (exp / "results.csv").write_text("rq_id,metric,value\nrq1,grand_mean,0.35\n", encoding="utf-8")
+    rep = write_claims_report(tmp_path)
+    assert rep is not None
+    import json
+
+    data = json.loads((paper / "claims.json").read_text(encoding="utf-8"))
+    assert data["n_suppressed"] == 2
+    assert {s["text"] for s in data["suppressed"]} == {"0.08", "0.05"}
 
 
 # --- rounding-aware matching ---------------------------------------------------

@@ -68,6 +68,7 @@ class NumericClaim:
     context: str  # ± a few words around the token, for the report
     decimals: int  # significant decimals as written (drives rounding-aware match)
     is_percent: bool = False
+    suppress_reason: str = ""  # non-empty when this is a non-point number (significance/dispersion)
 
 
 @dataclass
@@ -81,6 +82,7 @@ class CheckedClaim:
     backed: bool
     matched_metric: str = ""
     matched_value: float | None = None
+    suppress_reason: str = ""  # why this number was excluded from the point-claim audit (if any)
 
 
 @dataclass
@@ -89,6 +91,11 @@ class ClaimReport:
 
     backed: list[CheckedClaim] = field(default_factory=list)
     unbacked: list[CheckedClaim] = field(default_factory=list)
+    # Numbers the audit deliberately did NOT require evidence for — significance conventions
+    # (p<0.05, thresholds) and dispersion (SD/SE/±/CI) that a point-only results.csv can't carry.
+    # Recorded (not silently dropped) so the gate's own scope is auditable, and flagged backed=True
+    # when a recorded metric happens to verify them. These NEVER count toward n_unbacked/the verdict.
+    suppressed: list[CheckedClaim] = field(default_factory=list)
     evidence: list[Evidence] = field(default_factory=list)
     audited_sections: list[str] = field(default_factory=list)
 
@@ -100,14 +107,20 @@ class ClaimReport:
     def n_unbacked(self) -> int:
         return len(self.unbacked)
 
+    @property
+    def n_suppressed(self) -> int:
+        return len(self.suppressed)
+
     def to_dict(self) -> dict:
         return {
             "n_claims": self.n_claims,
             "n_backed": len(self.backed),
             "n_unbacked": self.n_unbacked,
+            "n_suppressed": self.n_suppressed,
             "audited_sections": self.audited_sections,
             "backed": [asdict(c) for c in self.backed],
             "unbacked": [asdict(c) for c in self.unbacked],
+            "suppressed": [asdict(c) for c in self.suppressed],
             "evidence": [asdict(e) for e in self.evidence],
         }
 
@@ -249,20 +262,20 @@ def split_sections(paper_md: str) -> dict[str, str]:
     return sections
 
 
-def extract_claims(text: str, section: str) -> list[NumericClaim]:
-    """Pull numeric claims (decimals, percentages, scientific notation) from one section."""
-    claims: list[NumericClaim] = []
+def _iter_numbers(text: str, section: str) -> list[NumericClaim]:
+    """Every numeric token in the text, each tagged with its ``suppress_reason`` (empty when it
+    is a genuine point-estimate claim). Callers split on that tag: ``extract_claims`` keeps the
+    point claims to audit, ``extract_suppressed`` keeps the conventions to record-not-require."""
+    out: list[NumericClaim] = []
     for m in _NUM_RE.finditer(text):
         token = m.group(0).strip()
-        if _suppress_reason(text, m.start(), m.end()):
-            continue  # significance (p<0.05, "p-value of 0.14") or dispersion (SD/SE/±/CI)
         is_pct = m.lastgroup == "pct"
         value = _parse_number(token.rstrip("%").strip() if is_pct else token)
         if value is None:
             continue
         lo, hi = max(0, m.start() - 40), min(len(text), m.end() + 40)
         ctx = " ".join(text[lo:hi].split())
-        claims.append(
+        out.append(
             NumericClaim(
                 text=token,
                 value=value,
@@ -270,9 +283,23 @@ def extract_claims(text: str, section: str) -> list[NumericClaim]:
                 context=ctx,
                 decimals=_decimals_of(token),
                 is_percent=is_pct,
+                suppress_reason=_suppress_reason(text, m.start(), m.end()) or "",
             )
         )
-    return claims
+    return out
+
+
+def extract_claims(text: str, section: str) -> list[NumericClaim]:
+    """Pull the point-estimate numeric claims (decimals, percentages, scientific notation) from
+    one section — i.e. every number EXCEPT significance conventions (p<0.05, "p-value of 0.14")
+    and dispersion (SD/SE/±/CI), which results.csv can't carry and which are handled separately."""
+    return [c for c in _iter_numbers(text, section) if not c.suppress_reason]
+
+
+def extract_suppressed(text: str, section: str) -> list[NumericClaim]:
+    """The numbers ``extract_claims`` deliberately skips — significance/dispersion conventions.
+    Surfaced (not dropped) so the audit's own scope is inspectable in claims.json."""
+    return [c for c in _iter_numbers(text, section) if c.suppress_reason]
 
 
 # --- matching -----------------------------------------------------------------
@@ -351,6 +378,24 @@ def check_paper(
                 matched_value=ev.value if ev else None,
             )
             (report.backed if ev else report.unbacked).append(checked)
+        # Record the suppressed conventions too, marking the ones a recorded metric actually
+        # backs — so a reviewer can SEE which numbers the gate chose not to require evidence for
+        # (instead of them vanishing) and which were positively verified anyway. These never
+        # move n_unbacked, so the verdict is unchanged and no new false positives are introduced.
+        for claim in extract_suppressed(body, name):
+            ev = match_claim(claim, evidence)
+            report.suppressed.append(
+                CheckedClaim(
+                    text=claim.text,
+                    value=claim.value,
+                    section=claim.section,
+                    context=claim.context,
+                    backed=ev is not None,
+                    matched_metric=ev.metric if ev else "",
+                    matched_value=ev.value if ev else None,
+                    suppress_reason=claim.suppress_reason,
+                )
+            )
     return report
 
 

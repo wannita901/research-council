@@ -109,6 +109,13 @@ def _check_claims(out_dir: Path) -> CheckResult:
         "n_backed": len(report.backed),
         "n_unbacked": report.n_unbacked,
         "unbacked": [c.text for c in report.unbacked],
+        # Numbers excluded from the point-claim audit (significance/dispersion conventions), with
+        # the ones a recorded metric verifies anyway — surfaced so the gate's scope is inspectable.
+        "n_suppressed": report.n_suppressed,
+        "suppressed": [
+            {"text": c.text, "reason": c.suppress_reason, "backed": c.backed}
+            for c in report.suppressed
+        ],
     }
     if report.n_unbacked:
         return CheckResult(
