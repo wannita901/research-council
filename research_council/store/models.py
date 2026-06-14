@@ -4,6 +4,11 @@ from __future__ import annotations
 
 from pydantic import BaseModel, Field
 
+# Placeholder written as experiment.py when an RQ produced no code. The reproduction manifest
+# must hash these exact bytes (not ""), or check_code_integrity flags a spurious sha256 mismatch
+# against the on-disk file in precisely the no-code case this placeholder anticipates.
+NO_CODE_PLACEHOLDER = "# no code produced\n"
+
 
 # --- knowledge / retrieval -------------------------------------------------
 class Paper(BaseModel):

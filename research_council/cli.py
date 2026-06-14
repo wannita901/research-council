@@ -843,7 +843,9 @@ def project_status(pid: str = typer.Argument(..., help="project id")):
         log_text = (
             build_log.read_text(encoding="utf-8", errors="replace") if build_log.exists() else ""
         )
-        if "no tectonic/latexmk on PATH" in log_text:
+        from research_council.verify.latex import NO_ENGINE_MARKER
+
+        if NO_ENGINE_MARKER in log_text:
             ui.console.print(
                 f"[yellow]paper: ◐ paper.tex written; no TeX engine on PATH to compile it "
                 f"(see {build_log})[/yellow]"

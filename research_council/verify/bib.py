@@ -115,11 +115,18 @@ def title_similarity(a: str, b: str) -> float:
 
 
 def _doi_from_url(url: str | None) -> str:
-    """Extract a bare DOI (10.xxxx/…) from a URL or doi: string, else ''."""
+    """Extract a bare DOI (10.xxxx/…) from a URL or doi: string, else ''.
+
+    The DOI is typeset verbatim into ``\\url{https://doi.org/<doi>}`` (verify/latex), so a greedy
+    ``\\S+`` capture that swept up a ``{``/``}``/``\\`` would close or break the ``\\url`` group and
+    fail the PDF compile. Restrict the suffix to characters that are safe inside ``\\url`` and
+    trim trailing sentence punctuation that is never part of a DOI."""
     if not url:
         return ""
-    m = re.search(r"10\.\d{4,9}/\S+", url)
-    return m.group(0) if m else ""
+    m = re.search(r"10\.\d{4,9}/[^\s{}\\<>\"]+", url)
+    if not m:
+        return ""
+    return m.group(0).rstrip(".,;:)]>")
 
 
 # --- resolution (network edge, providers INJECTED) ----------------------------

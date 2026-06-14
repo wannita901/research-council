@@ -21,6 +21,11 @@ from pathlib import Path
 
 from research_council.store.models import PaperDraft
 
+# Written to build.log when no LaTeX engine is on PATH. Readers (verify/report, cli) match this
+# verbatim to tell "no engine" (benign on engine-less CI) apart from a real build failure, so the
+# single source of truth lives here at the producer rather than re-typed at each consumer.
+NO_ENGINE_MARKER = "no tectonic/latexmk on PATH"
+
 Emit = Callable[[str, str, dict], None] | None
 _ORDER = ["Introduction", "Related Work", "Method", "Experiment", "Results", "Conclusion"]
 _SPECIALS = {
@@ -200,7 +205,7 @@ def build_paper_latex(
         tex = scaffold_tex(draft, venue_cfg, doc_class=dc, resolutions=resolutions)
         tex_path.write_text(tex, encoding="utf-8")
         if engine is None:
-            (paper_dir / "build.log").write_text("no tectonic/latexmk on PATH\n", encoding="utf-8")
+            (paper_dir / "build.log").write_text(NO_ENGINE_MARKER + "\n", encoding="utf-8")
             if emit:
                 emit("writing", "latex_skip", {"reason": "no_engine"})
             return {"status": "fallback_no_tex", "pdf": "", "log": "", "tex": str(tex_path)}

@@ -17,7 +17,12 @@ from collections.abc import Callable
 from pathlib import Path
 
 from research_council.debate.caps import StageBCaps, stage_b_caps, total_spend
-from research_council.store.models import CodeReview, ExperimentResult, RQResult
+from research_council.store.models import (
+    NO_CODE_PLACEHOLDER,
+    CodeReview,
+    ExperimentResult,
+    RQResult,
+)
 
 _METRIC = re.compile(r"METRIC\s+([^\s=]+)\s*=\s*(\S+)")
 Emit = Callable[[str, str, dict], None] | None
@@ -48,7 +53,7 @@ def write_experiment(result: ExperimentResult, out_dir: Path | str) -> Path:
     actually ran, the result summary, the run log, and the code reviews. Returns the dir."""
     d = Path(out_dir) / "experiment"
     d.mkdir(parents=True, exist_ok=True)
-    (d / "experiment.py").write_text(result.code or "# no code produced\n", encoding="utf-8")
+    (d / "experiment.py").write_text(result.code or NO_CODE_PLACEHOLDER, encoding="utf-8")
     (d / "log.txt").write_text(result.log or "", encoding="utf-8")
 
     res_md = [
@@ -316,7 +321,7 @@ def write_experiments(rq_results: list[RQResult], out_dir: Path | str) -> Path:
         sub = exp / rr.rq_id
         sub.mkdir(parents=True, exist_ok=True)
         r = rr.result
-        (sub / "experiment.py").write_text(r.code or "# no code produced\n", encoding="utf-8")
+        (sub / "experiment.py").write_text(r.code or NO_CODE_PLACEHOLDER, encoding="utf-8")
         (sub / "log.txt").write_text(r.log or "", encoding="utf-8")
         (sub / "reviews.md").write_text(_reviews_md(r), encoding="utf-8")
         (sub / "question.md").write_text(

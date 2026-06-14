@@ -33,7 +33,7 @@ import json
 import re
 from pathlib import Path
 
-from research_council.store.models import RQResult
+from research_council.store.models import NO_CODE_PLACEHOLDER, RQResult
 
 # Common ways generated experiment code pins randomness. We record what we find so a missing
 # seed is *visible* (deterministic=False), not silently assumed reproducible.
@@ -90,12 +90,15 @@ def build_manifest(rr: RQResult, *, image: str = DEFAULT_IMAGE) -> dict:
     the result, derived purely from the artifacts already produced by Stage B."""
     r = rr.result
     name, value = _metric_parts(r.metric)
-    seeds = detect_seeds(r.code or "")
+    # Hash the exact bytes write_experiments writes to disk (the placeholder when there is no
+    # code), so check_code_integrity re-verifies against the same content rather than sha256("").
+    on_disk_code = r.code or NO_CODE_PLACEHOLDER
+    seeds = detect_seeds(on_disk_code)
     return {
         "rq_id": rr.rq_id,
         "question": rr.question,
         "code_file": "experiment.py",
-        "code_sha256": code_sha256(r.code or ""),
+        "code_sha256": code_sha256(on_disk_code),
         "requirements": list(r.requirements),
         "metric": {"name": name, "value": value, "raw": r.metric},
         "seeds": seeds,

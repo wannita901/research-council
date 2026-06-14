@@ -184,6 +184,18 @@ def test_check_code_integrity_skips_manifest_without_hash(tmp_path):
     assert check_code_integrity(tmp_path) == []
 
 
+def test_check_code_integrity_clean_for_no_code_rq(tmp_path):
+    # An RQ that produced no code: write_experiments writes the "# no code produced" placeholder
+    # to experiment.py while build_manifest hashes the same bytes — so the manifest's recorded
+    # hash must match the on-disk placeholder, not sha256("") which would flag a spurious mismatch.
+    from research_council.debate.experimentation import write_experiments
+
+    rqs = [_rq("rq1", "q", "", "acc=0.5")]
+    write_experiments(rqs, tmp_path)
+    write_repro(rqs, tmp_path)
+    assert check_code_integrity(tmp_path) == []
+
+
 # ── the script actually works (local re-run) ─────────────────────────────────
 
 

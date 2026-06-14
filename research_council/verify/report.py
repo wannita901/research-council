@@ -252,7 +252,11 @@ def _check_references(out_dir: Path) -> CheckResult:
         )
     # No bib on disk: fall back to the json only to tell "no citations" (SKIP) from
     # "citations existed but the verifiable artifact is missing" (FAIL).
-    details = {"references_bib": False, "json_n_total": json_total, "json_n_resolved": json_resolved}
+    details = {
+        "references_bib": False,
+        "json_n_total": json_total,
+        "json_n_resolved": json_resolved,
+    }
     if not json_total:
         return CheckResult("references", SKIP, "no citations / references.bib", details)
     return CheckResult(
@@ -397,9 +401,6 @@ def _check_citations(out_dir: Path) -> CheckResult:
     )
 
 
-_NO_ENGINE_MARKER = "no tectonic/latexmk on PATH"
-
-
 def _check_pdf(out_dir: Path) -> CheckResult:
     """The headline artifact. A paper.tex with no paper.pdf is a build failure, not 'no
     paper' — surfaced as FAIL so a broken Stage-C compile can't pass as verified.
@@ -415,7 +416,7 @@ def _check_pdf(out_dir: Path) -> CheckResult:
         kb = pdf.stat().st_size / 1024
         return CheckResult("pdf", PASS, f"paper.pdf compiled ({kb:.0f} KB)", {"kb": round(kb, 1)})
     if tex.exists():
-        from research_council.verify.latex import latex_engine
+        from research_council.verify.latex import NO_ENGINE_MARKER, latex_engine
 
         build_log = paper_dir / "build.log"
         log_text = (
@@ -424,7 +425,7 @@ def _check_pdf(out_dir: Path) -> CheckResult:
         # build.log is the run-time record of WHY there's no PDF. The no-engine marker (or, for
         # pre-producer projects with no log, no engine on PATH now) means the compile never ran —
         # not that it ran and failed.
-        if _NO_ENGINE_MARKER in log_text or (not log_text and latex_engine()[0] is None):
+        if NO_ENGINE_MARKER in log_text or (not log_text and latex_engine()[0] is None):
             return CheckResult(
                 "pdf", SKIP, "paper.tex present; no TeX engine available to compile it", {}
             )

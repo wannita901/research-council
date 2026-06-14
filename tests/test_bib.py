@@ -77,6 +77,25 @@ def test_similarity_empty_is_zero():
     assert title_similarity("", "anything") == 0.0
 
 
+# --- DOI extraction -----------------------------------------------------------
+def test_doi_from_url_extracts_bare_doi():
+    from research_council.verify.bib import _doi_from_url
+
+    assert _doi_from_url("https://doi.org/10.1145/1234567.890") == "10.1145/1234567.890"
+    assert _doi_from_url("doi:10.1000/xyz") == "10.1000/xyz"
+    assert _doi_from_url(None) == "" and _doi_from_url("https://example.com") == ""
+
+
+def test_doi_from_url_does_not_capture_url_breaking_chars():
+    # The DOI is typeset verbatim into \url{...}; a captured '}' would close the group and break
+    # the PDF compile. The suffix must stop at brace/backslash and shed trailing punctuation.
+    from research_council.verify.bib import _doi_from_url
+
+    assert _doi_from_url("https://doi.org/10.1145/abc}def") == "10.1145/abc"
+    assert _doi_from_url("https://doi.org/10.1145/abc\\def") == "10.1145/abc"
+    assert _doi_from_url("see https://doi.org/10.1145/abc).") == "10.1145/abc"
+
+
 # --- resolve_citation ---------------------------------------------------------
 async def test_resolves_strong_title_match_with_doi():
     cit = Citation(key="repair", text="Neural Program Repair")
@@ -241,7 +260,9 @@ def test_parse_bib_entries_round_trips_to_bibtex():
     so a reader/auditor needs only the .bib (no sidecar json) to count resolutions."""
     cites = [Citation(key="ok", text="Neural Program Repair"), Citation(key="no", text="Mystery")]
     resolutions = [
-        Resolution(key="ok", query_title="Neural Program Repair", resolved=True, doi="10.1145/3597926"),
+        Resolution(
+            key="ok", query_title="Neural Program Repair", resolved=True, doi="10.1145/3597926"
+        ),
         Resolution(key="no", query_title="Mystery", resolved=False),
     ]
     entries = parse_bib_entries(to_bibtex(cites, resolutions))
