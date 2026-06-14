@@ -311,9 +311,7 @@ def test_non_finite_metric_keeps_claims_json_valid(tmp_path: Path):
     exp = tmp_path / "experiment"
     paper.mkdir()
     exp.mkdir()
-    (paper / "paper.md").write_text(
-        "# T\n## Results\nWe report an F1 of 0.81.\n", encoding="utf-8"
-    )
+    (paper / "paper.md").write_text("# T\n## Results\nWe report an F1 of 0.81.\n", encoding="utf-8")
     (exp / "results.csv").write_text(
         "rq_id,metric,value\nrq1,accuracy,inf\nrq2,loss,nan\nrq3,f1,0.81\n",
         encoding="utf-8",

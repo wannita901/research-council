@@ -241,7 +241,9 @@ def test_parse_bib_entries_round_trips_to_bibtex():
     so a reader/auditor needs only the .bib (no sidecar json) to count resolutions."""
     cites = [Citation(key="ok", text="Neural Program Repair"), Citation(key="no", text="Mystery")]
     resolutions = [
-        Resolution(key="ok", query_title="Neural Program Repair", resolved=True, doi="10.1145/3597926"),
+        Resolution(
+            key="ok", query_title="Neural Program Repair", resolved=True, doi="10.1145/3597926"
+        ),
         Resolution(key="no", query_title="Mystery", resolved=False),
     ]
     entries = parse_bib_entries(to_bibtex(cites, resolutions))
