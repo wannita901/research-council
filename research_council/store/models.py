@@ -446,6 +446,8 @@ class WritingResult(BaseModel):
     claims_unbacked: int = 0  # of those, how many had no matching evidence value
     approved_rqs: int = 0  # RQs the council approved, read back from results.csv (plan/25 Gap 4)
     total_rqs: int = 0  # RQs that ran (approved_rqs of total_rqs gated the B→C handoff)
+    refs_total: int = 0  # citations the paper uses, emitted to references.bib (plan/25 Gap 2)
+    refs_resolved: int = 0  # of those, how many resolved to a real DOI/arXiv record
 
 
 # --- run config & trace envelope ------------------------------------------

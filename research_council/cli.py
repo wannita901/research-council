@@ -1075,6 +1075,8 @@ def _run_stage_c(handoff, out_dir, onboarding, profile: str = "balanced"):
             )
         elif k == "revise":
             extra = f"round {pl['round']} · sections {pl['sections']}"
+        elif k == "references":
+            extra = f"{pl.get('resolved', 0)}/{pl.get('total', 0)} citation(s) resolved to a DOI/record"
         elif k == "latex":
             extra = f"{pl['status']}" + (" · pdf" if pl.get("pdf") else "")
         else:
@@ -1085,6 +1087,16 @@ def _run_stage_c(handoff, out_dir, onboarding, profile: str = "balanced"):
         f"  [dim]Stage C · council writing for {vname} "
         f"({profile}: ≤{caps.max_revisions} revisions, accept ≥{caps.accept}, ${caps.usd_budget})…[/dim]"
     )
+
+    # plan/25 Gap 2: resolve the paper's citations to real DOIs/arXiv ids → references.bib.
+    # Use the real bibliographic adapters the user selected (openalex/arxiv/semanticscholar);
+    # these are network calls, so this only happens on the live Stage-C path.
+    from research_council.retrieval.registry import _REAL
+
+    _BIB_SOURCES = ("openalex", "arxiv", "semanticscholar")
+    bib_providers = [_REAL[t]() for t in cfg.tools if t in _BIB_SOURCES]
+    if not bib_providers:  # ensure at least one DOI source even if the user picked only wiki
+        bib_providers = [_REAL["openalex"]()]
 
     async def _go():
         cites = await grounded_citations(handoff.idea)
@@ -1099,6 +1111,7 @@ def _run_stage_c(handoff, out_dir, onboarding, profile: str = "balanced"):
             prior_draft=prior_draft,
             build_error=build_error,
             latex_fixer=latex_fixer,
+            bib_providers=bib_providers,
             emit=_emit,
         )
 
@@ -1117,6 +1130,12 @@ def _run_stage_c(handoff, out_dir, onboarding, profile: str = "balanced"):
         if res.approved_rqs == 0:
             approval_note += " — [yellow]paper rests on unapproved experiments[/yellow]"
         ui.console.print(f"  [dim]{approval_note}[/dim]")
+    # plan/25 Gap 2: surface how many citations resolved to a verifiable DOI/record.
+    if res.refs_total:
+        refs_note = f"  references: {res.refs_resolved}/{res.refs_total} resolved to a DOI/record → references.bib"
+        if res.refs_resolved < res.refs_total:
+            refs_note += " — [yellow]some citations unverified[/yellow]"
+        ui.console.print(f"  [dim]{refs_note}[/dim]")
     summary = (
         f"'{res.title}' · {vname} · {'accepted' if res.accepted else res.stopped_reason} · "
         f"mean {res.review.mean:.2f} · latex {res.latex} · approved {res.approved_rqs}/{res.total_rqs}"

@@ -251,6 +251,7 @@ async def run_writing(
     build_error: str = "",
     latex_fixer=None,
     latex: bool = True,
+    bib_providers=None,
     emit: Emit = None,
 ) -> WritingResult:
     caps = caps or stage_c_caps(profile)
@@ -466,6 +467,17 @@ async def run_writing(
                 "claims",
                 {"total": claims.n_claims, "unbacked": claims.n_unbacked},
             )
+
+    # Citation-to-record resolution (plan/25 Gap 2): resolve each citation against the real
+    # bibliographic providers and emit paper/references.bib + references.json. Always emits the
+    # .bib (UNVERIFIED-tagged when offline / unresolved) so the artifact is a reliable signal.
+    from research_council.verify.bib import write_bib
+
+    bib = await write_bib(out_dir, draft, bib_providers)
+    result.refs_total = bib.n_total
+    result.refs_resolved = bib.n_resolved
+    if emit:
+        emit("writing", "references", {"total": bib.n_total, "resolved": bib.n_resolved})
 
     if latex:
         from research_council.verify.latex import build_paper_latex, compile_existing
