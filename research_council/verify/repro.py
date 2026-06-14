@@ -110,6 +110,44 @@ def build_manifest(rr: RQResult, *, image: str = DEFAULT_IMAGE) -> dict:
     }
 
 
+def check_code_integrity(out_dir: Path | str) -> list[dict]:
+    """Re-verify each repro.json's ``code_sha256`` against the on-disk ``experiment.py``.
+
+    ``build_manifest`` records ``code_sha256`` as THE anchor that ties a recorded metric to the
+    exact code that produced it — "a mismatching sha256 means the recorded metric no longer
+    describes this code". But the anchor is inert until something reads it back: a swapped or
+    edited ``experiment.py`` (or a stale manifest left over from an earlier run) would leave the
+    recorded metric describing code no longer on disk, and a presence-only audit would still pass.
+
+    Returns one entry per integrity violation — a manifest whose recorded hash does not match
+    ``sha256(experiment.py)``, or that pins a hash but ships no ``experiment.py``. Manifests with
+    no recorded ``code_sha256`` (e.g. ``{}`` placeholders) are skipped: there is nothing to verify,
+    not a falsehood. Offline — recomputes the hash from the file already on disk."""
+    exp = Path(out_dir) / "experiment"
+    violations: list[dict] = []
+    for manifest in sorted(exp.glob("*/repro.json")):
+        try:
+            data = json.loads(manifest.read_text(encoding="utf-8"))
+        except (ValueError, OSError):
+            continue
+        recorded = data.get("code_sha256")
+        if not recorded:
+            continue
+        rq = data.get("rq_id", manifest.parent.name)
+        code_file = manifest.parent / data.get("code_file", "experiment.py")
+        if not code_file.exists():
+            violations.append(
+                {"rq": rq, "reason": "experiment.py missing", "recorded": recorded, "actual": None}
+            )
+            continue
+        actual = code_sha256(code_file.read_text(encoding="utf-8"))
+        if actual != recorded:
+            violations.append(
+                {"rq": rq, "reason": "sha256 mismatch", "recorded": recorded, "actual": actual}
+            )
+    return violations
+
+
 def _sh_quote(s: str) -> str:
     return "'" + s.replace("'", "'\"'\"'") + "'"
 

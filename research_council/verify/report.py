@@ -18,7 +18,7 @@ import re
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
 
-from research_council.verify import approval, bib, claims
+from research_council.verify import approval, bib, claims, repro
 
 # Figure references the paper points the reader to: markdown ![alt](path) and LaTeX
 # \includegraphics[..]{path}. A reference that resolves to no file on disk is a broken
@@ -138,16 +138,23 @@ def _check_approval(out_dir: Path) -> CheckResult:
 
 def _check_reproducible(out_dir: Path) -> CheckResult:
     """A re-runnable artifact needs the top-level reproduce.sh plus a per-RQ repro.json
-    pinning each experiment by sha256. Partial coverage degrades to WARN."""
+    pinning each experiment by sha256. Partial coverage degrades to WARN.
+
+    Presence alone is not enough: each manifest's recorded ``code_sha256`` must still match the
+    ``experiment.py`` on disk. If a script was edited or swapped after the manifest was written
+    (or the manifest is stale), the pinned hash no longer describes the shipped code — the
+    recorded metric is unreproducible — so a hash mismatch is a FAIL, not a silent PASS."""
     exp = out_dir / "experiment"
     if not exp.exists():
         return CheckResult("reproducible", SKIP, "no experiment/ directory")
     script = exp / "reproduce.sh"
     manifests = sorted(exp.glob("*/repro.json"))
+    violations = repro.check_code_integrity(out_dir) if manifests else []
     details = {
         "reproduce_sh": script.exists(),
         "n_manifests": len(manifests),
         "rqs": [m.parent.name for m in manifests],
+        "code_integrity_violations": violations,
     }
     if not script.exists() and not manifests:
         return CheckResult(
@@ -156,11 +163,19 @@ def _check_reproducible(out_dir: Path) -> CheckResult:
             "no reproduce.sh or repro.json — runs are not re-runnable",
             details,
         )
+    if violations:
+        rqs = ", ".join(v["rq"] for v in violations)
+        return CheckResult(
+            "reproducible",
+            FAIL,
+            f"{len(violations)} manifest(s) ({rqs}) pin a code hash that no longer matches experiment.py",
+            details,
+        )
     if script.exists() and manifests:
         return CheckResult(
             "reproducible",
             PASS,
-            f"reproduce.sh + {len(manifests)} per-RQ manifest(s) present",
+            f"reproduce.sh + {len(manifests)} per-RQ manifest(s) present, code hashes verified",
             details,
         )
     return CheckResult(

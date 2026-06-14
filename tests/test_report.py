@@ -206,6 +206,29 @@ def test_partial_repro_artifacts_warn(tmp_path):
     assert _by_name(report)["reproducible"].status == WARN
 
 
+def test_tampered_experiment_code_flips_reproducible_to_fail(tmp_path):
+    """A manifest pins code_sha256, but the on-disk experiment.py was swapped after the run.
+    The recorded metric no longer describes the shipped code → reproducible FAILs and an
+    otherwise-clean project goes UNVERIFIED, instead of the pin being trusted blindly."""
+    from research_council.store.models import ExperimentResult, RQResult
+    from research_council.verify.repro import write_repro
+
+    out = _clean_project(tmp_path)
+    code = "import random\nrandom.seed(0)\nprint('METRIC f1=0.873')"
+    rq = RQResult(
+        rq_id="rq1",
+        question="does it, work?",
+        result=ExperimentResult(ran=True, feasible=True, approved=True, metric="f1=0.873", code=code),
+    )
+    exp = write_repro([rq], out)  # repro.json now carries the real sha256 of `code`
+    (exp / "rq1" / "experiment.py").write_text(code + "\n# tampered\n", encoding="utf-8")
+    report = verify_project(out)
+    repro_check = _by_name(report)["reproducible"]
+    assert repro_check.status == FAIL
+    assert repro_check.details["code_integrity_violations"][0]["rq"] == "rq1"
+    assert report.verdict == "unverified"
+
+
 # --- figures ------------------------------------------------------------------
 def test_present_figure_passes(tmp_path):
     """A paper that references a figure which exists on disk → figures PASS."""

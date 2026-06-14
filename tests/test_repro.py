@@ -18,6 +18,7 @@ from pathlib import Path
 from research_council.store.models import ExperimentResult, RQResult
 from research_council.verify.repro import (
     build_manifest,
+    check_code_integrity,
     code_sha256,
     detect_seeds,
     reproduce_sh,
@@ -144,6 +145,43 @@ def test_reproduce_sh_skips_non_numeric_metric():
     body = reproduce_sh(rqs)
     assert "no numeric metric recorded" in body
     assert "re-running experiment.py" not in body
+
+
+# ── code-hash integrity read-back ────────────────────────────────────────────
+
+
+def test_check_code_integrity_clean_when_hash_matches(tmp_path):
+    code = "print('METRIC acc=0.5')"
+    exp = write_repro([_rq("rq1", "q", code, "acc=0.5")], tmp_path)
+    (exp / "rq1" / "experiment.py").write_text(code, encoding="utf-8")
+    assert check_code_integrity(tmp_path) == []
+
+
+def test_check_code_integrity_flags_edited_experiment(tmp_path):
+    # Manifest pins the original code's hash; the on-disk experiment.py was swapped — the
+    # recorded metric no longer describes the shipped code, so the anchor must catch it.
+    exp = write_repro([_rq("rq1", "q", "print('METRIC acc=0.5')", "acc=0.5")], tmp_path)
+    (exp / "rq1" / "experiment.py").write_text("print('METRIC acc=0.9')", encoding="utf-8")
+    v = check_code_integrity(tmp_path)
+    assert len(v) == 1
+    assert v[0]["rq"] == "rq1" and v[0]["reason"] == "sha256 mismatch"
+    assert v[0]["actual"] == code_sha256("print('METRIC acc=0.9')")
+
+
+def test_check_code_integrity_flags_missing_experiment(tmp_path):
+    # Manifest pins a hash but no experiment.py shipped — the pinned code is unverifiable.
+    write_repro([_rq("rq1", "q", "print('METRIC acc=0.5')", "acc=0.5")], tmp_path)
+    v = check_code_integrity(tmp_path)
+    assert len(v) == 1
+    assert v[0]["reason"] == "experiment.py missing" and v[0]["actual"] is None
+
+
+def test_check_code_integrity_skips_manifest_without_hash(tmp_path):
+    # A placeholder repro.json with no code_sha256 is nothing to verify, not a violation.
+    exp = tmp_path / "experiment" / "rq1"
+    exp.mkdir(parents=True)
+    (exp / "repro.json").write_text("{}", encoding="utf-8")
+    assert check_code_integrity(tmp_path) == []
 
 
 # ── the script actually works (local re-run) ─────────────────────────────────
