@@ -444,6 +444,8 @@ class WritingResult(BaseModel):
     latex: str = ""  # built | fallback_no_tex | build_failed | skipped
     claims_total: int = 0  # numeric claims audited against results.csv (plan/25 Gap 1)
     claims_unbacked: int = 0  # of those, how many had no matching evidence value
+    approved_rqs: int = 0  # RQs the council approved, read back from results.csv (plan/25 Gap 4)
+    total_rqs: int = 0  # RQs that ran (approved_rqs of total_rqs gated the B→C handoff)
 
 
 # --- run config & trace envelope ------------------------------------------

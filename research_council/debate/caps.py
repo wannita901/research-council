@@ -31,6 +31,12 @@ class StageCCaps:
     # Default False = flag-not-block (claims still drive revision when the loop runs for other
     # reasons, and always land in claims.json). `thorough` turns the teeth on.
     claims_unbacked_block: bool = False
+    # plan/25 Gap 4: when True, a paper whose RQs were ALL unapproved by the council
+    # (approved=False in results.csv) cannot ship as `accepted` — it falls back to best-so-far,
+    # forcing an honest feasibility/negative-result framing. Default False = flag-not-block (the
+    # writer is still told to frame unapproved work honestly via an injected constraint, and the
+    # approved-RQ count always lands in the result). `thorough` turns the teeth on.
+    unapproved_block: bool = False
 
 
 STAGE_B_PROFILES = {
@@ -85,6 +91,7 @@ STAGE_C_PROFILES = {
         usd_budget=4.00,
         block_severities=("high", "medium"),
         claims_unbacked_block=True,
+        unapproved_block=True,
     ),
 }
 
@@ -152,6 +159,7 @@ def stage_c_caps(profile: str | None = None) -> StageCCaps:
         usd_budget=_f("RC_STAGEC_USD", c.usd_budget),
         latex_fix_attempts=_i("RC_STAGEC_LATEX_FIX_ATTEMPTS", c.latex_fix_attempts),
         claims_unbacked_block=_b("RC_STAGEC_BLOCK_CLAIMS", c.claims_unbacked_block),
+        unapproved_block=_b("RC_STAGEC_BLOCK_UNAPPROVED", c.unapproved_block),
     )
 
 

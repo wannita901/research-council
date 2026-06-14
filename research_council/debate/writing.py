@@ -260,6 +260,21 @@ async def run_writing(
     experiment = handoff.artifacts or {}
     out_dir = Path(out_dir)
 
+    # plan/25 Gap 4: read back the council's own approval signal (results.csv `approved` column).
+    # If not every RQ was approved, inject an honesty constraint so the draft frames unapproved
+    # work as a feasibility/negative result instead of overclaiming. This must happen BEFORE the
+    # draft so the very first version is framed honestly.
+    from research_council.verify.approval import (
+        approval_status,
+        approval_to_change_request,
+        honesty_constraint,
+    )
+
+    approval = approval_status(out_dir)
+    _honesty = honesty_constraint(approval)
+    if _honesty:
+        handoff.constraints = {**(handoff.constraints or {}), "approval_honesty": _honesty}
+
     # Prefer the REAL figures the experiment saved (Stage B); copy them into paper/assets/.
     # Fall back to a single host-synthesized chart only if the experiment produced none.
     figures = _collect_experiment_figures(out_dir)
@@ -325,6 +340,15 @@ async def run_writing(
         if claim_crs:
             merged.change_requests.extend(claim_crs)
             if caps.claims_unbacked_block:
+                blocking = True
+
+        # plan/25 Gap 4: when the council approved ZERO RQs and unapproved_block is on, the paper
+        # cannot ship as accepted — fold in a high-severity demand and force blocking so it falls
+        # back to best-so-far with the honest framing rather than an "accepted" overclaim.
+        if caps.unapproved_block:
+            approval_cr = approval_to_change_request(approval)
+            if approval_cr is not None:
+                merged.change_requests.append(approval_cr)
                 blocking = True
 
         score_history.append(mean)
@@ -411,7 +435,19 @@ async def run_writing(
         citations=draft.citations,
         usd=total_spend(writer, *reviewers),
         stopped_reason=reason,
+        approved_rqs=approval.approved,
+        total_rqs=approval.total,
     )
+    if approval.has_results and emit:
+        emit(
+            "writing",
+            "approval",
+            {
+                "approved": approval.approved,
+                "total": approval.total,
+                "blocking": caps.unapproved_block and not approval.any_approved,
+            },
+        )
     paper_md = _write_paper(out_dir, draft, merged, venue_name, result)
     result.paper_path = str(paper_md)
 

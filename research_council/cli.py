@@ -1099,9 +1099,16 @@ def _run_stage_c(handoff, out_dir, onboarding, profile: str = "balanced"):
         f"latex: {res.latex} · ${cost:.4f}"
     )
     ui.console.print(f"  → {res.paper_path}" + (f"  ·  {res.pdf_path}" if res.pdf_path else ""))
+    # plan/25 Gap 4: surface the council's own approval tally so a paper written on unapproved
+    # experiments is visible (not silently shipped as a result).
+    if res.total_rqs:
+        approval_note = f"  council approved {res.approved_rqs}/{res.total_rqs} RQ(s)"
+        if res.approved_rqs == 0:
+            approval_note += " — [yellow]paper rests on unapproved experiments[/yellow]"
+        ui.console.print(f"  [dim]{approval_note}[/dim]")
     summary = (
         f"'{res.title}' · {vname} · {'accepted' if res.accepted else res.stopped_reason} · "
-        f"mean {res.review.mean:.2f} · latex {res.latex}"
+        f"mean {res.review.mean:.2f} · latex {res.latex} · approved {res.approved_rqs}/{res.total_rqs}"
     )
     artifacts = {"idea": handoff.idea, **res.model_dump()}
     return summary, artifacts
