@@ -117,6 +117,10 @@ def test_unbacked_claim_flips_clean_project_to_unverified(tmp_path):
 def test_missing_pdf_with_tex_is_fail(tmp_path):
     out = _clean_project(tmp_path)
     (out / "paper" / "paper.pdf").unlink()
+    # A real build failure log (engine ran, errored) — NOT the no-engine marker — so the
+    # FAIL path is exercised deterministically even on an engine-less machine (CI), where a
+    # tex-without-pdf and no log would otherwise degrade to SKIP.
+    (out / "paper" / "build.log").write_text("! LaTeX Error: build failed.\n", encoding="utf-8")
     report = verify_project(out)
     assert _by_name(report)["pdf"].status == FAIL
     assert report.verdict == "unverified"
