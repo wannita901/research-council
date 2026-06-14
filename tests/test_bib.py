@@ -20,6 +20,8 @@ from research_council.verify.bib import (
     BibReport,
     Resolution,
     bib_to_change_requests,
+    count_resolved_bib,
+    parse_bib_entries,
     resolve_citation,
     resolve_citations,
     title_similarity,
@@ -231,3 +233,28 @@ async def test_resolve_citations_batches(tmp_path):
     prov = _FakeProvider([_paper("Neural Program Repair", url="https://doi.org/10.1145/3597926")])
     out = await resolve_citations(cites, [prov])
     assert [r.resolved for r in out] == [True, False]
+
+
+# --- bib read-back (parse the PRIMARY artifact) -------------------------------
+def test_parse_bib_entries_round_trips_to_bibtex():
+    """to_bibtex → parse_bib_entries recovers each entry's key and resolved/unresolved state,
+    so a reader/auditor needs only the .bib (no sidecar json) to count resolutions."""
+    cites = [Citation(key="ok", text="Neural Program Repair"), Citation(key="no", text="Mystery")]
+    resolutions = [
+        Resolution(key="ok", query_title="Neural Program Repair", resolved=True, doi="10.1145/3597926"),
+        Resolution(key="no", query_title="Mystery", resolved=False),
+    ]
+    entries = parse_bib_entries(to_bibtex(cites, resolutions))
+    assert [(e["key"], e["resolved"]) for e in entries] == [("ok", True), ("no", False)]
+    assert count_resolved_bib(to_bibtex(cites, resolutions)) == (2, 1)
+
+
+def test_count_resolved_bib_header_only_is_zero():
+    assert count_resolved_bib(to_bibtex([], [])) == (0, 0)
+
+
+def test_parse_bib_survives_at_sign_in_title():
+    """A '@' inside a (non-bib-key) field value must not be mistaken for a new entry start."""
+    text = "@misc{a, title={Email me at x@y type stuff}, note = {UNVERIFIED}}\n"
+    entries = parse_bib_entries(text)
+    assert len(entries) == 1 and entries[0]["key"] == "a" and entries[0]["resolved"] is False

@@ -39,6 +39,12 @@ from pathlib import Path
 # 0.82 accepts light paraphrase / sub-title drift but rejects a merely topically-related paper.
 MATCH_THRESHOLD = 0.82
 
+# The note an unresolved entry carries in references.bib. Both the WRITER (_entry) and any
+# READER (e.g. the verifiability scorecard re-auditing the bib) key off this single marker so
+# the on-disk artifact is self-describing — a reader needs no sidecar json to tell resolved
+# from unresolved entries.
+UNVERIFIED_MARKER = "UNVERIFIED"
+
 # How many results to pull per provider when looking for a title match.
 SEARCH_K = 6
 
@@ -184,7 +190,7 @@ def _entry(citation, res: Resolution | None) -> str:
         if res.source:
             fields.append(f"  note = {{resolved via {_bib_escape(res.source)}}}")
     else:
-        fields.append("  note = {UNVERIFIED: no matching record found}")
+        fields.append(f"  note = {{{UNVERIFIED_MARKER}: no matching record found}}")
     return f"@{etype}{{{key},\n" + ",\n".join(fields) + "\n}"
 
 
@@ -221,6 +227,47 @@ async def write_bib(out_dir: Path | str, draft, providers=None, *, k: int = SEAR
         json.dumps(report.to_dict(), indent=2, ensure_ascii=False) + "\n", encoding="utf-8"
     )
     return report
+
+
+# --- bib read-back (PRIMARY-artifact audit) -----------------------------------
+# An entry begins with @type{ — used to locate entry starts when reading a .bib back. We then
+# brace-match to the entry's end so a field value containing a stray '@' can't split an entry.
+_ENTRY_START_RE = re.compile(r"@(\w+)\s*\{")
+
+
+def parse_bib_entries(text: str) -> list[dict]:
+    """Parse a references.bib (as emitted by ``to_bibtex``) into ``{type, key, resolved}`` dicts.
+
+    ``resolved`` is True when the entry carries no ``UNVERIFIED_MARKER`` — i.e. it was matched to
+    a real record. This reads the PRIMARY artifact (the .bib a reader/CI actually inspects) so an
+    audit doesn't have to trust the run-time references.json, which may be stale or absent."""
+    entries: list[dict] = []
+    text = text or ""
+    n = len(text)
+    for m in _ENTRY_START_RE.finditer(text):
+        brace = m.end() - 1  # index of the opening '{'
+        depth, j = 0, brace
+        while j < n:
+            c = text[j]
+            if c == "{":
+                depth += 1
+            elif c == "}":
+                depth -= 1
+                if depth == 0:
+                    break
+            j += 1
+        body = text[brace + 1 : j]
+        key = body.split(",", 1)[0].strip()
+        entries.append(
+            {"type": m.group(1).lower(), "key": key, "resolved": UNVERIFIED_MARKER not in body}
+        )
+    return entries
+
+
+def count_resolved_bib(text: str) -> tuple[int, int]:
+    """Return ``(n_total, n_resolved)`` read back from a references.bib's own entries."""
+    entries = parse_bib_entries(text)
+    return len(entries), sum(1 for e in entries if e["resolved"])
 
 
 def bib_to_change_requests(report: BibReport, *, severity: str = "low"):

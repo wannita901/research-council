@@ -18,7 +18,7 @@ import re
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
 
-from research_council.verify import approval, claims
+from research_council.verify import approval, bib, claims
 
 # Figure references the paper points the reader to: markdown ![alt](path) and LaTeX
 # \includegraphics[..]{path}. A reference that resolves to no file on disk is a broken
@@ -170,32 +170,42 @@ def _check_reproducible(out_dir: Path) -> CheckResult:
 
 def _check_references(out_dir: Path) -> CheckResult:
     """references.bib must exist and resolve at least one citation to a real DOI/record;
-    an all-UNVERIFIED bib is a WARN (visible gap), a missing bib with citations a FAIL."""
+    an all-UNVERIFIED bib is a WARN (visible gap), a missing bib with citations a FAIL.
+
+    The counts are read back from references.bib ITSELF (the PRIMARY artifact a reader/CI
+    inspects) — not from the run-time references.json, which may be stale or absent. The json
+    is read only as a corroborating signal (e.g. to detect that any citation existed when the
+    .bib is missing entirely)."""
     paper_dir = out_dir / "paper"
-    bib = paper_dir / "references.bib"
+    bib_path = paper_dir / "references.bib"
     refs_json = paper_dir / "references.json"
-    n_total = n_resolved = None
+    json_total = json_resolved = None
     if refs_json.exists():
         try:
             data = json.loads(refs_json.read_text(encoding="utf-8"))
-            n_total = data.get("n_total")
-            n_resolved = data.get("n_resolved")
+            json_total = data.get("n_total")
+            json_resolved = data.get("n_resolved")
         except (ValueError, OSError):
             pass
-    details = {"references_bib": bib.exists(), "n_total": n_total, "n_resolved": n_resolved}
-    if not bib.exists():
-        # No bib AND no evidence that any citation existed → nothing to verify.
-        if not n_total:
-            return CheckResult("references", SKIP, "no citations / references.bib", details)
-        return CheckResult(
-            "references", FAIL, f"{n_total} citation(s) but no references.bib", details
-        )
-    if n_resolved is not None and n_total:
+    if bib_path.exists():
+        n_total, n_resolved = bib.count_resolved_bib(bib_path.read_text(encoding="utf-8"))
+        details = {
+            "references_bib": True,
+            "n_total": n_total,
+            "n_resolved": n_resolved,
+            "json_n_total": json_total,
+            "json_n_resolved": json_resolved,
+        }
+        if n_total == 0:
+            # Header-only bib (the paper cites nothing) → nothing to verify, never a falsehood.
+            return CheckResult(
+                "references", SKIP, "references.bib present but lists no citations", details
+            )
         if n_resolved == 0:
             return CheckResult(
                 "references",
                 WARN,
-                f"references.bib present but 0/{n_total} resolved to a DOI",
+                f"references.bib present but 0/{n_total} resolved to a DOI/record",
                 details,
             )
         return CheckResult(
@@ -204,7 +214,14 @@ def _check_references(out_dir: Path) -> CheckResult:
             f"{n_resolved}/{n_total} citation(s) resolved to a DOI/record",
             details,
         )
-    return CheckResult("references", PASS, "references.bib present", details)
+    # No bib on disk: fall back to the json only to tell "no citations" (SKIP) from
+    # "citations existed but the verifiable artifact is missing" (FAIL).
+    details = {"references_bib": False, "json_n_total": json_total, "json_n_resolved": json_resolved}
+    if not json_total:
+        return CheckResult("references", SKIP, "no citations / references.bib", details)
+    return CheckResult(
+        "references", FAIL, f"{json_total} citation(s) but no references.bib", details
+    )
 
 
 def _gather_figure_refs(out_dir: Path) -> list[str]:
