@@ -126,19 +126,20 @@ Everything a project produces lives under `projects/<id>/`:
 projects/<id>/
 ├── proposal.md          # ①  the research proposal
 ├── experiment/          # ②  one loop per research question
-│   ├── results.csv      #     rq · metric · value · feasible · approved · …
+│   ├── results.csv      #     rq · metric · value · feasible · approved · … (one headline row per RQ)
+│   ├── metrics.csv      #     rq · metric · value — EVERY METRIC line (headline + secondaries)
 │   ├── reproduce.sh     #     re-runs every RQ and diffs each metric vs the council-time value
 │   └── rq1/ rq2/ …      #     experiment.py · log.txt · reviews.md · repro.json
 └── paper/               # ③  paper.md · sections/ · review.md · paper.tex/pdf · build.log
     ├── references.bib   #     citations resolved to real DOIs/arXiv records (+ references.json)
-    ├── claims.json      #     numeric claims audited against results.csv
+    ├── claims.json      #     numeric claims audited against results.csv + metrics.csv
     └── verification.json #    VERIFIED/UNVERIFIED scorecard (also via `council project verify`)
 runs/<id>/trace.jsonl    # full event trace of the run
 ```
 
 ## Design & status
 
-The full ideation → experimentation → writing lifecycle has **real engines** end-to-end and also runs offline via stubs. Live providers, real literature retrieval (OpenAlex / arXiv / Semantic Scholar / GitHub), a grounded LLM-wiki, Docker-sandboxed experiments, and a FastAPI backend (stage A) are all built. On top of that, a **verifiability layer** turns the "every claim must cite a source or show evidence" principle into enforced checks: numeric claims are audited against `results.csv`, citations are resolved to real DOIs, experiments get a `reproduce.sh`, and every finished run ships a `verification.json` scorecard with a VERIFIED/UNVERIFIED verdict.
+The full ideation → experimentation → writing lifecycle has **real engines** end-to-end and also runs offline via stubs. Live providers, real literature retrieval (OpenAlex / arXiv / Semantic Scholar / GitHub), a grounded LLM-wiki, Docker-sandboxed experiments, and a FastAPI backend (stage A) are all built. On top of that, a **verifiability layer** turns the "every claim must cite a source or show evidence" principle into enforced checks: numeric claims are audited against the experiment's recorded metrics (`results.csv` + `metrics.csv`), citations are resolved to real DOIs, experiments get a `reproduce.sh`, and every finished run ships a `verification.json` scorecard with a VERIFIED/UNVERIFIED verdict.
 
 Design notes live in [`plan/`](plan/1_sota-gap-analysis.html) (HTML — open in a browser): [lifecycle](plan/13_research-lifecycle.html) · [stage B/C loops](plan/18_stage-bc-loops.html) · [conductor](plan/19_conversational-conductor.html) · [proposal & evidence](plan/20_proposal-and-evidence.html) · [RQ-driven experiments](plan/21_rq-driven-experiments.html) · [deliberation balance](plan/23_deliberation-balance.html) · [verifiable artifacts](plan/25_verifiable-artifacts-gap.html).
 
