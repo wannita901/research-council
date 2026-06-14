@@ -347,6 +347,13 @@ def write_experiments(rq_results: list[RQResult], out_dir: Path | str) -> Path:
         )
         w.writeheader()
         w.writerows(rows)
+
+    # plan/25 Gap 3: per-RQ reproduction manifest (repro.json) + a top-level reproduce.sh that
+    # re-runs each experiment and diffs its metric against the recorded value, so the data half
+    # of the artifact chain is re-runnable rather than take-it-on-faith. Offline — no sandbox.
+    from research_council.verify.repro import write_repro
+
+    write_repro(rq_results, out_dir)
     return exp
 
 
