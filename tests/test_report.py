@@ -219,7 +219,9 @@ def test_tampered_experiment_code_flips_reproducible_to_fail(tmp_path):
     rq = RQResult(
         rq_id="rq1",
         question="does it, work?",
-        result=ExperimentResult(ran=True, feasible=True, approved=True, metric="f1=0.873", code=code),
+        result=ExperimentResult(
+            ran=True, feasible=True, approved=True, metric="f1=0.873", code=code
+        ),
     )
     exp = write_repro([rq], out)  # repro.json now carries the real sha256 of `code`
     (exp / "rq1" / "experiment.py").write_text(code + "\n# tampered\n", encoding="utf-8")
