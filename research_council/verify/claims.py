@@ -164,10 +164,50 @@ _PERCENT = r"\d+(?:\.\d+)?\s*%"
 _DECIMAL = r"\d+\.\d+"
 _NUM_RE = re.compile(rf"(?P<sci>{_SCI})|(?P<pct>{_PERCENT})|(?P<dec>{_DECIMAL})")
 
-# Significance thresholds (p<0.05, α=0.01, p = .05) are conventions, not measured results;
-# requiring them to appear in results.csv would be a false positive. Detected by the marker
-# immediately preceding the number.
-_THRESHOLD_RE = re.compile(r"(?:\bp\b|α|alpha)\s*[<>=≤≥]\s*$", re.IGNORECASE)
+# Numbers that are NOT point-estimate empirical claims, so they can't — and shouldn't — be
+# matched against results.csv (which records ONE point metric per RQ). Suppressing them keeps the
+# checker focused on the paper's headline findings, which is exactly where fabrication shows up
+# (the …103845 "0.81→0.57" smoking gun), instead of crying wolf on honest statistical reporting
+# and burying the real signal under false positives. Two families, mirroring the original p<0.05
+# suppression:
+#   * SIGNIFICANCE — p-values and significance thresholds (p<0.05, α=0.01, "p-value of 0.14",
+#     "the 0.05 threshold") are inferential conventions/statistics, not recorded point metrics.
+#   * DISPERSION — SD / SE / SEM / standard deviation / standard error / ± spreads / confidence
+#     intervals are derived FROM a run, but results.csv stores only the point estimate, so they
+#     are unverifiable against it; flagging them would wrongly imply fabrication.
+#
+# Scope boundary: this does NOT suppress sub-aggregate point values the paper reports but that
+# aren't in results.csv (e.g. per-cell means) — those are genuine point claims and stay flagged
+# until Stage B records a richer statistical record. Each pattern is anchored close to the number
+# (preceding/following window) so a far-off keyword can't accidentally silence a real claim.
+_SIG_BEFORE_RE = re.compile(
+    r"(?:\bp\b|α|alpha)\s*[<>=≤≥]\s*$"  # p<0.05, α=0.01, p = .05
+    r"|p[\s-]*values?\s+(?:of|was|is|=|:)\s*$",  # "p-value of 0.14"
+    re.IGNORECASE,
+)
+_THRESHOLD_AFTER_RE = re.compile(r"^\s*%?\s*threshold", re.IGNORECASE)  # "0.05 threshold"
+_DISPERSION_BEFORE_RE = re.compile(
+    r"(?:±|\bSDs?\b|\bSEs?\b|\bSEM\b|\bIQR\b|std\.?\s*(?:dev|err)?\.?"
+    r"|standard\s+(?:deviation|error)|confidence\s+intervals?|\bCIs?\b)"
+    # tether: keyword local to the number, optionally across one range operand ("SEs ≈0.09–0.10")
+    r"[^0-9]{0,18}(?:[\d.]+\s*[–—-]\s*)?$",
+    re.IGNORECASE,
+)
+
+
+def _suppress_reason(text: str, start: int, end: int) -> str | None:
+    """Why the number at text[start:end] is NOT a point-estimate claim to audit (so should be
+    skipped), or None if it is a genuine empirical claim. See the constants above for the two
+    families (significance / dispersion) and the scope boundary."""
+    before = text[max(0, start - 28) : start]
+    after = text[end : end + 14]
+    if _SIG_BEFORE_RE.search(before):
+        return "significance"
+    if _THRESHOLD_AFTER_RE.search(after):
+        return "threshold"
+    if _DISPERSION_BEFORE_RE.search(before):
+        return "dispersion"
+    return None
 
 
 def _decimals_of(token: str) -> int:
@@ -200,8 +240,8 @@ def extract_claims(text: str, section: str) -> list[NumericClaim]:
     claims: list[NumericClaim] = []
     for m in _NUM_RE.finditer(text):
         token = m.group(0).strip()
-        if _THRESHOLD_RE.search(text[max(0, m.start() - 8) : m.start()]):
-            continue  # p<0.05 / α=0.01 — a significance threshold, not a measured result
+        if _suppress_reason(text, m.start(), m.end()):
+            continue  # significance (p<0.05, "p-value of 0.14") or dispersion (SD/SE/±/CI)
         is_pct = m.lastgroup == "pct"
         value = _parse_number(token.rstrip("%").strip() if is_pct else token)
         if value is None:

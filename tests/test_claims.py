@@ -49,6 +49,61 @@ def test_significance_thresholds_are_not_claims():
     assert [c.text for c in claims] == []
 
 
+def test_narrative_pvalue_and_threshold_are_suppressed():
+    # results.csv records point metrics, not inferential statistics: a p-value reported in prose
+    # ("p-value of 0.14") and a significance threshold named narratively ("the 0.05 threshold",
+    # "corrected 0.00139 threshold") are conventions/statistics, not values to find in the data.
+    text = (
+        "The minimum uncorrected p-value of 0.14 falls short of the 0.05 threshold, "
+        "let alone the corrected 0.00139 threshold."
+    )
+    assert extract_claims(text, "Results") == []
+
+
+def test_dispersion_statistics_are_suppressed():
+    # SD / SE / ± / CI are derived from the run; results.csv stores only the point estimate, so
+    # flagging them would wrongly imply fabrication. The point estimate itself stays a claim.
+    text = (
+        "The grand mean is 0.35 (SD across cells = 0.08); cluster-robust SEs (≈0.09–0.10) "
+        "exceed the naive i.i.d. SEs (≈0.06), within a CI of 0.04."
+    )
+    vals = {c.text for c in extract_claims(text, "Results")}
+    assert vals == {"0.35"}  # the dispersion companions 0.08 / 0.09 / 0.10 / 0.06 / 0.04 are gone
+
+
+def test_genuine_subaggregate_point_value_still_flagged():
+    # Scope boundary: a per-cell point value the paper asserts but that isn't in results.csv is a
+    # genuine point claim and MUST stay flagged — suppression is only for significance/dispersion.
+    evidence = [Evidence(metric="grand_mean", value=0.35)]
+    rep = check_paper("## Results\nCell accuracy ranged from 0.27 to 0.43.", evidence)
+    assert {c.text for c in rep.unbacked} == {"0.27", "0.43"}
+
+
+def test_192231_prose_drops_dispersion_noise_but_keeps_real_gap():
+    # Verbatim sentences from the honest pilot project …192231, whose results.csv records only
+    # the grand mean (mean_cc_score = 0.3534). Pre-suppression the checker flagged 9 "unbacked"
+    # numbers — almost all dispersion/p-value noise — burying the real signal. After suppression
+    # only the genuine sub-aggregate cell value (0.43, absent from the grand-mean-only data) is
+    # flagged, so the gate accuses fabrication, not honest statistical reporting.
+    paper_md = (
+        "## Abstract\n"
+        "The grand mean chance-corrected score is 0.35 (SD across cells = 0.08). All "
+        "pairwise comparisons are inconclusive under Fisher's exact test.\n\n"
+        "## Results\n"
+        "Scores range from 0.27 (K=16, T=20) to 0.43 (K=4, T=5). The minimum uncorrected "
+        "p-value of 0.14 falls well short of the uncorrected 0.05 threshold, let alone the "
+        "corrected 0.00139 threshold. Cluster-robust SEs (≈0.09–0.10) are substantially "
+        "larger than naive i.i.d. SEs (≈0.06)."
+    )
+    evidence = [
+        Evidence(metric="mean_cc_score", value=0.3534),
+        Evidence(metric="mean_chance_corrected_accuracy", value=0.2666),  # backs the 0.27 cell
+    ]
+    rep = check_paper(paper_md, evidence)
+    assert {c.text for c in rep.unbacked} == {"0.43"}
+    assert "0.35" in {c.text for c in rep.backed}  # the grand mean still matches the data
+
+
 # --- rounding-aware matching ---------------------------------------------------
 def test_rounding_aware_match_backs_a_rounded_claim():
     evidence = [Evidence(metric="interaction_F", value=5.0812)]
