@@ -839,9 +839,17 @@ def project_status(pid: str = typer.Argument(..., help="project id")):
         kb = pdf.stat().st_size / 1024
         ui.console.print(f"[green]paper: ✓ {pdf} ({kb:.0f} KB)[/green]")
     elif tex.exists():
-        ui.console.print(
-            f"[yellow]paper: ✗ no PDF — LaTeX build failed (see {paper_dir / 'build.log'})[/yellow]"
-        )
+        build_log = paper_dir / "build.log"
+        log_text = build_log.read_text(encoding="utf-8", errors="replace") if build_log.exists() else ""
+        if "no tectonic/latexmk on PATH" in log_text:
+            ui.console.print(
+                f"[yellow]paper: ◐ paper.tex written; no TeX engine on PATH to compile it "
+                f"(see {build_log})[/yellow]"
+            )
+        else:
+            ui.console.print(
+                f"[yellow]paper: ✗ no PDF — LaTeX build failed (see {build_log})[/yellow]"
+            )
     if is_complete(p):
         ui.console.print("[green]✓ project complete[/green]")
     elif p.stages[p.current].status == "awaiting_approval":

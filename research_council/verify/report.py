@@ -245,15 +245,35 @@ def _check_figures(out_dir: Path) -> CheckResult:
     )
 
 
+_NO_ENGINE_MARKER = "no tectonic/latexmk on PATH"
+
+
 def _check_pdf(out_dir: Path) -> CheckResult:
     """The headline artifact. A paper.tex with no paper.pdf is a build failure, not 'no
-    paper' — surfaced as FAIL so a broken Stage-C compile can't pass as verified."""
+    paper' — surfaced as FAIL so a broken Stage-C compile can't pass as verified.
+
+    The one case that is NOT a falsehood is "no TeX engine was available to compile":
+    latex.py records that as a non-failure (status ``fallback_no_tex``) and writes the
+    marker ``no tectonic/latexmk on PATH`` to build.log. Treating that as FAIL would mark
+    every engine-less machine (CI without tectonic/latexmk) UNVERIFIED purely for a missing
+    local binary — so it degrades to SKIP, never blocking the verdict."""
     paper_dir = out_dir / "paper"
     pdf, tex = paper_dir / "paper.pdf", paper_dir / "paper.tex"
     if pdf.exists():
         kb = pdf.stat().st_size / 1024
         return CheckResult("pdf", PASS, f"paper.pdf compiled ({kb:.0f} KB)", {"kb": round(kb, 1)})
     if tex.exists():
+        from research_council.verify.latex import latex_engine
+
+        build_log = paper_dir / "build.log"
+        log_text = build_log.read_text(encoding="utf-8", errors="replace") if build_log.exists() else ""
+        # build.log is the run-time record of WHY there's no PDF. The no-engine marker (or, for
+        # pre-producer projects with no log, no engine on PATH now) means the compile never ran —
+        # not that it ran and failed.
+        if _NO_ENGINE_MARKER in log_text or (not log_text and latex_engine()[0] is None):
+            return CheckResult(
+                "pdf", SKIP, "paper.tex present; no TeX engine available to compile it", {}
+            )
         return CheckResult(
             "pdf", FAIL, "paper.tex present but no paper.pdf — LaTeX build failed", {}
         )

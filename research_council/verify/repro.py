@@ -146,7 +146,8 @@ def reproduce_sh(rq_results: list[RQResult], *, rel_tol: float = REL_TOL) -> str
             "  && got=$(echo \"$out\" | sed -n 's/.*METRIC[[:space:]]\\{1,\\}"
             + _re_sed(name)
             + "[[:space:]]*=[[:space:]]*\\([^[:space:]]*\\).*/\\1/p' | tail -n1) \\",
-            f"  && python3 -c \"import sys; got=float('$got'); exp={value!r}; rel={rel_tol!r}; "
+            f"  && GOT=\"$got\" python3 -c \"import os, sys; got=float(os.environ['GOT']); "
+            f"exp={value!r}; rel={rel_tol!r}; "
             "sys.exit(0 if abs(got-exp) <= rel*abs(exp) or (got==0 and exp==0) else 1)\" \\",
             f"  && echo 'PASS {rq}: '\"$got\"' ~= {value}' \\",
             f"  || {{ echo 'FAIL {rq}: expected {value}, got '\"${{got:-<none>}}\"; exit 1; }} ) "

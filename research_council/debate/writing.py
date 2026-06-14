@@ -340,7 +340,12 @@ async def run_writing(
         claim_crs = claims_to_change_requests(claim_report)
         if claim_crs:
             merged.change_requests.extend(claim_crs)
-            if caps.claims_unbacked_block:
+            # Only BLOCK on unbacked claims when there is actually evidence to back them
+            # against. With no results.csv every numeric claim reads as unbacked, so blocking
+            # here would make any paper with a number unacceptable forever — the same
+            # "no results → no signal, don't gate" stance approval_to_change_request takes.
+            # The change-requests still surface as feedback either way.
+            if caps.claims_unbacked_block and evidence:
                 blocking = True
 
         # plan/25 Gap 4: when the council approved ZERO RQs and unapproved_block is on, the paper
