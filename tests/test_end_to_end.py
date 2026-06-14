@@ -248,3 +248,34 @@ async def test_verification_json_is_a_persisted_artifact(tmp_path):
     data = json.loads(path.read_text(encoding="utf-8"))
     assert data["project"] == "e2e"
     assert data["verdict"] == report.verdict == "verified"
+
+
+async def test_stage_c_completion_auto_emits_the_scorecard(tmp_path):
+    """plan/25 Gap 6 wiring: the helper Stage-C calls at completion auto-runs the scorecard,
+    so a finished run ships verification.json + a verdict WITHOUT a separate `project verify`.
+    Proves the CLI seam, not just verify_project on synthetic input."""
+    from research_council.cli import _emit_verifiability_scorecard
+
+    await _run_pipeline(tmp_path, latex=False)
+    report = _emit_verifiability_scorecard(tmp_path)
+    assert report.verdict == "verified" and report.n_fail == 0
+    assert (tmp_path / "paper" / "verification.json").exists()
+    assert report.project == tmp_path.name  # project id derived from the out_dir
+
+
+async def test_stage_c_completion_scorecard_flags_a_poisoned_run_as_unverified(tmp_path):
+    """The auto-emitted verdict is load-bearing at completion too: a fabricated number left in
+    the finished paper makes the completion scorecard report UNVERIFIED, not a silent green."""
+    from research_council.cli import _emit_verifiability_scorecard
+
+    await _run_pipeline(tmp_path, latex=False)
+    paper_md = tmp_path / "paper" / "paper.md"
+    paper_md.write_text(
+        paper_md.read_text(encoding="utf-8").replace(
+            "The interaction effect is significant (F=5.08).",
+            "The interaction effect is significant (F=5.08); accuracy hits 0.991.",
+        ),
+        encoding="utf-8",
+    )
+    report = _emit_verifiability_scorecard(tmp_path)
+    assert report.verdict == "unverified" and report.n_fail >= 1

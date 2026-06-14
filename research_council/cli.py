@@ -1183,12 +1183,39 @@ def _run_stage_c(handoff, out_dir, onboarding, profile: str = "balanced"):
         if res.refs_resolved < res.refs_total:
             refs_note += " — [yellow]some citations unverified[/yellow]"
         ui.console.print(f"  [dim]{refs_note}[/dim]")
+    # plan/25 Gap 6: auto-audit the finished paper. The per-stage gates above only guard the
+    # run as it happens; nothing re-read the *output* back into one verdict at completion. Run
+    # the project-level scorecard now so every finished run ships a verification.json and the
+    # operator sees VERIFIED/UNVERIFIED without remembering a separate `project verify`.
+    report = _emit_verifiability_scorecard(out_dir)
     summary = (
         f"'{res.title}' · {vname} · {'accepted' if res.accepted else res.stopped_reason} · "
-        f"mean {res.review.mean:.2f} · latex {res.latex} · approved {res.approved_rqs}/{res.total_rqs}"
+        f"mean {res.review.mean:.2f} · latex {res.latex} · approved {res.approved_rqs}/{res.total_rqs} · "
+        f"verifiability {report.verdict}"
     )
-    artifacts = {"idea": handoff.idea, **res.model_dump()}
+    artifacts = {"idea": handoff.idea, "verifiability": report.to_dict(), **res.model_dump()}
     return summary, artifacts
+
+
+def _emit_verifiability_scorecard(out_dir):
+    """Auto-run the project verifiability scorecard at Stage-C completion (plan/25 Gap 6):
+    persist paper/verification.json and print the one-line VERIFIED/UNVERIFIED verdict. Returns
+    the VerifiabilityReport so the caller can fold the verdict into its summary/artifacts."""
+    from research_council.verify.report import write_report
+
+    report = write_report(out_dir, project=Path(out_dir).name)
+    verdict = report.verdict
+    vcolor = {"verified": "green", "verified-with-warnings": "yellow"}.get(verdict, "red")
+    vmark = "✓" if report.n_fail == 0 else "✗"
+    n_pass = len(report.checks) - report.n_fail - report.n_warn
+    fails = [c.name for c in report.checks if c.status == "fail"]
+    fail_note = f" — failed: {', '.join(fails)}" if fails else ""
+    ui.console.print(
+        f"  [{vcolor}]{vmark} verifiability: {verdict.upper()}[/{vcolor}]"
+        f" ({n_pass} pass, {report.n_warn} warn, {report.n_fail} fail){fail_note}"
+    )
+    ui.console.print(f"  [dim]→ {Path(out_dir) / 'paper' / 'verification.json'}[/dim]")
+    return report
 
 
 def _build_v2_peers(cfg, live: bool):
