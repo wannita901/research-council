@@ -135,6 +135,27 @@ def stream_line(round_no: int, phase: str, kind: str, author: str | None, extra:
     )
 
 
+def format_review_finding(f: dict) -> str:
+    """One Stage-B code-review finding as plain text (severity/kind, blocking mark, msg, fix)."""
+    blocking = f.get("kind") in ("correctness", "soundness") and f.get("severity") == "high"
+    mark = " (blocking)" if blocking else ""
+    fix = f"  → {f['fix']}" if f.get("fix") else ""
+    return f"{f.get('severity', '')}/{f.get('kind', '')}{mark} {f.get('msg', '')}{fix}".strip()
+
+
+def format_change_request(c: dict) -> str:
+    """One Stage-C reviewer change-request as plain text (severity, target section, msg)."""
+    section = c.get("section") or "whole"
+    return f"{c.get('severity', '')} ({section}) {c.get('msg', '')}".strip()
+
+
+def review_feedback(findings, formatter) -> None:
+    """Print each reviewer item on its own indented line, the way Stage A streams critiques —
+    so Stage B/C show the council's actual feedback, not just a finding count."""
+    for item in findings:
+        console.print(f"      [dim]·[/dim] {escape(formatter(item))}")
+
+
 def ranking_table(ranked, composites, titles, breakdown=None, *, title) -> None:
     t = Table(title=title, box=box.SIMPLE_HEAVY, title_style="bold", title_justify="left")
     t.add_column("#", justify="right", style="dim")

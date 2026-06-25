@@ -387,9 +387,20 @@ def ideate(
 
         librarian, _ = _build_librarian()
         on_round_end = _round_harvester(trace, retrieval, topic, librarian, Ingestor(librarian))
+        ui.console.print(
+            "[dim]--harvest on: each ideation round is ingested into the LLM-wiki "
+            "(knowledge/wiki/) so later rounds can read it.[/dim]"
+        )
     elif harvest and not live:
         ui.console.print(
             "[yellow]--harvest needs --live (the librarian uses real models); skipping harvest.[/yellow]"
+        )
+    elif live:
+        # Make the default visible — the wiki only updates with --harvest, so its absence
+        # isn't a silent bug (issue: "I don't see the library update at the end of iterations").
+        ui.console.print(
+            "[dim]LLM-wiki harvest is off (default) — pass --harvest to ingest each round "
+            "into knowledge/wiki/ for later rounds.[/dim]"
         )
 
     try:
@@ -992,6 +1003,9 @@ def _run_stage_b(handoff, allow_local: bool, profile: str = "balanced", out_dir=
         else:
             extra = ""
         ui.stream_line(0, ph, k, None, extra)
+        # Echo the reviewer's actual findings (like Stage A streams each critique), not just the count.
+        if k == "code_review" and pl.get("findings"):
+            ui.review_feedback(pl["findings"], ui.format_review_finding)
 
     prior = load_prior_experiments(out_dir) if out_dir is not None else {}
     if prior:
@@ -1122,10 +1136,9 @@ def _run_stage_c(handoff, out_dir, onboarding, profile: str = "balanced"):
             extra = f"'{pl.get('title', '')}' · {pl.get('citations', 0)} cites"
         elif k == "reviewer":
             crs = pl.get("change_requests", [])
-            top = f" · “{crs[0]['msg'][:54]}”" if crs else ""
             extra = (
                 f"  ↳ {pl['vendor']} · mean {pl['mean']:.2f} · {pl.get('verdict', '')} · "
-                f"{len(crs)} change-req(s){top}"
+                f"{len(crs)} change-req(s)"
             )
         elif k == "review":
             extra = (
@@ -1143,6 +1156,9 @@ def _run_stage_c(handoff, out_dir, onboarding, profile: str = "balanced"):
         else:
             extra = pl.get("status", "")
         ui.stream_line(0, ph, k, None, extra)
+        # Echo each PC reviewer's actual change-requests (like Stage A streams each critique).
+        if k == "reviewer" and pl.get("change_requests"):
+            ui.review_feedback(pl["change_requests"], ui.format_change_request)
 
     ui.console.print(
         f"  [dim]Stage C · council writing for {vname} "

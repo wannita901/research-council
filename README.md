@@ -97,6 +97,16 @@ council project verify  <id>                           # re-audit the artifacts 
 
 Stage ③ already auto-emits `paper/verification.json` and prints the verdict on completion; `council project verify` re-runs that scorecard on demand (and exits non-zero when UNVERIFIED, so it doubles as a CI gate).
 
+**Resuming or redoing a stage.** `council project approve <id>` always *advances* to the next stage — it has no stage selector. To pick up an interrupted run, or to rewind and re-do an earlier stage from its existing artifacts, use the conductor's resume flags:
+
+```bash
+council run --resume <id>                              # re-enter the gate loop where you left off
+council run --resume <id> --from experimentation       # rewind to a stage and improve its artifacts
+council run --resume <id> --from ideation --live       # …e.g. re-do ideation, then flow forward
+```
+
+`--from <stage>` keeps that stage's artifacts (so the council improves rather than rebuilds), resets the later stages, and continues forward through the same **go / redo / stop** gates.
+
 | Flag | What it does |
 | --- | --- |
 | `--live` | use real models (omit it for the offline stub dry-run) |
