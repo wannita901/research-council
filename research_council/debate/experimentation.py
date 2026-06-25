@@ -168,9 +168,15 @@ async def run_experimentation(
     best: ExperimentResult | None = None
 
     for attempt in range(1, caps.max_iters + 1):
-        draft = await coder.draft(idea, plan, error=err, prior_code=code, feedback=notes)
-        code = draft.code
-        if emit:
+        draft, draft_error = None, ""
+        try:
+            draft = await coder.draft(idea, plan, error=err, prior_code=code, feedback=notes)
+            code = draft.code
+        except Exception as exc:
+            # The coder couldn't return a valid (non-empty) script even after its output
+            # retries. Treat it like empty code — re-prompt — rather than crashing Stage B.
+            code, draft_error = "", str(exc)[:200]
+        if emit and draft is not None:
             emit(
                 "experiment",
                 "code_drafted",
@@ -183,7 +189,7 @@ async def run_experimentation(
             # whole runs with only "# no code produced" and three wasted iterations. Re-prompt
             # the coder pointedly instead of spending this iteration's sandbox + reviewers.
             if emit:
-                emit("experiment", "empty_code", {"attempt": attempt})
+                emit("experiment", "empty_code", {"attempt": attempt, "error": draft_error})
             err = ""
             notes = (
                 "Your previous response left the `code` field EMPTY. Return the COMPLETE, "
@@ -196,7 +202,9 @@ async def run_experimentation(
                 attempts=attempt,
                 iterations=attempt,
                 code=code,
-                log="coder returned an empty script",
+                log=f"coder returned an empty script ({draft_error})"
+                if draft_error
+                else "coder returned an empty script",
                 backend=sandbox.name,
             )
             best.iterations = attempt

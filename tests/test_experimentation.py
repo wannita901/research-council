@@ -115,6 +115,19 @@ async def test_retries_then_approved():
     assert res.approved and res.iterations == 2 and res.metric == "f1=0.5"
 
 
+def test_experiment_draft_rejects_empty_code():
+    """Root-cause fix: `code` is required + non-empty, so a model that omits/blanks the script
+    fails validation (pydantic-ai then re-asks) instead of silently yielding an empty draft."""
+    import pytest
+    from pydantic import ValidationError
+
+    with pytest.raises(ValidationError):
+        ExperimentDraft(code="")
+    with pytest.raises(ValidationError):
+        ExperimentDraft(notes="forgot the code")
+    assert ExperimentDraft(code="print('METRIC x=1')").code  # a real script is accepted
+
+
 async def test_empty_code_never_runs_sandbox_or_reviewers():
     """Regression: a coder that returns an empty `code` field (the silent-failure mode that
     produced '# no code produced' across whole runs) must NOT waste a sandbox + review cycle.
