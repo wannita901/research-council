@@ -177,6 +177,37 @@ async def run_experimentation(
                 {"attempt": attempt, "chars": len(code), "notes": draft.notes},
             )
 
+        if not code.strip():
+            # An empty `code` field means the model returned no script. Running the sandbox
+            # would burn a full review cycle on nothing — the silent-failure mode that left
+            # whole runs with only "# no code produced" and three wasted iterations. Re-prompt
+            # the coder pointedly instead of spending this iteration's sandbox + reviewers.
+            if emit:
+                emit("experiment", "empty_code", {"attempt": attempt})
+            err = ""
+            notes = (
+                "Your previous response left the `code` field EMPTY. Return the COMPLETE, "
+                "self-contained Python script as the `code` field — not in `notes` — and it "
+                "must end with one or more `METRIC <name>=<value>` lines."
+            )
+            best = best or ExperimentResult(
+                ran=False,
+                feasible=False,
+                attempts=attempt,
+                iterations=attempt,
+                code=code,
+                log="coder returned an empty script",
+                backend=sandbox.name,
+            )
+            best.iterations = attempt
+            if (
+                caps.usd_budget
+                and (total_spend(coder, *reviewers) - budget_base) >= caps.usd_budget
+            ):
+                best.stopped_reason = "budget_exhausted"
+                return best
+            continue
+
         res = sandbox.run(code, timeout=caps.timeout, requirements=draft.requirements)
         last_ran = res.ok
         metric = _metric_of(res.stdout)

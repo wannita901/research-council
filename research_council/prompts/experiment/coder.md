@@ -34,5 +34,7 @@ Figures (for the paper):
   collected and handed to the writing stage. Use a non-interactive backend
   (`import matplotlib; matplotlib.use("Agg")`). Plot from your REAL computed results.
 
-Return `code`, the `requirements` list, and a one-line `notes`. If a previous attempt failed,
-read the error and fix it.
+Return `code`, the `requirements` list, and a one-line `notes`. The `code` field MUST contain
+the FULL runnable script as a string — never leave it empty and never put the script in `notes`
+instead; an empty `code` field is rejected and wastes a whole review round. If a previous attempt
+failed, read the error and fix it.

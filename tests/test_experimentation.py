@@ -70,6 +70,30 @@ _BALANCED = StageBCaps(max_iters=3, k=2, usd_budget=0.0, timeout=5)
 _ONE = StageBCaps(max_iters=1, k=2, usd_budget=0.0, timeout=5)
 
 
+class _SpySandbox:
+    """Counts how many times the sandbox actually executes — to prove empty code never
+    burns a run. Delegates real execution to LocalSandbox for non-empty scripts."""
+
+    name = "spy"
+
+    def __init__(self):
+        self.runs = 0
+
+    def run(self, code, timeout=10, requirements=None):
+        self.runs += 1
+        return LocalSandbox().run(code, timeout=timeout)
+
+
+class _CountingReviewer(_FakeReviewer):
+    def __init__(self, **kw):
+        super().__init__(**kw)
+        self.calls = 0
+
+    async def review(self, idea, plan, code, run):
+        self.calls += 1
+        return await super().review(idea, plan, code, run)
+
+
 async def test_feasible_and_approved_first_try():
     res = await run_experimentation(
         {"title": "X"},
@@ -89,6 +113,35 @@ async def test_retries_then_approved():
         {"title": "X"}, "p", coder, _approvers(2), LocalSandbox(), caps=_BALANCED
     )
     assert res.approved and res.iterations == 2 and res.metric == "f1=0.5"
+
+
+async def test_empty_code_never_runs_sandbox_or_reviewers():
+    """Regression: a coder that returns an empty `code` field (the silent-failure mode that
+    produced '# no code produced' across whole runs) must NOT waste a sandbox + review cycle.
+    The loop should re-prompt instead, and the RQ ends infeasible — not falsely 'ran'."""
+    sb = _SpySandbox()
+    reviewers = [_CountingReviewer(approve=True, vendor=f"v{i}") for i in range(2)]
+    res = await run_experimentation(
+        {"title": "X"}, "plan", _FakeCoder(["", "", ""]), reviewers, sb, caps=_BALANCED
+    )
+    assert sb.runs == 0  # empty code never reached the sandbox
+    assert all(r.calls == 0 for r in reviewers)  # nor the reviewers
+    assert not res.feasible and not res.approved and res.iterations == 3
+
+
+async def test_empty_code_then_valid_recovers():
+    """The empty-code guard re-prompts; the next non-empty draft runs normally and can pass."""
+    sb = _SpySandbox()
+    res = await run_experimentation(
+        {"title": "X"},
+        "plan",
+        _FakeCoder(["", "print('METRIC acc=0.8')"]),
+        _approvers(2),
+        sb,
+        caps=_BALANCED,
+    )
+    assert sb.runs == 1  # only the non-empty attempt executed
+    assert res.feasible and res.approved and res.metric == "acc=0.8"
 
 
 async def test_feasible_but_blocked_is_not_approved():
