@@ -295,17 +295,34 @@ def _check_figures(out_dir: Path) -> CheckResult:
     refs = list(seen)
     if not refs:
         return CheckResult("figures", SKIP, "paper references no figures", {"n_refs": 0})
+    from research_council.verify.figure import is_valid_figure
+
     missing = [r for r in refs if not (paper_dir / r).exists()]
-    details = {"n_refs": len(refs), "n_missing": len(missing), "missing": missing}
-    if missing:
+    # Present on disk but not a valid, non-empty image: a 0-byte/truncated/garbage figure resolves
+    # the link yet still breaks \includegraphics and shows the reader a broken plot, so it's a
+    # verifiability defect just like a dangling reference (existence alone is not correctness).
+    corrupt = [r for r in refs if r not in missing and not is_valid_figure(paper_dir / r)]
+    details = {
+        "n_refs": len(refs),
+        "n_missing": len(missing),
+        "missing": missing,
+        "n_corrupt": len(corrupt),
+        "corrupt": corrupt,
+    }
+    if missing or corrupt:
+        parts = []
+        if missing:
+            parts.append(f"{len(missing)} missing from disk")
+        if corrupt:
+            parts.append(f"{len(corrupt)} present but not a valid image")
         return CheckResult(
             "figures",
             FAIL,
-            f"{len(missing)}/{len(refs)} referenced figure(s) missing from disk — broken evidence link",
+            f"{len(missing) + len(corrupt)}/{len(refs)} referenced figure(s) {', '.join(parts)} — broken evidence link",
             details,
         )
     return CheckResult(
-        "figures", PASS, f"all {len(refs)} referenced figure(s) present on disk", details
+        "figures", PASS, f"all {len(refs)} referenced figure(s) present and valid on disk", details
     )
 
 

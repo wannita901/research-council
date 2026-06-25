@@ -290,6 +290,47 @@ def test_write_claims_report_none_without_paper(tmp_path: Path):
     assert write_claims_report(tmp_path) is None
 
 
+def test_parse_number_rejects_non_finite():
+    from research_council.verify.claims import _parse_number
+
+    # finite values still parse
+    assert _parse_number("0.81") == 0.81
+    assert _parse_number("1.37e-4") == 0.000137
+    # NaN / ±inf (and overflow to inf) are rejected so they can't poison claims.json
+    for tok in ("inf", "-inf", "Infinity", "nan", "NaN", "1e400"):
+        assert _parse_number(tok) is None, tok
+
+
+def test_non_finite_metric_keeps_claims_json_valid(tmp_path: Path):
+    """A degenerate experiment that recorded a non-finite metric must not emit a bare
+    NaN/Infinity token into claims.json (invalid JSON for strict readers)."""
+    import json
+    import math
+
+    paper = tmp_path / "paper"
+    exp = tmp_path / "experiment"
+    paper.mkdir()
+    exp.mkdir()
+    (paper / "paper.md").write_text("# T\n## Results\nWe report an F1 of 0.81.\n", encoding="utf-8")
+    (exp / "results.csv").write_text(
+        "rq_id,metric,value\nrq1,accuracy,inf\nrq2,loss,nan\nrq3,f1,0.81\n",
+        encoding="utf-8",
+    )
+    write_claims_report(tmp_path)
+    text = (paper / "claims.json").read_text(encoding="utf-8")
+    assert "NaN" not in text and "Infinity" not in text
+
+    def _reject(tok):  # strict RFC-8259 reader: NaN/Infinity are not valid JSON
+        raise ValueError(tok)
+
+    data = json.loads(text, parse_constant=_reject)
+    # Only the finite metric survived; the non-finite rows were dropped.
+    assert all(math.isfinite(e["value"]) for e in data["evidence"])
+    assert [(e["rq_id"], e["metric"], e["value"]) for e in data["evidence"]] == [
+        ("rq3", "f1", 0.81)
+    ]
+
+
 # --- in-memory draft checking (wired into the writing loop) --------------------
 def test_draft_to_audit_md_stitches_abstract_and_results_only():
     draft = PaperDraft(

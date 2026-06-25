@@ -81,6 +81,25 @@ def approval_status(out_dir: Path | str) -> ApprovalStatus:
     return ApprovalStatus(approved=approved, total=total, unapproved_rqs=unapproved)
 
 
+def feasibility_by_rq(out_dir: Path | str) -> dict[str, bool]:
+    """Map each RQ id → whether its experiment was FEASIBLE (ran to exit 0 + emitted a METRIC),
+    read from <out_dir>/experiment/results.csv. Empty when there's no results.csv (no signal).
+
+    The writing stage uses this to keep figures from NON-feasible runs out of the paper: a
+    non-feasible RQ's script errored or never produced a valid metric, so any plot it left on
+    disk is from a broken run and must not be presented to the reader as a result."""
+    path = Path(out_dir) / "experiment" / "results.csv"
+    out: dict[str, bool] = {}
+    if not path.exists():
+        return out
+    with path.open(encoding="utf-8", newline="") as f:
+        for row in csv.DictReader(f):
+            rq_id = (row.get("rq_id") or "").strip()
+            if rq_id:
+                out[rq_id] = (row.get("feasible") or "").strip().lower() in _TRUE
+    return out
+
+
 def honesty_constraint(status: ApprovalStatus) -> str | None:
     """Framing the writer must obey when the council did not approve every RQ.
 

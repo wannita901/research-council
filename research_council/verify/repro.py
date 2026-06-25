@@ -30,6 +30,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import math
 import re
 from pathlib import Path
 
@@ -75,14 +76,21 @@ def detect_seeds(code: str) -> list[int]:
 
 
 def _metric_parts(metric: str | None) -> tuple[str | None, float | None]:
-    """('name', value) from a 'name=value' METRIC string, value parsed to float if numeric."""
+    """('name', value) from a 'name=value' METRIC string, value parsed to a *finite* float.
+
+    A non-numeric value yields (name, None). A NaN/±inf value also yields (name, None): a
+    non-finite number can't be a diff target (`abs(got-exp) <= rel*abs(exp)` is never true for
+    NaN, so reproduce.sh could never PASS) and json.dumps would write a bare `NaN`/`Infinity`
+    token that is invalid JSON and breaks any strict reader of repro.json. So `value` carries
+    only re-checkable finite numbers, and `verifiable` stays honest for a degenerate metric."""
     if not metric or "=" not in metric:
         return (None, None)
     name, _, raw = metric.partition("=")
     try:
-        return (name.strip(), float(raw.strip()))
+        v = float(raw.strip())
     except ValueError:
         return (name.strip(), None)
+    return (name.strip(), v if math.isfinite(v) else None)
 
 
 def build_manifest(rr: RQResult, *, image: str = DEFAULT_IMAGE) -> dict:

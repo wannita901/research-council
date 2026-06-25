@@ -8,17 +8,52 @@ isn't one). This keeps the dependency soft and the loop honest.
 
 from __future__ import annotations
 
+import math
 import re
 from pathlib import Path
 
 _METRIC = re.compile(r"METRIC\s+([^\s=]+)\s*=\s*(\S+)")
 
+# Magic-byte prefixes that identify a structurally-valid raster/vector image by suffix. PNG and
+# PDF are binary with a fixed header; SVG is XML text whose root element is <svg ...>. Used by
+# is_valid_figure to reject the bad-image cases the existence check misses: a 0-byte file the
+# sandbox touched but never wrote, a truncated/garbage save, or an LLM that wrote a stack-trace
+# into "plot.png" — none of which are correct evidence and any of which breaks \includegraphics.
+_IMAGE_MAGIC: dict[str, bytes] = {".png": b"\x89PNG", ".pdf": b"%PDF"}
+
+
+def is_valid_figure(path: Path) -> bool:
+    """True iff `path` is a non-empty file whose bytes match a real image header for its suffix.
+
+    A trusted host check (no sandbox, no image libs): a missing/empty file fails; a .png/.pdf
+    must start with its signature; an .svg must contain an <svg root element in its head; any
+    other (non-empty) suffix is accepted rather than over-rejected. The point is to catch the
+    broken-image cases — empty, truncated, or not-actually-an-image — that the figures that enter
+    the paper as evidence must not be, before they reach the reader or break the LaTeX build."""
+    p = Path(path)
+    try:
+        if p.stat().st_size == 0:
+            return False
+        head = p.read_bytes()[:4096]
+    except OSError:
+        return False
+    suffix = p.suffix.lower()
+    if suffix == ".svg":
+        return b"<svg" in head.lower()
+    magic = _IMAGE_MAGIC.get(suffix)
+    return head.startswith(magic) if magic else True
+
 
 def _num(s: str) -> float | None:
+    """Parse a metric value to a *finite* float, or None. NaN/±inf parse as floats but are
+    rejected: a non-finite value can't be drawn as a bar height (NaN renders as a missing/blank
+    bar, inf blows up the axis), so it has no place on a results chart — it is dropped here so a
+    numerically-broken metric never becomes a misleading figure."""
     try:
-        return float(s)
+        v = float(s)
     except (ValueError, TypeError):
         return None
+    return v if math.isfinite(v) else None
 
 
 def _metrics(experiment: dict) -> list[tuple[str, float]]:

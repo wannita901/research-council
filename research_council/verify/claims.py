@@ -25,6 +25,7 @@ Design decisions (resolving the open questions in plan/25 §5):
 from __future__ import annotations
 
 import json
+import math
 import re
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
@@ -165,7 +166,11 @@ def load_evidence(out_dir: Path | str) -> list[Evidence]:
 # --- number parsing -----------------------------------------------------------
 def _parse_number(token: str) -> float | None:
     """Parse a numeric token, including scientific notation written as 1.37×10⁻⁴,
-    1.37 x 10^-4, or 1.37e-4. Returns None if it isn't a number."""
+    1.37 x 10^-4, or 1.37e-4. Returns None if it isn't a number, or if it is a
+    non-finite (NaN/±inf) value: such a value can't be a point claim or evidence
+    target (rounding/tolerance matching is never true for NaN) and json.dumps would
+    write a bare NaN/Infinity token, invalid JSON that breaks strict readers of
+    claims.json. Mirrors repro._metric_parts and figure._num."""
     if token is None:
         return None
     s = token.strip().translate(_SUPERSCRIPT).replace("−", "-")  # unicode minus → ascii
@@ -177,9 +182,10 @@ def _parse_number(token: str) -> float | None:
     if m:
         s = f"{m.group(1)}e{m.group(2)}"
     try:
-        return float(s)
+        v = float(s)
     except ValueError:
         return None
+    return v if math.isfinite(v) else None
 
 
 # Tokens that look like the paper's own measured quantities: decimals, percentages, and

@@ -109,6 +109,17 @@ def test_build_manifest_no_metric_not_verifiable():
     assert m["metric"]["name"] is None and m["verifiable"] is False
 
 
+def test_build_manifest_nonfinite_metric_not_verifiable_and_serializes():
+    # A NaN headline metric: value must be None (not float('nan')) so verifiable is honest AND
+    # json.dumps emits valid JSON ('null'), not a bare NaN token a strict reader would reject.
+    rr = _rq("rq1", "q", "print('METRIC loss=nan')", "loss=nan")
+    m = build_manifest(rr)
+    assert m["metric"]["value"] is None and m["verifiable"] is False
+    assert m["metric"]["raw"] == "loss=nan"  # raw kept for transparency
+    text = json.dumps(m, indent=2)
+    assert "NaN" not in text and json.loads(text)["metric"]["value"] is None
+
+
 def test_build_manifest_pins_real_project_experiment():
     """The on-disk …103845 rq1 script + its recorded metric → a manifest whose sha256 is the
     hash of the actual file and whose deterministic flag honestly reports the script's lack of
