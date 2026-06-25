@@ -12,12 +12,18 @@ the best-so-far result is returned with an honest `feasible`/`approved` flag.
 
 from __future__ import annotations
 
+import math
 import re
 from collections.abc import Callable
 from pathlib import Path
 
 from research_council.debate.caps import StageBCaps, stage_b_caps, total_spend
-from research_council.store.models import CodeReview, ExperimentResult, RQResult
+from research_council.store.models import (
+    NO_CODE_PLACEHOLDER,
+    CodeReview,
+    ExperimentResult,
+    RQResult,
+)
 
 _METRIC = re.compile(r"METRIC\s+([^\s=]+)\s*=\s*(\S+)")
 Emit = Callable[[str, str, dict], None] | None
@@ -28,12 +34,46 @@ def _metric_of(stdout: str) -> str | None:
     return f"{m.group(1)}={m.group(2)}" if m else None
 
 
+def _is_nonfinite_metric(metric: str | None) -> bool:
+    """True iff the headline metric's value is a number that is NaN or ±inf.
+
+    A non-finite headline metric means the experiment *ran* and printed a METRIC line but the
+    computation was numerically degenerate — division by zero, overflow, or aggregating over an
+    empty/all-NaN array. Such a run satisfies the bare `ran + emitted a METRIC` test yet carries
+    no usable evidence: it would plot a broken NaN bar in the paper, can never reproduce (its
+    re-run diff is never within tolerance), and serializes to invalid JSON (`NaN`) in repro.json.
+    So it must NOT count as feasible. A non-numeric (categorical) value is *not* non-finite and
+    stays feasible — this rule only rejects the numerically-broken case, not string metrics."""
+    if not metric or "=" not in metric:
+        return False
+    _, _, raw = metric.partition("=")
+    try:
+        return not math.isfinite(float(raw.strip()))
+    except ValueError:
+        return False  # non-numeric (categorical) metric — not our concern here
+
+
+def _metrics_of(stdout: str) -> list[str]:
+    """Every `METRIC name=value` line the run printed, in first-seen order, deduped.
+
+    Stage B's headline metric is the first line (drives feasibility/repro/approval), but an
+    experiment may also print secondary metrics (baselines, per-cell/group values, ablations).
+    Capturing them all gives a paper's non-headline numbers a verifiable source in metrics.csv
+    instead of being silently dropped by the single-`.search()` headline read."""
+    seen: list[str] = []
+    for m in _METRIC.finditer(stdout or ""):
+        pair = f"{m.group(1)}={m.group(2)}"
+        if pair not in seen:
+            seen.append(pair)
+    return seen
+
+
 def write_experiment(result: ExperimentResult, out_dir: Path | str) -> Path:
     """Materialize the Stage-B artifacts under <out_dir>/experiment/ — the code the council
     actually ran, the result summary, the run log, and the code reviews. Returns the dir."""
     d = Path(out_dir) / "experiment"
     d.mkdir(parents=True, exist_ok=True)
-    (d / "experiment.py").write_text(result.code or "# no code produced\n", encoding="utf-8")
+    (d / "experiment.py").write_text(result.code or NO_CODE_PLACEHOLDER, encoding="utf-8")
     (d / "log.txt").write_text(result.log or "", encoding="utf-8")
 
     res_md = [
@@ -140,7 +180,9 @@ async def run_experimentation(
         res = sandbox.run(code, timeout=caps.timeout, requirements=draft.requirements)
         last_ran = res.ok
         metric = _metric_of(res.stdout)
-        feasible = bool(res.ok and metric)
+        metrics = _metrics_of(res.stdout)
+        nonfinite = _is_nonfinite_metric(metric)
+        feasible = bool(res.ok and metric and not nonfinite)
         if emit:
             emit(
                 "experiment",
@@ -180,6 +222,7 @@ async def run_experimentation(
             ran=last_ran,
             feasible=feasible,
             metric=metric,
+            metrics=metrics,
             attempts=attempt,
             iterations=attempt,
             code=code,
@@ -212,6 +255,16 @@ async def run_experimentation(
             return best
 
         err, notes = _feedback(res.stderr or "", reviews)
+        if nonfinite:
+            # The run exited 0 but its metric is NaN/inf → tell the coder why it isn't feasible,
+            # since the reason is in the value, not stderr, and a blind retry would repeat it.
+            err = (
+                f"The experiment emitted a non-finite headline metric ({metric}). A NaN/inf "
+                "result is numerically degenerate (division by zero, overflow, log of a "
+                "non-positive number, or aggregating over empty/all-NaN data) and is not a "
+                "valid result. Fix the computation so the headline METRIC is a finite number.\n"
+                + err
+            )
 
     assert best is not None
     best.stopped_reason = "iters_exhausted"
@@ -299,7 +352,7 @@ def write_experiments(rq_results: list[RQResult], out_dir: Path | str) -> Path:
         sub = exp / rr.rq_id
         sub.mkdir(parents=True, exist_ok=True)
         r = rr.result
-        (sub / "experiment.py").write_text(r.code or "# no code produced\n", encoding="utf-8")
+        (sub / "experiment.py").write_text(r.code or NO_CODE_PLACEHOLDER, encoding="utf-8")
         (sub / "log.txt").write_text(r.log or "", encoding="utf-8")
         (sub / "reviews.md").write_text(_reviews_md(r), encoding="utf-8")
         (sub / "question.md").write_text(
@@ -347,6 +400,28 @@ def write_experiments(rq_results: list[RQResult], out_dir: Path | str) -> Path:
         )
         w.writeheader()
         w.writerows(rows)
+
+    # plan/25 (iter-14): the FULL metric record. results.csv keeps one headline row per RQ (the
+    # contract approval.py/repro.py rely on); metrics.csv records EVERY `METRIC name=value` the
+    # run printed (headline + secondaries) so a paper's non-headline numbers — baselines,
+    # per-cell/group values, ablations — have a verifiable source instead of being dropped.
+    # claims.load_evidence merges this with results.csv when checking the prose.
+    metric_rows = []
+    for rr in rq_results:
+        for pair in rr.result.metrics or ([rr.result.metric] if rr.result.metric else []):
+            mname, mval = _metric_parts(pair)
+            metric_rows.append({"rq_id": rr.rq_id, "metric": mname, "value": mval})
+    with (exp / "metrics.csv").open("w", newline="", encoding="utf-8") as f:
+        w = csv.DictWriter(f, fieldnames=["rq_id", "metric", "value"])
+        w.writeheader()
+        w.writerows(metric_rows)
+
+    # plan/25 Gap 3: per-RQ reproduction manifest (repro.json) + a top-level reproduce.sh that
+    # re-runs each experiment and diffs its metric against the recorded value, so the data half
+    # of the artifact chain is re-runnable rather than take-it-on-faith. Offline — no sandbox.
+    from research_council.verify.repro import write_repro
+
+    write_repro(rq_results, out_dir)
     return exp
 
 

@@ -28,3 +28,7 @@ skills-lock.json
 
 # Per-project lifecycle state + traces
 projects/
+
+# Committed verifiability test fixtures (sanitized stand-ins for the live projects/*).
+# Re-include the fake paper.pdf the pdf-check fixture needs, which *.pdf above would ignore.
+!tests/fixtures/verify/**/*.pdf

@@ -20,8 +20,13 @@ Hard rules:
       method DISTINGUISHES them, so a positive result is informative.
   Match the printed METRIC to what the step actually tests; don't overclaim.
 - Be robust: the script must exit 0.
-- The LAST thing the script prints must be exactly one line: `METRIC <name>=<value>`
-  (e.g. `METRIC f1=0.62`) — this is how feasibility is verified.
+- The LAST thing the script prints must be a block of one or more `METRIC <name>=<value>` lines,
+  each on its own line. The FIRST one is the HEADLINE metric and is how feasibility is verified
+  (e.g. `METRIC f1=0.62`). Then ALSO print a `METRIC` line for EVERY other number you will want
+  the paper to be able to report — secondary metrics, baseline values, per-group/per-cell means,
+  ablation points (e.g. `METRIC precision=0.71`, `METRIC f1_baseline=0.48`, `METRIC f1_group_a=0.59`).
+  Use distinct, descriptive names. Any number the paper states that lacks a matching `METRIC`
+  here is flagged unbacked, so emit the data behind every claim you intend to make.
 
 Figures (for the paper):
 - Save any plots/charts as image files into a `figures/` directory (e.g.

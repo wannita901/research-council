@@ -831,10 +831,80 @@ def project_status(pid: str = typer.Argument(..., help="project id")):
         s = p.stages[n]
         t.add_row("①②③"[i], n, _STAGE_ICON.get(s.status, s.status), s.summary[:64])
     ui.console.print(t)
+    # Surface the headline artifact: a paper.tex with no paper.pdf is a LaTeX build
+    # failure, not "no paper" — make it visible instead of a silent skip (plan/25 Gap 5).
+    paper_dir = store.root / pid / "paper"
+    pdf, tex = paper_dir / "paper.pdf", paper_dir / "paper.tex"
+    if pdf.exists():
+        kb = pdf.stat().st_size / 1024
+        ui.console.print(f"[green]paper: ✓ {pdf} ({kb:.0f} KB)[/green]")
+    elif tex.exists():
+        build_log = paper_dir / "build.log"
+        log_text = (
+            build_log.read_text(encoding="utf-8", errors="replace") if build_log.exists() else ""
+        )
+        from research_council.verify.latex import NO_ENGINE_MARKER
+
+        if NO_ENGINE_MARKER in log_text:
+            ui.console.print(
+                f"[yellow]paper: ◐ paper.tex written; no TeX engine on PATH to compile it "
+                f"(see {build_log})[/yellow]"
+            )
+        else:
+            ui.console.print(
+                f"[yellow]paper: ✗ no PDF — LaTeX build failed (see {build_log})[/yellow]"
+            )
     if is_complete(p):
         ui.console.print("[green]✓ project complete[/green]")
     elif p.stages[p.current].status == "awaiting_approval":
         ui.console.print(f"next: [cyan]council project approve {pid}[/cyan]")
+
+
+_VERIFY_ICON = {
+    "pass": "[green]✓ pass[/green]",
+    "warn": "[yellow]◐ warn[/yellow]",
+    "fail": "[red]✗ fail[/red]",
+    "skip": "[dim]– skip[/dim]",
+}
+_VERDICT_STYLE = {
+    "verified": "[green]✓ VERIFIED[/green]",
+    "verified-with-warnings": "[yellow]◐ VERIFIED (with warnings)[/yellow]",
+    "unverified": "[red]✗ UNVERIFIED[/red]",
+}
+
+
+@project_app.command("verify")
+def project_verify(pid: str = typer.Argument(..., help="project id")):
+    """Audit a finished project's artifacts and print a verifiability scorecard.
+
+    Re-runs every verify check (claims↔results.csv, council approval, reproduce.sh,
+    references.bib, paper.pdf) against the on-disk artifacts and writes
+    paper/verification.json. Exits non-zero when the verdict is UNVERIFIED, so it
+    doubles as a CI gate (plan/25 Gap 6)."""
+    from rich import box
+    from rich.table import Table
+
+    from research_council.lifecycle import ProjectStore
+    from research_council.verify.report import write_report
+
+    store = ProjectStore()
+    if not store.exists(pid):
+        ui.info(f"no project {pid!r}")
+        raise typer.Exit(1)
+    out_dir = store.root / pid
+    report = write_report(out_dir, project=pid)
+    ui.banner(f"Verify · {pid}", "verifiability scorecard")
+    t = Table(box=box.SIMPLE_HEAVY)
+    t.add_column("check", style="cyan")
+    t.add_column("status")
+    t.add_column("detail")
+    for c in report.checks:
+        t.add_row(c.name, _VERIFY_ICON.get(c.status, c.status), c.summary)
+    ui.console.print(t)
+    ui.console.print(f"verdict: {_VERDICT_STYLE.get(report.verdict, report.verdict)}")
+    ui.console.print(f"[dim]→ {out_dir / 'paper' / 'verification.json'}[/dim]")
+    if report.n_fail:
+        raise typer.Exit(1)
 
 
 @project_app.command("list")
@@ -1064,6 +1134,10 @@ def _run_stage_c(handoff, out_dir, onboarding, profile: str = "balanced"):
             )
         elif k == "revise":
             extra = f"round {pl['round']} · sections {pl['sections']}"
+        elif k == "references":
+            extra = (
+                f"{pl.get('resolved', 0)}/{pl.get('total', 0)} citation(s) resolved to a DOI/record"
+            )
         elif k == "latex":
             extra = f"{pl['status']}" + (" · pdf" if pl.get("pdf") else "")
         else:
@@ -1074,6 +1148,16 @@ def _run_stage_c(handoff, out_dir, onboarding, profile: str = "balanced"):
         f"  [dim]Stage C · council writing for {vname} "
         f"({profile}: ≤{caps.max_revisions} revisions, accept ≥{caps.accept}, ${caps.usd_budget})…[/dim]"
     )
+
+    # plan/25 Gap 2: resolve the paper's citations to real DOIs/arXiv ids → references.bib.
+    # Use the real bibliographic adapters the user selected (openalex/arxiv/semanticscholar);
+    # these are network calls, so this only happens on the live Stage-C path.
+    from research_council.retrieval.registry import _REAL
+
+    _BIB_SOURCES = ("openalex", "arxiv", "semanticscholar")
+    bib_providers = [_REAL[t]() for t in cfg.tools if t in _BIB_SOURCES]
+    if not bib_providers:  # ensure at least one DOI source even if the user picked only wiki
+        bib_providers = [_REAL["openalex"]()]
 
     async def _go():
         cites = await grounded_citations(handoff.idea)
@@ -1088,6 +1172,7 @@ def _run_stage_c(handoff, out_dir, onboarding, profile: str = "balanced"):
             prior_draft=prior_draft,
             build_error=build_error,
             latex_fixer=latex_fixer,
+            bib_providers=bib_providers,
             emit=_emit,
         )
 
@@ -1099,12 +1184,52 @@ def _run_stage_c(handoff, out_dir, onboarding, profile: str = "balanced"):
         f"latex: {res.latex} · ${cost:.4f}"
     )
     ui.console.print(f"  → {res.paper_path}" + (f"  ·  {res.pdf_path}" if res.pdf_path else ""))
+    # plan/25 Gap 4: surface the council's own approval tally so a paper written on unapproved
+    # experiments is visible (not silently shipped as a result).
+    if res.total_rqs:
+        approval_note = f"  council approved {res.approved_rqs}/{res.total_rqs} RQ(s)"
+        if res.approved_rqs == 0:
+            approval_note += " — [yellow]paper rests on unapproved experiments[/yellow]"
+        ui.console.print(f"  [dim]{approval_note}[/dim]")
+    # plan/25 Gap 2: surface how many citations resolved to a verifiable DOI/record.
+    if res.refs_total:
+        refs_note = f"  references: {res.refs_resolved}/{res.refs_total} resolved to a DOI/record → references.bib"
+        if res.refs_resolved < res.refs_total:
+            refs_note += " — [yellow]some citations unverified[/yellow]"
+        ui.console.print(f"  [dim]{refs_note}[/dim]")
+    # plan/25 Gap 6: auto-audit the finished paper. The per-stage gates above only guard the
+    # run as it happens; nothing re-read the *output* back into one verdict at completion. Run
+    # the project-level scorecard now so every finished run ships a verification.json and the
+    # operator sees VERIFIED/UNVERIFIED without remembering a separate `project verify`.
+    report = _emit_verifiability_scorecard(out_dir)
     summary = (
         f"'{res.title}' · {vname} · {'accepted' if res.accepted else res.stopped_reason} · "
-        f"mean {res.review.mean:.2f} · latex {res.latex}"
+        f"mean {res.review.mean:.2f} · latex {res.latex} · approved {res.approved_rqs}/{res.total_rqs} · "
+        f"verifiability {report.verdict}"
     )
-    artifacts = {"idea": handoff.idea, **res.model_dump()}
+    artifacts = {"idea": handoff.idea, "verifiability": report.to_dict(), **res.model_dump()}
     return summary, artifacts
+
+
+def _emit_verifiability_scorecard(out_dir):
+    """Auto-run the project verifiability scorecard at Stage-C completion (plan/25 Gap 6):
+    persist paper/verification.json and print the one-line VERIFIED/UNVERIFIED verdict. Returns
+    the VerifiabilityReport so the caller can fold the verdict into its summary/artifacts."""
+    from research_council.verify.report import write_report
+
+    report = write_report(out_dir, project=Path(out_dir).name)
+    verdict = report.verdict
+    vcolor = {"verified": "green", "verified-with-warnings": "yellow"}.get(verdict, "red")
+    vmark = "✓" if report.n_fail == 0 else "✗"
+    n_pass = len(report.checks) - report.n_fail - report.n_warn
+    fails = [c.name for c in report.checks if c.status == "fail"]
+    fail_note = f" — failed: {', '.join(fails)}" if fails else ""
+    ui.console.print(
+        f"  [{vcolor}]{vmark} verifiability: {verdict.upper()}[/{vcolor}]"
+        f" ({n_pass} pass, {report.n_warn} warn, {report.n_fail} fail){fail_note}"
+    )
+    ui.console.print(f"  [dim]→ {Path(out_dir) / 'paper' / 'verification.json'}[/dim]")
+    return report
 
 
 def _build_v2_peers(cfg, live: bool):

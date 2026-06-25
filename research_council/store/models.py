@@ -4,6 +4,11 @@ from __future__ import annotations
 
 from pydantic import BaseModel, Field
 
+# Placeholder written as experiment.py when an RQ produced no code. The reproduction manifest
+# must hash these exact bytes (not ""), or check_code_integrity flags a spurious sha256 mismatch
+# against the on-disk file in precisely the no-code case this placeholder anticipates.
+NO_CODE_PLACEHOLDER = "# no code produced\n"
+
 
 # --- knowledge / retrieval -------------------------------------------------
 class Paper(BaseModel):
@@ -339,7 +344,11 @@ class CodeReview(BaseModel):
 class ExperimentResult(BaseModel):
     ran: bool = False  # the script executed without error (exit 0, no timeout)
     feasible: bool = False  # ran AND emitted a METRIC line — the "run-it" verification
-    metric: str | None = None
+    metric: str | None = None  # HEADLINE metric (first METRIC line) — drives feasibility/repro
+    # ALL `METRIC name=value` lines the run printed, first-seen order (metric == metrics[0]).
+    # Secondary metrics (baselines, per-cell/group values, ablations) are recorded so a paper's
+    # non-headline numbers have a verifiable source in metrics.csv, not just the single point.
+    metrics: list[str] = Field(default_factory=list)
     attempts: int = 0
     code: str = ""
     log: str = ""
@@ -442,6 +451,12 @@ class WritingResult(BaseModel):
     usd: float = 0.0
     stopped_reason: str = ""  # accepted | revisions_exhausted | budget_exhausted
     latex: str = ""  # built | fallback_no_tex | build_failed | skipped
+    claims_total: int = 0  # numeric claims audited against results.csv (plan/25 Gap 1)
+    claims_unbacked: int = 0  # of those, how many had no matching evidence value
+    approved_rqs: int = 0  # RQs the council approved, read back from results.csv (plan/25 Gap 4)
+    total_rqs: int = 0  # RQs that ran (approved_rqs of total_rqs gated the B→C handoff)
+    refs_total: int = 0  # citations the paper uses, emitted to references.bib (plan/25 Gap 2)
+    refs_resolved: int = 0  # of those, how many resolved to a real DOI/arXiv record
 
 
 # --- run config & trace envelope ------------------------------------------

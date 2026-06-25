@@ -297,6 +297,167 @@ def test_write_experiment_materializes_artifacts(tmp_path):
     assert (d / "log.txt").exists()
 
 
+def test_is_nonfinite_metric():
+    from research_council.debate.experimentation import _is_nonfinite_metric
+
+    assert _is_nonfinite_metric("loss=nan") is True
+    assert _is_nonfinite_metric("loss=inf") is True
+    assert _is_nonfinite_metric("loss=-inf") is True
+    assert _is_nonfinite_metric("acc=0.9") is False  # finite number
+    assert _is_nonfinite_metric("label=converged") is False  # categorical, not our concern
+    assert _is_nonfinite_metric(None) is False
+    assert _is_nonfinite_metric("") is False
+
+
+class _StubSandbox:
+    """Returns a fixed stdout/exit — lets the council loop be driven without a python binary."""
+
+    name = "stub"
+
+    def __init__(self, stdout, *, ok=True):
+        self._stdout, self._ok = stdout, ok
+
+    def run(self, code, *, timeout=30, requirements=None):
+        from research_council.verify.sandbox import SandboxResult
+
+        return SandboxResult(self._ok, 0 if self._ok else 1, self._stdout, "", 0.0, False, "stub")
+
+
+async def test_nonfinite_metric_is_not_feasible():
+    # exit 0 + a METRIC line, but the value is NaN → numerically degenerate, NOT feasible.
+    res = await run_experimentation(
+        {"title": "X"},
+        "p",
+        _FakeCoder(["print('METRIC loss=nan')"]),
+        _approvers(2),
+        _StubSandbox("METRIC loss=nan\n"),
+        caps=_ONE,
+    )
+    assert res.ran and not res.feasible and not res.approved
+    assert res.metric == "loss=nan"  # metric kept for transparency, just not counted feasible
+
+
+async def test_finite_metric_still_feasible_via_stub():
+    res = await run_experimentation(
+        {"title": "X"},
+        "p",
+        _FakeCoder(["print('METRIC acc=0.9')"]),
+        _approvers(2),
+        _StubSandbox("METRIC acc=0.9\n"),
+        caps=_ONE,
+    )
+    assert res.feasible and res.approved
+
+
+def test_metrics_of_captures_all_lines_deduped_first_seen():
+    from research_council.debate.experimentation import _metric_of, _metrics_of
+
+    out = (
+        "noise\nMETRIC f1=0.85\nMETRIC precision=0.71\n"
+        "METRIC f1=0.85\nMETRIC f1_baseline=0.48\n"  # duplicate headline collapses
+    )
+    assert _metric_of(out) == "f1=0.85"  # headline = first, unchanged
+    assert _metrics_of(out) == ["f1=0.85", "precision=0.71", "f1_baseline=0.48"]
+    assert _metrics_of("no metric here") == []
+
+
+_MULTI_STDOUT = "METRIC f1=0.85\nMETRIC precision=0.71\nMETRIC f1_baseline=0.48\n"
+
+
+class _MultiMetricCoder:
+    """Emits a headline metric plus two secondaries — a realistic multi-number experiment."""
+
+    def __init__(self):
+        self.usage = UsageMeter()
+
+    async def draft(self, idea, plan, *, error="", prior_code="", feedback=""):
+        return ExperimentDraft(code="print('multi')")
+
+
+class _StdoutSandbox:
+    """Offline fake sandbox returning fixed stdout (the real LocalSandbox needs a `python`
+    binary, absent in this env). Lets the metric-capture wiring be verified deterministically."""
+
+    def __init__(self, stdout):
+        self._stdout = stdout
+
+    def run(self, code, *, timeout=0, requirements=()):
+        from research_council.verify.sandbox import SandboxResult
+
+        return SandboxResult(
+            ok=True,
+            exit_code=0,
+            stdout=self._stdout,
+            stderr="",
+            duration_s=0.0,
+            timed_out=False,
+            backend="fake",
+        )
+
+
+async def test_run_experimentation_records_all_metrics():
+    res = await run_experimentation(
+        {"title": "X"},
+        "p",
+        _MultiMetricCoder(),
+        _approvers(2),
+        _StdoutSandbox(_MULTI_STDOUT),
+        caps=_BALANCED,
+    )
+    assert res.metric == "f1=0.85"  # headline unchanged → repro/approval contracts hold
+    assert res.metrics == ["f1=0.85", "precision=0.71", "f1_baseline=0.48"]
+
+
+async def test_write_experiments_emits_metrics_csv(tmp_path):
+    from research_council.debate.experimentation import run_experiments, write_experiments
+    from research_council.store.models import ResearchQuestion
+
+    rqs = [ResearchQuestion(id="rq1", question="q1", plan="p1", metrics="f1")]
+    res = await run_experiments(
+        {"title": "X"},
+        rqs,
+        _MultiMetricCoder(),
+        _approvers(2),
+        _StdoutSandbox(_MULTI_STDOUT),
+        caps=_BALANCED,
+    )
+    exp = write_experiments(res, tmp_path)
+    # results.csv stays one HEADLINE row per RQ (approval/repro contract) ...
+    results_csv = (exp / "results.csv").read_text()
+    assert results_csv.count("\nrq1,") == 1 and "f1" in results_csv
+    # ... while metrics.csv carries every captured METRIC.
+    metrics_csv = (exp / "metrics.csv").read_text()
+    assert metrics_csv.splitlines()[0] == "rq_id,metric,value"
+    assert "rq1,f1,0.85" in metrics_csv
+    assert "rq1,precision,0.71" in metrics_csv
+    assert "rq1,f1_baseline,0.48" in metrics_csv
+
+
+def test_load_evidence_merges_metrics_csv_and_backs_secondary_claim(tmp_path):
+    """A paper number that matches a SECONDARY metric (only in metrics.csv) is now backed."""
+    from research_council.verify import claims
+
+    exp = tmp_path / "experiment"
+    exp.mkdir(parents=True)
+    # results.csv: one headline row per RQ (the existing contract)
+    (exp / "results.csv").write_text(
+        "rq_id,question,metric,value,feasible,approved\nrq1,q,f1,0.85,True,True\n"
+    )
+    # metrics.csv: headline + secondaries; headline duplicate must collapse
+    (exp / "metrics.csv").write_text(
+        "rq_id,metric,value\nrq1,f1,0.85\nrq1,precision,0.71\nrq1,f1_baseline,0.48\n"
+    )
+    ev = claims.load_evidence(tmp_path)
+    values = sorted(e.value for e in ev)
+    assert values == [0.48, 0.71, 0.85]  # f1=0.85 deduped, secondaries present
+
+    report = claims.check_paper(
+        "## Results\nThe model reached F1 0.85, with precision 0.71 over a 0.48 baseline.",
+        ev,
+    )
+    assert report.n_unbacked == 0  # 0.71 and 0.48 now have a recorded source
+
+
 async def test_coder_offline_via_testmodel():
     import pytest
 

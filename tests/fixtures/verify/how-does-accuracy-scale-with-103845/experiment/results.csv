@@ -1,0 +1,4 @@
+rq_id,question,metric,value,feasible,approved,approvals,iterations,stopped_reason,backend
+rq1,"How does accuracy scale with N, and does T interact?",signed_NxT_interaction,0.000137,True,False,0,3,iters_exhausted,docker
+rq1,"How does accuracy scale with N, and does T interact?",interaction_effect_size,0.39,True,False,0,3,iters_exhausted,docker
+rq1,"How does accuracy scale with N, and does T interact?",interaction_F,5.0812,True,False,0,3,iters_exhausted,docker

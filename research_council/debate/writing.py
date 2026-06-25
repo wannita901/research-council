@@ -178,18 +178,37 @@ def _write_paper(
 
 def _collect_experiment_figures(out_dir: Path) -> list[str]:
     """Copy the real figures Stage B saved (experiment/<rq>/figures/*) into paper/assets/,
-    prefixed by RQ to avoid collisions. Returns their paths relative to the paper dir."""
+    prefixed by RQ to avoid collisions. Returns their paths relative to the paper dir.
+
+    Figures from a NON-feasible RQ are skipped: a non-feasible run errored or never emitted a
+    valid METRIC, so any plot it left on disk is from a broken experiment and must not enter the
+    paper as evidence (the prose honesty-gate frames unapproved *text*, but a chart is a stronger
+    visual claim). Filtering is conservative — a figure is dropped only when results.csv positively
+    marks its RQ feasible=False; with no results.csv (no signal) or an unlisted RQ, the figure is
+    kept so pre-producer projects are unaffected.
+
+    A figure that is not a structurally-valid, non-empty image (0-byte/truncated/garbage left by a
+    half-failed savefig, or a non-image file) is also skipped: a broken image is not correct
+    evidence and would break the LaTeX \\includegraphics it ends up in."""
+    from research_council.verify.approval import feasibility_by_rq
+    from research_council.verify.figure import is_valid_figure
+
     exp = Path(out_dir) / "experiment"
     assets = Path(out_dir) / "paper" / "assets"
     rels: list[str] = []
     if not exp.is_dir():
         return rels
+    feasible = feasibility_by_rq(out_dir)
     for sub in sorted(p for p in exp.iterdir() if p.is_dir()):
+        if feasible.get(sub.name) is False:
+            continue  # broken/non-feasible experiment → its figure is not valid evidence
         figdir = sub / "figures"
         if not figdir.is_dir():
             continue
         for p in sorted(figdir.glob("*")):
             if p.is_file() and p.suffix.lower() in (".png", ".pdf", ".svg"):
+                if not is_valid_figure(p):
+                    continue  # empty/corrupt/non-image plot → not valid evidence
                 assets.mkdir(parents=True, exist_ok=True)
                 dest = f"{sub.name}_{p.name}"
                 (assets / dest).write_bytes(p.read_bytes())
@@ -251,6 +270,7 @@ async def run_writing(
     build_error: str = "",
     latex_fixer=None,
     latex: bool = True,
+    bib_providers=None,
     emit: Emit = None,
 ) -> WritingResult:
     caps = caps or stage_c_caps(profile)
@@ -259,6 +279,21 @@ async def run_writing(
     rubric = venue_cfg.get("rubric", {})
     experiment = handoff.artifacts or {}
     out_dir = Path(out_dir)
+
+    # plan/25 Gap 4: read back the council's own approval signal (results.csv `approved` column).
+    # If not every RQ was approved, inject an honesty constraint so the draft frames unapproved
+    # work as a feasibility/negative result instead of overclaiming. This must happen BEFORE the
+    # draft so the very first version is framed honestly.
+    from research_council.verify.approval import (
+        approval_status,
+        approval_to_change_request,
+        honesty_constraint,
+    )
+
+    approval = approval_status(out_dir)
+    _honesty = honesty_constraint(approval)
+    if _honesty:
+        handoff.constraints = {**(handoff.constraints or {}), "approval_honesty": _honesty}
 
     # Prefer the REAL figures the experiment saved (Stage B); copy them into paper/assets/.
     # Fall back to a single host-synthesized chart only if the experiment produced none.
@@ -300,6 +335,13 @@ async def run_writing(
                 },
             )
 
+    # plan/25 Gap 1: the evidence the paper's numbers must match (experiment/results.csv).
+    # Loaded once; each review round folds any UNBACKED numeric claim into the change-requests
+    # so the writer must cite/back/remove it — turning the post-hoc flag into a feedback loop.
+    from research_council.verify.claims import check_draft, claims_to_change_requests, load_evidence
+
+    evidence = load_evidence(out_dir)
+
     score_history: list[float] = []
     best = None  # (mean, draft, merged_review)
     accepted = False
@@ -309,6 +351,31 @@ async def run_writing(
     for rnd in range(1, caps.max_revisions + 1):
         reviews = [await rv.review(draft, rubric) for rv in reviewers]
         merged, mean, blocking = _merge_reviews(reviews, caps.block_severities)
+
+        # Fold unbacked numeric claims into THIS round's change-requests. They drive the
+        # writer's revision (sections_to_revise) and, when caps.claims_unbacked_block is on,
+        # block acceptance until resolved or the revision cap binds.
+        claim_report = check_draft(draft, evidence)
+        claim_crs = claims_to_change_requests(claim_report)
+        if claim_crs:
+            merged.change_requests.extend(claim_crs)
+            # Only BLOCK on unbacked claims when there is actually evidence to back them
+            # against. With no results.csv every numeric claim reads as unbacked, so blocking
+            # here would make any paper with a number unacceptable forever — the same
+            # "no results → no signal, don't gate" stance approval_to_change_request takes.
+            # The change-requests still surface as feedback either way.
+            if caps.claims_unbacked_block and evidence:
+                blocking = True
+
+        # plan/25 Gap 4: when the council approved ZERO RQs and unapproved_block is on, the paper
+        # cannot ship as accepted — fold in a high-severity demand and force blocking so it falls
+        # back to best-so-far with the honest framing rather than an "accepted" overclaim.
+        if caps.unapproved_block:
+            approval_cr = approval_to_change_request(approval)
+            if approval_cr is not None:
+                merged.change_requests.append(approval_cr)
+                blocking = True
+
         score_history.append(mean)
         if emit:
             for rv in reviews:  # per-reviewer detail: who scored what + what they demand
@@ -337,6 +404,16 @@ async def run_writing(
                     "change_requests": len(merged.change_requests),
                 },
             )
+            if claim_crs:
+                emit(
+                    "writing",
+                    "claims_round",
+                    {
+                        "round": rnd,
+                        "unbacked": len(claim_crs),
+                        "blocking": caps.claims_unbacked_block,
+                    },
+                )
         if best is None or mean > best[0]:
             best = (mean, draft.model_copy(deep=True), merged)
 
@@ -383,16 +460,60 @@ async def run_writing(
         citations=draft.citations,
         usd=total_spend(writer, *reviewers),
         stopped_reason=reason,
+        approved_rqs=approval.approved,
+        total_rqs=approval.total,
     )
+    if approval.has_results and emit:
+        emit(
+            "writing",
+            "approval",
+            {
+                "approved": approval.approved,
+                "total": approval.total,
+                "blocking": caps.unapproved_block and not approval.any_approved,
+            },
+        )
     paper_md = _write_paper(out_dir, draft, merged, venue_name, result)
     result.paper_path = str(paper_md)
+
+    # Claims-to-evidence check (plan/25 Gap 1): diff the prose's numeric claims against
+    # experiment/results.csv and emit paper/claims.json. Surfaces fabricated figures that the
+    # writer was *told* not to invent but nothing previously checked.
+    from research_council.verify.claims import write_claims_report
+
+    claims = write_claims_report(out_dir)
+    if claims is not None:
+        result.claims_total = claims.n_claims
+        result.claims_unbacked = claims.n_unbacked
+        if emit:
+            emit(
+                "writing",
+                "claims",
+                {"total": claims.n_claims, "unbacked": claims.n_unbacked},
+            )
+
+    # Citation-to-record resolution (plan/25 Gap 2): resolve each citation against the real
+    # bibliographic providers and emit paper/references.bib + references.json. Always emits the
+    # .bib (UNVERIFIED-tagged when offline / unresolved) so the artifact is a reliable signal.
+    from research_council.verify.bib import write_bib
+
+    bib = await write_bib(out_dir, draft, bib_providers)
+    result.refs_total = bib.n_total
+    result.refs_resolved = bib.n_resolved
+    if emit:
+        emit("writing", "references", {"total": bib.n_total, "resolved": bib.n_resolved})
 
     if latex:
         from research_council.verify.latex import build_paper_latex, compile_existing
 
         paper_dir = out_dir / "paper"
         lx = build_paper_latex(
-            draft, paper_dir, venue_cfg, attempts=caps.latex_fix_attempts, emit=emit
+            draft,
+            paper_dir,
+            venue_cfg,
+            attempts=caps.latex_fix_attempts,
+            emit=emit,
+            resolutions=bib.resolutions,
         )
         # build-verify-FIX: if the mechanical pass can't compile it, hand the .tex + error log to
         # the council's LaTeX fixer and recompile (bounded) — the fail log IS the feedback.

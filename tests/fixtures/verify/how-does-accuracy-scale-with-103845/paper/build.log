@@ -1,0 +1,5 @@
+This is a recorded LaTeX build failure (not a missing-engine fallback).
+! Undefined control sequence.
+l.6 \badcommand
+
+LaTeX failed; no paper.pdf was produced. See the log above.
