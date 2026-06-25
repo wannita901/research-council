@@ -289,9 +289,9 @@ def ideate(
     ),
     live: bool = typer.Option(False, help="use real providers (needs keys + SDKs)"),
     harvest: bool = typer.Option(
-        False,
-        "--harvest",
-        help="ingest each round into the LLM-wiki so later rounds read it (live; spends librarian tokens)",
+        True,
+        "--harvest/--no-harvest",
+        help="ingest each ideation round into the LLM-wiki (knowledge/wiki/) so later rounds read it (live only; on by default, --no-harvest to disable)",
     ),
     stream: bool = typer.Option(True, help="print each phase event live"),
     interactive: bool = typer.Option(True, help="onboarding questions + review gate (TTY only)"),
@@ -382,26 +382,18 @@ def ideate(
     # per-round wiki harvest (opt-in, live): each round's findings + cited papers are ingested
     # so the NEXT round's research can read them.
     on_round_end, librarian = None, None
-    if harvest and live:
+    if live and harvest:
         from research_council.librarian.ingest import Ingestor
 
         librarian, _ = _build_librarian()
         on_round_end = _round_harvester(trace, retrieval, topic, librarian, Ingestor(librarian))
         ui.console.print(
-            "[dim]--harvest on: each ideation round is ingested into the LLM-wiki "
-            "(knowledge/wiki/) so later rounds can read it.[/dim]"
+            "[dim]LLM-wiki harvest on — each ideation round is ingested into knowledge/wiki/ "
+            "for later rounds (--no-harvest to disable; pages are gitignored).[/dim]"
         )
-    elif harvest and not live:
-        ui.console.print(
-            "[yellow]--harvest needs --live (the librarian uses real models); skipping harvest.[/yellow]"
-        )
-    elif live:
-        # Make the default visible — the wiki only updates with --harvest, so its absence
-        # isn't a silent bug (issue: "I don't see the library update at the end of iterations").
-        ui.console.print(
-            "[dim]LLM-wiki harvest is off (default) — pass --harvest to ingest each round "
-            "into knowledge/wiki/ for later rounds.[/dim]"
-        )
+    elif live and not harvest:
+        ui.console.print("[dim]LLM-wiki harvest off (--no-harvest).[/dim]")
+    # offline runs use stubs — harvest needs real models, so it's silently skipped there.
 
     try:
         rec, candidates = asyncio.run(
