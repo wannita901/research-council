@@ -76,6 +76,8 @@ council run --live --profile balanced          # the real thing
 
 > Experiments can declare their own pip dependencies — these are installed in a network-enabled prep step, then the code runs with **no network** (real libraries, isolated execution). Optional: `mise run build-image` pre-bakes the common scientific stack (numpy / pandas / scipy / scikit-learn / matplotlib) so those are instant. The experiment also saves real plots, which the paper embeds.
 
+> On live runs, each ideation round is harvested into the LLM-wiki (`knowledge/wiki/`, gitignored) so later rounds can read it. This is on by default and spends a little librarian (Sonnet) budget — pass `--no-harvest` to skip it.
+
 ## Commands & flags
 
 **One conversation** (recommended) — the conductor drives the whole lifecycle:
