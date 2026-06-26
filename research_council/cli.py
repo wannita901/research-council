@@ -727,89 +727,6 @@ def _proj_slug(s: str) -> str:
     return re.sub(r"[^a-z0-9]+", "-", s.lower()).strip("-")[:28] or "project"
 
 
-@project_app.command("new")
-def project_new(
-    topic: str = typer.Option(..., "--topic", "-t", help="research question"),
-    live: bool = typer.Option(False, help="use real providers (needs keys)"),
-    interactive: bool = typer.Option(True, help="review gate during ideation (TTY only)"),
-    auto_iterate: int = typer.Option(1, "--auto-iterate", help="non-interactive ideation rounds"),
-    seats: str = typer.Option(None, help="vendor=model,... override"),
-    tools: str = typer.Option(None, help="retrieval tools override"),
-):
-    """Start a project: run Stage A (ideation), then await your approval to advance to B."""
-    import datetime
-
-    from research_council.debate.orchestrator_v2 import CODENAMES, run_ideation
-    from research_council.lifecycle import ProjectStore, new_project
-
-    cfg = load_config("ideation")
-    if seats:
-        cfg.seats = parse_seats(seats)
-    if tools:
-        cfg.tools = parse_tools(tools)
-
-    stamp = datetime.datetime.now().strftime("%Y%m%d-%H%M%S")
-    pid = f"{_proj_slug(topic)}-{stamp[-6:]}"
-    store = ProjectStore()
-    proj = new_project(topic, pid, created=stamp)
-    store.save(proj)
-    ui.banner(
-        f"Project · {pid}", f"{topic}  ·  stage ① ideation  ·  {'live' if live else 'offline'}"
-    )
-
-    retrieval = build_retrieval(cfg.tools) if live else build_stub_retrieval(cfg.tools)
-    peers: dict = {}
-    for vendor, model in cfg.seats.items():
-        cn = CODENAMES.get(vendor, vendor)
-        if live:
-            from research_council.agents.agent_peer import AgentPeer, agent_model_name
-
-            peers[cn] = AgentPeer(
-                vendor,
-                cn,
-                agent_model_name(vendor, model),
-                retrieval,
-                max_iters=cfg.max_iters,
-                max_tool_calls=cfg.max_tool_calls,
-                price_model=model,
-            )
-        else:
-            from research_council.agents.stub_agent_peer import StubV2Peer
-
-            peers[cn] = StubV2Peer(vendor, cn, retrieval)
-
-    reviewer = _cli_reviewer if (interactive and sys.stdin.isatty()) else None
-    trace = TraceWriter.new("ideation")
-    try:
-        rec, candidates = asyncio.run(
-            run_ideation(
-                topic,
-                peers,
-                trace,
-                reviewer=reviewer,
-                auto_rounds=auto_iterate,
-                max_turns=cfg.max_turns,
-                max_msgs_per_peer=cfg.max_msgs_per_peer,
-                anonymize_on=cfg.anonymize,
-                emit=_stream,
-            )
-        )
-    except KeyboardInterrupt:
-        raise typer.Abort() from None
-
-    by = {c.id: c for c in candidates}
-    winner = by.get(rec.ranked[0]) if rec.ranked else None
-    if winner is None:
-        ui.console.print("[red]ideation produced no candidate[/red]")
-        raise typer.Exit(1)
-    _record_ideation(proj, store, pid, winner, trace.run_id)
-    ui.console.print(f"\n[green]Stage A complete[/green] · selected: [bold]{winner.title}[/bold]")
-    ui.console.print(
-        f"  approve & advance → [cyan]council project approve {pid}[/cyan]   ·   "
-        f"status → council project status {pid}"
-    )
-
-
 @project_app.command("status")
 def project_status(pid: str = typer.Argument(..., help="project id")):
     """Show a project's stages and where it is."""
@@ -860,7 +777,7 @@ def project_status(pid: str = typer.Argument(..., help="project id")):
     if is_complete(p):
         ui.console.print("[green]✓ project complete[/green]")
     elif p.stages[p.current].status == "awaiting_approval":
-        ui.console.print(f"next: [cyan]council project approve {pid}[/cyan]")
+        ui.console.print(f"next: [cyan]council run --resume {pid}[/cyan]")
 
 
 _VERIFY_ICON = {
@@ -1434,7 +1351,7 @@ def run_conductor(
 
     One command walks the whole lifecycle; at each stage boundary it tells you the outcome and
     asks whether to go on, redo the stage, or stop — so you answer questions instead of typing a
-    command per stage. Resumable later via `council project approve <id>`."""
+    command per stage. Resumable later via `council run --resume <id>`."""
     import datetime
 
     from research_council.debate.caps import resolve_profile
@@ -1480,7 +1397,8 @@ def run_conductor(
         if proj.stages[proj.current].status != "awaiting_approval":
             ui.info(
                 f"project is at {proj.current}/{proj.stages[proj.current].status} — "
-                f"resume continues from a gate. Try `council project approve {pid}`."
+                f"resume continues from a gate. Inspect with `council project status {pid}` "
+                f"or rewind with `council run --resume {pid} --from <stage>`."
             )
             raise typer.Exit(1)
     else:
@@ -1568,66 +1486,6 @@ def run_conductor(
     except KeyboardInterrupt:
         ui.console.print(f"\n[yellow]paused[/yellow] · resume → council run --resume {pid}")
         raise typer.Abort() from None
-
-
-@project_app.command("approve")
-def project_approve(
-    pid: str = typer.Argument(..., help="project id"),
-    live: bool = typer.Option(
-        False, help="run the real next-stage engine (needs keys; B needs a sandbox)"
-    ),
-    allow_local_sandbox: bool = typer.Option(
-        False,
-        "--allow-local-sandbox",
-        help="if Docker is absent, run generated code UNISOLATED (unsafe)",
-    ),
-    venue: str = typer.Option(
-        None, help="Stage C target venue (icse/fse/ase/neurips/emnlp/iclr/generic)"
-    ),
-    profile: str = typer.Option(
-        None,
-        help="cap profile for B/C loops (default RC_PROFILE or balanced): conservative | balanced | thorough",
-    ),
-):
-    """Approve the current stage and advance (running the next stage's engine)."""
-    from research_council.debate.caps import resolve_profile
-    from research_council.lifecycle import (
-        ProjectStore,
-        approve_and_advance,
-        record_result,
-        run_stage_stub,
-    )
-
-    profile = resolve_profile(profile)
-    store = ProjectStore()
-    if not store.exists(pid):
-        ui.info(f"no project {pid!r}")
-        raise typer.Exit(1)
-    p = store.load(pid)
-    cur = p.current
-    if p.stages[cur].status != "awaiting_approval":
-        ui.info(f"stage '{cur}' is {p.stages[cur].status} — nothing to approve.")
-        raise typer.Exit(1)
-    p, handoff = approve_and_advance(p)
-    if handoff is not None:  # advanced to a next stage → run it
-        nxt = p.current
-        if nxt == "experimentation" and live:
-            summary, artifacts = _run_stage_b(
-                handoff, allow_local_sandbox, profile, out_dir=store.root / pid
-            )  # real Stage B
-        elif nxt == "writing" and live:
-            onboarding = _venue_choice(handoff, venue, live=live)
-            summary, artifacts = _run_stage_c(
-                handoff, store.root / pid, onboarding, profile
-            )  # real Stage C
-        else:
-            summary, artifacts = run_stage_stub(nxt, handoff)  # offline → stub
-        record_result(p, nxt, summary=summary, artifacts=artifacts)
-        ui.console.print(f"[green]approved {cur}[/green] → ▶ [cyan]{nxt}[/cyan]\n  {summary}")
-        ui.console.print(f"  next: [cyan]council project approve {pid}[/cyan]")
-    else:
-        ui.console.print(f"[green]approved {cur}[/green] · [bold]project complete 🎉[/bold]")
-    store.save(p)
 
 
 if __name__ == "__main__":
