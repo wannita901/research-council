@@ -20,6 +20,7 @@ from collections.abc import Callable
 from pathlib import Path
 
 from research_council.store.models import PaperDraft
+from research_council.verify.figure import caption_for_figure
 
 # Written to build.log when no LaTeX engine is on PATH. Readers (verify/report, cli) match this
 # verbatim to tell "no engine" (benign on engine-less CI) apart from a real build failure, so the
@@ -138,12 +139,12 @@ def scaffold_tex(
                 rf"\section{{{_esc(name)}}}",
                 _body_to_tex(draft.sections[name], keys),
             ]
-    for i, fig in enumerate(draft.figures, 1):
+    for fig in draft.figures:
         parts += [
             r"\begin{figure}[t]",
             r"\centering",
             rf"\includegraphics[width=.7\linewidth]{{{fig}}}",
-            rf"\caption{{Figure {i}.}}",
+            rf"\caption{{{_esc(caption_for_figure(fig))}}}",  # LaTeX auto-numbers "Figure N:"
             r"\end{figure}",
         ]
     if draft.citations:

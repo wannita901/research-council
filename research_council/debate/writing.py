@@ -23,6 +23,7 @@ from research_council.store.models import (
     ReviewNotes,
     WritingResult,
 )
+from research_council.verify.figure import caption_for_figure
 
 _ORDER = ["Introduction", "Related Work", "Method", "Experiment", "Results", "Conclusion"]
 Emit = Callable[[str, str, dict], None] | None
@@ -145,7 +146,8 @@ def _write_paper(
     if draft.figures:
         body += ["## Figures"]
         for i, fig in enumerate(draft.figures, 1):
-            body += [f"**Figure {i}.**", f"![figure {i}]({fig})", ""]
+            cap = caption_for_figure(fig)
+            body += [f"**Figure {i}.** {cap}", f"![figure {i}]({fig})", ""]
     if draft.citations:
         body += ["## References"]
         for c in draft.citations:

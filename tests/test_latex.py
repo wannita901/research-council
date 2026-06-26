@@ -38,6 +38,26 @@ def test_scaffold_escapes_specials_and_avoids_bibtex():
     assert r"\includegraphics" in tex
 
 
+def test_figures_get_real_captions_not_double_numbered():
+    """Figures carried empty '\\caption{Figure N.}' (which LaTeX double-numbers as 'Figure N:
+    Figure N.'). Captions are now derived from the descriptive filename and LaTeX numbers them."""
+    from research_council.verify.figure import caption_for_figure
+
+    assert (
+        caption_for_figure("assets/RQ1_invariant_A_mrr_vs_noise.png")
+        == "RQ1: invariant A MRR vs noise"
+    )
+    draft = PaperDraft(
+        title="T",
+        abstract="a",
+        sections={"Results": "x"},
+        figures=["assets/RQ2_mrr_heatmap.png"],
+    )
+    tex = scaffold_tex(draft, {"doc_class": "article"})
+    assert r"\caption{RQ2: MRR heatmap}" in tex  # real caption, no manual "Figure N."
+    assert r"\caption{Figure" not in tex  # no double-numbering
+
+
 def test_scaffold_embeds_resolved_doi_url_in_bibitem():
     """The compiled PDF's references must carry the resolved DOI/URL (plan/25 Gap 2 follow-up):
     scaffold_tex consumes the bib resolutions so each \\bibitem resolves to a real record, not
