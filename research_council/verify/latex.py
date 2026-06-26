@@ -20,6 +20,7 @@ from collections.abc import Callable
 from pathlib import Path
 
 from research_council.store.models import PaperDraft
+from research_council.verify.figure import caption_for_figure
 
 # Written to build.log when no LaTeX engine is on PATH. Readers (verify/report, cli) match this
 # verbatim to tell "no engine" (benign on engine-less CI) apart from a real build failure, so the
@@ -69,9 +70,14 @@ def _body_to_tex(md: str, keys: set[str]) -> str:
                 r"\begin{figure}[t]",
                 r"\centering",
                 rf"\includegraphics[width=.7\linewidth]{{{img.group(1)}}}",
-                r"\caption{Experiment results.}",
+                rf"\caption{{{_esc(caption_for_figure(img.group(1)))}}}",
                 r"\end{figure}",
             ]
+            continue
+        sub = re.match(r"(#{3,4})\s+(.*)", line.strip())  # ### RQ subsections inside a section
+        if sub:
+            cmd = "subsection" if len(sub.group(1)) == 3 else "subsubsection"
+            out.append(rf"\{cmd}{{{_esc(sub.group(2))}}}")
             continue
         if line.strip().startswith(("- ", "* ")):
             out.append(r"\par " + _cite(_esc(line.strip()[2:]), keys))
@@ -138,12 +144,12 @@ def scaffold_tex(
                 rf"\section{{{_esc(name)}}}",
                 _body_to_tex(draft.sections[name], keys),
             ]
-    for i, fig in enumerate(draft.figures, 1):
+    for fig in draft.figures:
         parts += [
             r"\begin{figure}[t]",
             r"\centering",
             rf"\includegraphics[width=.7\linewidth]{{{fig}}}",
-            rf"\caption{{Figure {i}.}}",
+            rf"\caption{{{_esc(caption_for_figure(fig))}}}",  # LaTeX auto-numbers "Figure N:"
             r"\end{figure}",
         ]
     if draft.citations:

@@ -16,8 +16,11 @@ mise.local.toml
 # Wiki library archives (local snapshots)
 knowledge/.archive/
 
-# LLM-wiki generated corpus (keep CLAUDE.md + scaffold; ignore generated pages/papers)
+# LLM-wiki generated corpus (keep CLAUDE.md; ignore generated pages/papers + the auto-
+# regenerated index/log, which every harvest rewrites — harvest is on by default for live runs)
 knowledge/wiki/*/
+knowledge/wiki/index.md
+knowledge/wiki/log.md
 knowledge/raw/external/*
 !knowledge/raw/external/.gitkeep
 

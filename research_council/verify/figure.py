@@ -14,6 +14,22 @@ from pathlib import Path
 
 _METRIC = re.compile(r"METRIC\s+([^\s=]+)\s*=\s*(\S+)")
 
+
+def caption_for_figure(path: str) -> str:
+    """A readable caption from the figure's filename — Stage B saves descriptive names like
+    ``RQ1_invariant_A_mrr_vs_noise.png``, which carry more than the empty 'Figure N.' the paper
+    emitted before. ponytail: derived, not LLM-authored — good enough and free; swap for a
+    writer-authored caption if these read too terse."""
+    parts = Path(path).stem.split("_")
+    prefix = ""
+    if parts and re.fullmatch(r"[Rr][Qq]\d+", parts[0]):
+        prefix, parts = parts[0].upper() + ": ", parts[1:]
+    _stop = {"vs", "of", "to", "at", "on", "in", "by"}
+    words = [p.upper() if (len(p) <= 3 and p.isalpha() and p not in _stop) else p for p in parts]
+    text = " ".join(words).strip()
+    return (prefix + text).strip() or "Experiment results"
+
+
 # Magic-byte prefixes that identify a structurally-valid raster/vector image by suffix. PNG and
 # PDF are binary with a fixed header; SVG is XML text whose root element is <svg ...>. Used by
 # is_valid_figure to reject the bad-image cases the existence check misses: a 0-byte file the

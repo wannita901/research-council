@@ -76,26 +76,26 @@ council run --live --profile balanced          # the real thing
 
 > Experiments can declare their own pip dependencies — these are installed in a network-enabled prep step, then the code runs with **no network** (real libraries, isolated execution). Optional: `mise run build-image` pre-bakes the common scientific stack (numpy / pandas / scipy / scikit-learn / matplotlib) so those are instant. The experiment also saves real plots, which the paper embeds.
 
+> On live runs, each ideation round is harvested into the LLM-wiki (`knowledge/wiki/`, gitignored) so later rounds can read it. This is on by default and spends a little librarian (Sonnet) budget — pass `--no-harvest` to skip it.
+
 ## Commands & flags
 
-**One conversation** (recommended) — the conductor drives the whole lifecycle:
+`council run` drives the whole lifecycle, gated at each stage (**go / redo / stop**), and resumes:
 
 ```bash
-council run --live --profile balanced
+council run --live --profile balanced              # ideation → experimentation → writing
+council run --resume <id>                           # pick up an interrupted run where you left off
+council run --resume <id> --from experimentation    # rewind to a stage and improve its artifacts
 ```
 
-**Or stage by stage** — scriptable and resumable. Re-running a stage that already has output **improves it** instead of starting over:
+`--from <stage>` keeps that stage's artifacts (the council improves rather than rebuilds), resets the later stages, and flows forward. Two helpers inspect a project without re-running it:
 
 ```bash
-council project new     --topic "…" --live          # stage ① ideation
-council project status  <id>                          # see where it is + the proposal
-council project approve <id> --live                   # → runs stage ② experimentation
-council project approve <id> --live --venue icse      # → runs stage ③ writing
-council project approve <id>                           # → done
-council project verify  <id>                           # re-audit the artifacts → VERIFIED/UNVERIFIED
+council project status <id>     # where it is + the proposal
+council project verify <id>     # re-audit artifacts → VERIFIED/UNVERIFIED (exits non-zero on fail → CI gate)
 ```
 
-Stage ③ already auto-emits `paper/verification.json` and prints the verdict on completion; `council project verify` re-runs that scorecard on demand (and exits non-zero when UNVERIFIED, so it doubles as a CI gate).
+Stage ③ also auto-emits `paper/verification.json` and prints the verdict on completion; `verify` just re-runs that scorecard on demand.
 
 | Flag | What it does |
 | --- | --- |

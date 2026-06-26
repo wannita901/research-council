@@ -295,9 +295,14 @@ class ExperimentDraft(BaseModel):
     """Coder agent output — a self-contained script + the pip packages it needs (plan/24).
 
     `requirements` are installed in a network-enabled prep step BEFORE the script runs; the
-    script itself then runs with no network. Empty = standard library only."""
+    script itself then runs with no network. Empty = standard library only.
 
-    code: str = ""
+    `code` is REQUIRED and non-empty: with a `= ""` default, a model that omitted the field
+    produced a silently-empty script that passed validation and wasted a whole review round
+    (the '# no code produced' failure). Requiring it makes pydantic-ai's output validator
+    reject an empty/missing script and re-ask the model until it actually writes one."""
+
+    code: str = Field(min_length=1)
     notes: str = ""
     requirements: list[str] = Field(default_factory=list)  # e.g. ["numpy", "scikit-learn"]
 

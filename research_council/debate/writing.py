@@ -23,6 +23,7 @@ from research_council.store.models import (
     ReviewNotes,
     WritingResult,
 )
+from research_council.verify.figure import caption_for_figure
 
 _ORDER = ["Introduction", "Related Work", "Method", "Experiment", "Results", "Conclusion"]
 Emit = Callable[[str, str, dict], None] | None
@@ -123,6 +124,42 @@ def _merge_revision(
     return merged
 
 
+def _place_figures_in_results(draft: PaperDraft) -> None:
+    """Move each RQ's figure(s) to the top of its Results subsection (in place).
+
+    Stage B names figures by RQ (``RQ1_*.png``) and the writer is asked to give Results one
+    ``### <RQ id>`` subsection per question. We match figure→subsection by the RQ token in the
+    header and inject the image right after it, so a chart sits with the result it supports
+    instead of dumping at the end. Figures whose RQ has no matching header stay in
+    ``draft.figures`` (rendered in a trailing Figures block) so nothing is lost."""
+    import re
+
+    results = draft.sections.get("Results")
+    if not results or not draft.figures:
+        return
+    by_rq: dict[str, list[str]] = {}
+    for f in draft.figures:
+        m = re.match(r"(?:assets/)?(RQ\d+)", Path(f).name, re.I)
+        if m:
+            by_rq.setdefault(m.group(1).upper(), []).append(f)
+    if not by_rq:
+        return
+
+    placed, seen, out_lines = set(), set(), []
+    for line in results.splitlines():
+        out_lines.append(line)
+        if line.lstrip().startswith("#"):
+            m = re.search(r"RQ\d+", line, re.I)
+            rq = m.group(0).upper() if m else None
+            if rq in by_rq and rq not in seen:
+                seen.add(rq)
+                for f in by_rq[rq]:
+                    out_lines += [f"![{caption_for_figure(f)}]({f})", ""]
+                    placed.add(f)
+    draft.sections["Results"] = "\n".join(out_lines)
+    draft.figures = [f for f in draft.figures if f not in placed]
+
+
 # --- paper files --------------------------------------------------------------
 def _write_paper(
     out_dir: Path, draft: PaperDraft, review: ReviewNotes, venue_name: str, result: WritingResult
@@ -145,7 +182,8 @@ def _write_paper(
     if draft.figures:
         body += ["## Figures"]
         for i, fig in enumerate(draft.figures, 1):
-            body += [f"**Figure {i}.**", f"![figure {i}]({fig})", ""]
+            cap = caption_for_figure(fig)
+            body += [f"**Figure {i}.** {cap}", f"![figure {i}]({fig})", ""]
     if draft.citations:
         body += ["## References"]
         for c in draft.citations:
@@ -446,6 +484,7 @@ async def run_writing(
 
     # final coherence pass to smooth section-level edits
     draft = await writer.coherence_pass(draft)
+    _place_figures_in_results(draft)  # each RQ's figure → top of its Results subsection
     if emit:
         emit("writing", "coherence_pass", {"sections": list(draft.sections)})
 

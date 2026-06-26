@@ -18,7 +18,16 @@ class Coder:
         self._price_model = price_model
         self.usage = UsageMeter()
         self._agent: Agent = Agent(
-            model, output_type=ExperimentDraft, system_prompt=prompts.load("experiment/coder")
+            model,
+            output_type=ExperimentDraft,
+            system_prompt=prompts.load("experiment/coder"),
+            # `code` is required+non-empty (store.models): if the model omits it, the output
+            # validator rejects and re-asks. Allow a few retries so a transient empty/omitted
+            # script self-corrects instead of bubbling up as a hard failure.
+            retries={"output": 3},
+            # A full experiment script can be long; give the completion room so the structured
+            # tool-call holding `code` isn't truncated mid-JSON.
+            model_settings={"max_tokens": 8192},
         )
 
     async def draft(
