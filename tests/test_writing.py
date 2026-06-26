@@ -3,7 +3,12 @@
 from __future__ import annotations
 
 from research_council.debate.caps import StageCCaps
-from research_council.debate.writing import list_venues, load_venue, run_writing
+from research_council.debate.writing import (
+    _place_figures_in_results,
+    list_venues,
+    load_venue,
+    run_writing,
+)
 from research_council.obs.telemetry import UsageMeter
 from research_council.store.models import (
     ChangeRequest,
@@ -16,6 +21,22 @@ from research_council.store.models import (
 # An 8-byte PNG signature: enough for is_valid_figure's header sniff to accept the bytes as a
 # real image (the empty/garbage cases it must reject lack this).
 _PNG = b"\x89PNG\r\n\x1a\n"
+
+
+def test_figures_placed_at_rq_subsection_tops():
+    """Each RQ's figure lands at the top of its Results subsection (matched by filename prefix);
+    a figure with no matching subsection stays in the trailing figures list."""
+    d = PaperDraft(
+        title="t",
+        abstract="a",
+        sections={"Results": "### RQ1: speed\nprose-one\n### RQ2: memory\nprose-two"},
+        figures=["assets/RQ2_mrr_heatmap.png", "assets/RQ1_latency.png", "assets/extra_plot.png"],
+    )
+    _place_figures_in_results(d)
+    r = d.sections["Results"]
+    assert r.index("RQ1_latency.png") < r.index("prose-one")  # under the RQ1 header
+    assert r.index("RQ2_mrr_heatmap.png") < r.index("prose-two")  # under the RQ2 header
+    assert d.figures == ["assets/extra_plot.png"]  # matched removed, unmatched kept
 
 
 def test_load_venue_and_fallback():

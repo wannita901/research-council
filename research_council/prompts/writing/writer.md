@@ -8,6 +8,10 @@ Write a concise, honest paper:
 - `sections` — markdown bodies for: Introduction, Related Work, Method, Experiment,
   Results, Conclusion. Keep each tight (a few paragraphs). Ground claims in the experiment
   result; do NOT overstate — if only a toy run was verified, say so.
+  In **Results**, write one `### ` subsection per research question, and start the header with
+  the RQ id exactly as given (e.g. `### RQ1: <short question>`), then discuss only that RQ's
+  result. The matching figure is placed at the top of each subsection automatically, so you can
+  refer to it (e.g. "the figure above shows…") — don't paste image paths yourself.
 - `citations` — you may ONLY cite references from the supplied prior-art list. Reuse their
   exact `key`. NEVER invent a citation, author, year, or bibtex key. If the list is empty or
   thin, write Related Work honestly at a high level and cite nothing rather than fabricate.

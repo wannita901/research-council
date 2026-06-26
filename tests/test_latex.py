@@ -58,6 +58,19 @@ def test_figures_get_real_captions_not_double_numbered():
     assert r"\caption{Figure" not in tex  # no double-numbering
 
 
+def test_results_rq_subsections_and_inline_figures_render():
+    """A Results body with `### RQ` subsections + inline figure images becomes \\subsection +
+    a captioned figure float (figures sit with their RQ, not dumped at the end)."""
+    draft = PaperDraft(
+        title="T",
+        abstract="a",
+        sections={"Results": "### RQ1: speed\n![RQ1: latency](assets/RQ1_latency.png)\nprose."},
+    )
+    tex = scaffold_tex(draft, {"doc_class": "article"})
+    assert r"\subsection{RQ1: speed}" in tex
+    assert r"\includegraphics" in tex and r"\caption{RQ1: latency}" in tex
+
+
 def test_scaffold_embeds_resolved_doi_url_in_bibitem():
     """The compiled PDF's references must carry the resolved DOI/URL (plan/25 Gap 2 follow-up):
     scaffold_tex consumes the bib resolutions so each \\bibitem resolves to a real record, not

@@ -70,9 +70,14 @@ def _body_to_tex(md: str, keys: set[str]) -> str:
                 r"\begin{figure}[t]",
                 r"\centering",
                 rf"\includegraphics[width=.7\linewidth]{{{img.group(1)}}}",
-                r"\caption{Experiment results.}",
+                rf"\caption{{{_esc(caption_for_figure(img.group(1)))}}}",
                 r"\end{figure}",
             ]
+            continue
+        sub = re.match(r"(#{3,4})\s+(.*)", line.strip())  # ### RQ subsections inside a section
+        if sub:
+            cmd = "subsection" if len(sub.group(1)) == 3 else "subsubsection"
+            out.append(rf"\{cmd}{{{_esc(sub.group(2))}}}")
             continue
         if line.strip().startswith(("- ", "* ")):
             out.append(r"\par " + _cite(_esc(line.strip()[2:]), keys))
